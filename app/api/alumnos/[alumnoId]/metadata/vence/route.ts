@@ -113,6 +113,17 @@ function safePayloadForVence(p: any) {
     vence_estimado: payload.vence_estimado ?? null,
     vence_tipo: payload.vence_tipo ?? null,
     vence_motivo: payload.vence_motivo ?? null,
+    extensiones: Array.isArray(payload.extensiones)
+      ? payload.extensiones.map((ext: any) => ({
+          id: ext?.id ?? null,
+          tipo: ext?.tipo ?? null,
+          fecha_desde: ext?.fecha_desde ?? null,
+          fecha_hasta: ext?.fecha_hasta ?? null,
+          motivo: ext?.motivo ?? null,
+          created_at: ext?.created_at ?? null,
+          changed_by: ext?.changed_by ?? null,
+        }))
+      : [],
     historial: Array.isArray(payload.historial) ? payload.historial : [],
     ultimo_cambio_at: payload.ultimo_cambio_at ?? null,
     ultimo_cambio_por: payload.ultimo_cambio_por ?? null,
@@ -125,7 +136,10 @@ function safePayloadForMembresia(p: any) {
     alumno_id: payload.alumno_id ?? null,
     alumno_codigo: payload.alumno_codigo ?? null,
     alumno_nombre: payload.alumno_nombre ?? null,
+    numero_membresia: payload.numero_membresia ?? null,
     meses: payload.meses ?? payload.meses_extra ?? null,
+    fecha_desde: payload.fecha_desde ?? null,
+    fecha_hasta: payload.fecha_hasta ?? null,
     motivo: payload.motivo ?? null,
     created_at: payload.created_at ?? null,
     changed_by: payload.changed_by ?? null,

@@ -439,6 +439,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
   // Estado para editar vencimiento estimado (solo preview: no ejecuta endpoint)
   const [editVenceOpen, setEditVenceOpen] = useState(false);
   const [tempMesesExtra, setTempMesesExtra] = useState<string>("0");
+  const [tempVenceFechaDesde, setTempVenceFechaDesde] = useState<string>("");
+  const [tempVenceFechaHasta, setTempVenceFechaHasta] = useState<string>("");
   const [tempVenceTipo, setTempVenceTipo] = useState<
     "contractual" | "extraordinaria" | "membresia"
   >("contractual");
@@ -915,6 +917,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
     const alumnoId = String(student.id);
     const now = new Date().toISOString();
+    const todayIso = isoDay(new Date());
+    const nextMembershipNumber = membresiaExts.length + 1;
     const changedBy = {
       id: user?.id ?? null,
       codigo: (user as any)?.codigo ?? null,
@@ -924,14 +928,26 @@ export default function StudentDetailContent({ code }: { code: string }) {
     try {
       // Membresía: SIEMPRE crear una nueva extensión (no sobrescribir la existente)
       if (tempVenceTipo === "membresia") {
-        if (mesesExtra <= 0) {
+        if (mesesExtra !== 1) {
           toast({
             title: "No se pudo guardar",
-            description: "Selecciona meses de membresía (>= 1)",
+            description: "La membresía siempre se registra por 1 mes",
             variant: "destructive",
           });
           return;
         }
+
+        const fechaDesde = asDateOnly(tempVenceFechaDesde || todayIso);
+        const parsedDesde = parseMaybe(fechaDesde);
+        if (!parsedDesde) {
+          toast({
+            title: "No se pudo guardar",
+            description: "Selecciona una fecha de inicio válida para la membresía",
+            variant: "destructive",
+          });
+          return;
+        }
+        const fechaHasta = isoDay(addDays(parsedDesde, 30));
 
         const token = getAuthToken();
         const res = await fetch("/api/metadata", {
@@ -947,7 +963,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
               alumno_id: Number(student.id),
               alumno_codigo: code,
               alumno_nombre: student?.name ?? null,
-              meses: mesesExtra,
+              numero_membresia: nextMembershipNumber,
+              meses: 1,
+              fecha_desde: fechaDesde,
+              fecha_hasta: fechaHasta,
               motivo: effectiveMotivo || null,
               created_at: now,
               changed_by: changedBy,
@@ -964,6 +983,39 @@ export default function StudentDetailContent({ code }: { code: string }) {
         toast({ title: "Acceso actualizado" });
         return;
       }
+
+      const fechaDesde = asDateOnly(tempVenceFechaDesde || todayIso);
+      const fechaHasta = asDateOnly(tempVenceFechaHasta);
+      const parsedHasta = parseMaybe(fechaHasta);
+      const parsedDesde = parseMaybe(fechaDesde);
+
+      if (!fechaHasta || !parsedHasta || !parsedDesde) {
+        toast({
+          title: "No se pudo guardar",
+          description: "Selecciona fechas válidas para la extensión",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (toDayDate(parsedHasta).getTime() < toDayDate(parsedDesde).getTime()) {
+        toast({
+          title: "No se pudo guardar",
+          description: "La fecha final no puede ser menor a la fecha inicial",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const extensionEntry = {
+        id: `ext-${now}`,
+        tipo: tempVenceTipo,
+        fecha_desde: fechaDesde,
+        fecha_hasta: fechaHasta,
+        motivo: effectiveMotivo || null,
+        created_at: now,
+        changed_by: changedBy,
+      };
 
       // 1) Si no tenemos metadata cargada, intentamos recargar antes de crear
       if (!venceMeta) {
@@ -997,39 +1049,39 @@ export default function StudentDetailContent({ code }: { code: string }) {
         }
         const prevTipo = prevPayload?.vence_tipo ?? null;
         const prevMotivo = prevPayload?.vence_motivo ?? null;
+        const prevExtensiones = Array.isArray(prevPayload?.extensiones)
+          ? prevPayload.extensiones
+          : [];
         const prevHistory = Array.isArray(prevPayload?.historial)
           ? prevPayload.historial
           : [];
 
-        const monthsChanged = String(prevExtra ?? "") !== String(mesesExtra);
-
-        // Agregar entrada al historial solo si realmente cambia algo (meses/tipo/motivo)
-        const nextHistory = [...prevHistory];
-        const changed =
-          monthsChanged ||
-          String(prevTipo || "") !== String(tempVenceTipo) ||
-          String(prevMotivo || "") !== String(effectiveMotivo);
-        if (changed) {
-          nextHistory.push({
+        const nextHistory = [
+          ...prevHistory,
+          {
             changed_at: now,
             from_meses_extra: prevExtra,
-            to_meses_extra: mesesExtra,
+            to_meses_extra: prevExtra,
             from_total_meses: prevExtra === null ? null : 4 + prevExtra,
-            to_total_meses: 4 + mesesExtra,
+            to_total_meses: prevExtra === null ? null : 4 + prevExtra,
             tipo: tempVenceTipo,
             motivo: effectiveMotivo || null,
+            fecha_desde: fechaDesde,
+            fecha_hasta: fechaHasta,
             changed_by: changedBy,
-          });
-        }
+            reason: "append_range",
+          },
+        ];
 
         // IMPORTANTE: no sobrescribir payload completo; migramos a meses_extra (sin fecha)
         const { vence_estimado: _legacyVence, ...prevPayloadSansLegacy } =
           prevPayload;
         const mergedPayload = {
           ...prevPayloadSansLegacy,
-          meses_extra: mesesExtra,
+          meses_extra: prevExtra,
           vence_tipo: tempVenceTipo,
-          vence_motivo: effectiveMotivo || null,
+          vence_motivo: effectiveMotivo || prevMotivo || null,
+          extensiones: [...prevExtensiones, extensionEntry],
           historial: nextHistory,
           ultimo_cambio_at: now,
           ultimo_cambio_por: changedBy,
@@ -1058,14 +1110,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
           throw new Error(txt || `HTTP ${res.status}`);
         }
 
-        // Feedback claro: si solo cambió el motivo/tipo pero no los meses, no se verá extensión.
-        if (!monthsChanged) {
-          toast({
-            title: "Guardado",
-            description:
-              "Se guardó el motivo/tipo, pero los meses extra no cambiaron. Para sumar acceso, aumenta los meses extra.",
-          });
-        }
       } else {
         // 3) Si no existe, crear el metadata (uno por alumno)
         const payload = {
@@ -1075,20 +1119,23 @@ export default function StudentDetailContent({ code }: { code: string }) {
           creado_por_id: changedBy.id,
           creado_por_codigo: changedBy.codigo,
           creado_por_nombre: changedBy.nombre,
-          meses_extra: mesesExtra,
+          meses_extra: 0,
           vence_tipo: tempVenceTipo,
           vence_motivo: effectiveMotivo || null,
+          extensiones: [extensionEntry],
           historial: [
             {
               changed_at: now,
               from_meses_extra: null,
-              to_meses_extra: mesesExtra,
+              to_meses_extra: null,
               from_total_meses: null,
-              to_total_meses: 4 + mesesExtra,
+              to_total_meses: null,
               tipo: tempVenceTipo,
               motivo: effectiveMotivo || null,
+              fecha_desde: fechaDesde,
+              fecha_hasta: fechaHasta,
               changed_by: changedBy,
-              reason: "create",
+              reason: "create_range",
             },
           ],
         };
@@ -1855,6 +1902,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
       : null;
     const metaVence = metaVenceIso ? parseMaybe(metaVenceIso) : null;
     const metaVenceDay = metaVence ? toDayDate(metaVence) : null;
+    const explicitExtensions = Array.isArray((venceMeta as any)?.payload?.extensiones)
+      ? (venceMeta as any).payload.extensiones
+      : [];
 
     // Helper: meses completos (calendario) entre dos fechas
     const monthsBetweenFloor = (from: Date, to: Date) => {
@@ -1884,7 +1934,25 @@ export default function StudentDetailContent({ code }: { code: string }) {
     const usedMetadataVence = extraMonths !== null || Boolean(metaVenceDay);
     const normalizedExtraMonths = extraMonths ?? 0;
     const membresiaAll = Array.isArray(membresiaExts) ? membresiaExts : [];
-    const membresiaActive = membresiaAll.filter((m: any) => {
+    const membresiaOrdered = membresiaAll
+      .slice()
+      .sort((a: any, b: any) => {
+        const ta = new Date(a?.payload?.created_at || a?.created_at || 0).getTime();
+        const tb = new Date(b?.payload?.created_at || b?.created_at || 0).getTime();
+        if (ta !== tb) return ta - tb;
+        return Number(a?.id || 0) - Number(b?.id || 0);
+      })
+      .map((m: any, index: number) => ({
+        ...m,
+        payload: {
+          ...(m?.payload ?? {}),
+          numero_membresia:
+            Number(m?.payload?.numero_membresia) > 0
+              ? Number(m.payload.numero_membresia)
+              : index + 1,
+        },
+      }));
+    const membresiaActive = membresiaOrdered.filter((m: any) => {
       const n = Number(m?.payload?.meses ?? m?.payload?.meses_extra ?? 0);
       const isAnulado =
         Boolean(m?.payload?.anulado) || !Number.isFinite(n) || n <= 0;
@@ -1895,30 +1963,97 @@ export default function StudentDetailContent({ code }: { code: string }) {
       return acc + (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
     }, 0);
     const membresiaCount = membresiaActive.length;
-    const membresiaCountTotal = membresiaAll.length;
+    const membresiaCountTotal = membresiaOrdered.length;
     const membresiaAnuladasCount = Math.max(
       0,
       membresiaCountTotal - membresiaCount,
     );
 
-    const totalMonths = 4 + normalizedExtraMonths + membresiaMonthsTotal;
+    const rangeExtensions = explicitExtensions
+      .map((ext: any, index: number) => {
+        const from = parseMaybe(ext?.fecha_desde ?? null);
+        const to = parseMaybe(ext?.fecha_hasta ?? null);
+        if (!from || !to) return null;
+        return {
+          id: ext?.id ?? `range-${index}`,
+          tipo:
+            ext?.tipo === "extraordinaria" ? "extraordinaria" : "contractual",
+          motivo: ext?.motivo ?? null,
+          changedBy: ext?.changed_by ?? null,
+          createdAt: ext?.created_at ?? null,
+          start: toDayDate(from),
+          end: toDayDate(to),
+        };
+      })
+      .filter(Boolean) as Array<{
+      id: string;
+      tipo: "contractual" | "extraordinaria";
+      motivo: string | null;
+      changedBy: any;
+      createdAt: string | null;
+      start: Date;
+      end: Date;
+    }>;
+
+    const activeRangeExtensions = rangeExtensions.filter(
+      (ext) => ext.end.getTime() >= today.getTime(),
+    );
+    const explicitRangeEnd = activeRangeExtensions.reduce<Date | null>((acc, ext) => {
+      if (!acc || ext.end.getTime() > acc.getTime()) return ext.end;
+      return acc;
+    }, null);
+    const explicitRangeDays = activeRangeExtensions.reduce(
+      (acc, ext) => acc + daysBetweenInclusive(ext.start, ext.end),
+      0,
+    );
+
+    const activeMembershipPeriods = membresiaActive
+      .map((m: any) => {
+        const from = parseMaybe(m?.payload?.fecha_desde ?? m?.payload?.created_at ?? null);
+        const to = parseMaybe(m?.payload?.fecha_hasta ?? null);
+        if (!from || !to) return null;
+        return {
+          id: String(m?.id ?? ""),
+          number:
+            Number(m?.payload?.numero_membresia) > 0
+              ? Number(m.payload.numero_membresia)
+              : null,
+          start: toDayDate(from),
+          end: toDayDate(to),
+        };
+      })
+      .filter(Boolean) as Array<{
+      id: string;
+      number: number | null;
+      start: Date;
+      end: Date;
+    }>;
+    const activeMembershipEnd = activeMembershipPeriods.reduce<Date | null>((acc, ext) => {
+      if (!acc || ext.end.getTime() > acc.getTime()) return ext.end;
+      return acc;
+    }, null);
 
     // Si es legacy (vence_estimado sin meses_extra), respetar la fecha exacta.
     // Si hay membresía además, sí se suma sobre la fecha legacy (30 días por mes de membresía).
     const baseForEnd =
       metaVenceDay && metaExtraParsed === null ? metaVenceDay : baseEnd;
     const extraDaysFromMonths = normalizedExtraMonths * 30;
-    const membresiaDays = membresiaMonthsTotal * 30;
-
-    const estEnd =
+    const legacyComputedEnd =
       metaVenceDay && metaExtraParsed === null
-        ? addDays(baseForEnd, membresiaDays)
-        : addDays(baseForEnd, extraDaysFromMonths + membresiaDays);
+        ? baseForEnd
+        : addDays(baseForEnd, extraDaysFromMonths);
 
-    const extensionDaysFromMetadata =
-      metaVenceDay && metaExtraParsed === null
-        ? legacyExtraDays + membresiaDays
-        : extraDaysFromMonths + membresiaDays;
+    const estEndCandidates = [legacyComputedEnd, explicitRangeEnd, activeMembershipEnd].filter(
+      Boolean,
+    ) as Date[];
+    const estEnd = estEndCandidates.reduce((acc, current) => {
+      return current.getTime() > acc.getTime() ? current : acc;
+    }, legacyComputedEnd);
+
+    const extensionDaysFromMetadata = Math.max(
+      0,
+      diffDays(baseEnd, estEnd),
+    );
     const remaining = diffDays(today, estEnd);
     const isExpired = remaining <= 0;
     return {
@@ -1938,11 +2073,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
       usedMetadataVence,
       extensionDaysFromMetadata,
       extraMonths: normalizedExtraMonths,
-      totalMonths,
       membresiaMonthsTotal,
       membresiaCount,
       membresiaCountTotal,
       membresiaAnuladasCount,
+      nextMembresiaNumber: membresiaCountTotal + 1,
+      rangeExtensions,
+      activeRangeExtensions,
+      activeMembershipPeriods,
+      explicitRangeDays,
     };
   }, [
     pIngreso,
@@ -2640,16 +2779,16 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-medium">
-                      Acceso ({accessStats?.totalMonths ?? 4} meses)
+                      Acceso
                     </h3>
                     <button
                       type="button"
                       className="p-1 rounded hover:bg-muted transition-colors"
                       title="Extender accesos"
                       onClick={() => {
-                        setTempMesesExtra(
-                          String(accessStats?.extraMonths ?? 0),
-                        );
+                        setTempMesesExtra("0");
+                        setTempVenceFechaDesde(isoDay(new Date()));
+                        setTempVenceFechaHasta(isoDay(new Date()));
                         {
                           const vt = (venceMeta as any)?.payload?.vence_tipo;
                           setTempVenceTipo(
@@ -2711,22 +2850,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       )
                         ? (venceMeta as any).payload.historial
                         : [];
-                      const extensionCount = hist.filter((h: any) => {
-                        const from =
-                          h?.from_meses_extra === null ||
-                          h?.from_meses_extra === undefined
-                            ? null
-                            : Number(h.from_meses_extra);
-                        const to =
-                          h?.to_meses_extra === null ||
-                          h?.to_meses_extra === undefined
-                            ? null
-                            : Number(h.to_meses_extra);
-                        if (to === null || !Number.isFinite(to)) return false;
-                        if (from === null || !Number.isFinite(from))
-                          return to > 0;
-                        return to > from;
-                      }).length;
+                      const extensionCount = accessStats.rangeExtensions.length;
+                      const activeCount = accessStats.activeRangeExtensions.length;
 
                       if (accessStats.extraMonths <= 0 && extensionCount === 0)
                         return null;
@@ -2734,18 +2859,24 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       return (
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-muted-foreground">
-                            Meses extra
+                            Extensiones por rango
                           </span>
                           <span className="font-medium">
-                            {accessStats.extraMonths}
-                            <span className="text-muted-foreground"> · </span>
-                            <span className="text-muted-foreground">
-                              {tipo}
-                            </span>
+                            {activeCount} vigente(s)
                             <span className="text-muted-foreground"> · </span>
                             <span className="text-muted-foreground">
                               {extensionCount} ext.
                             </span>
+                            {accessStats.extraMonths > 0 ? (
+                              <>
+                                <span className="text-muted-foreground"> · </span>
+                                <span className="text-muted-foreground">
+                                  {accessStats.extraMonths} mes(es) legacy
+                                </span>
+                              </>
+                            ) : null}
+                            <span className="text-muted-foreground"> · </span>
+                            <span className="text-muted-foreground">{tipo}</span>
                           </span>
                         </div>
                       );
@@ -2756,11 +2887,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">Membresía</span>
                         <span className="font-medium">
-                          {accessStats.membresiaMonthsTotal} mes(es)
+                          {accessStats.membresiaCount} activa(s)
                           <span className="text-muted-foreground"> · </span>
-                          <span className="text-muted-foreground">
-                            {accessStats.membresiaCount} ext.
-                          </span>
+                          <span className="text-muted-foreground">va por la #{accessStats.nextMembresiaNumber - 1 || 0}</span>
                           {accessStats.membresiaAnuladasCount > 0 ? (
                             <>
                               <span className="text-muted-foreground"> · </span>
@@ -2864,9 +2993,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           className="p-1 rounded hover:bg-muted transition-colors"
                           title="Extender accesos"
                           onClick={() => {
-                            setTempMesesExtra(
-                              String(accessStats?.extraMonths ?? 0),
-                            );
+                            setTempMesesExtra("0");
+                            setTempVenceFechaDesde(isoDay(new Date()));
+                            setTempVenceFechaHasta(isoDay(new Date()));
                             {
                               const vt = (venceMeta as any)?.payload
                                 ?.vence_tipo;
@@ -3368,13 +3497,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 variant="outline"
                 onClick={() => {
                   setTempVenceTipo("membresia");
-                  // Membresía: cada solicitud agrega +1 mes (delta fijo)
+                    setTempVenceFechaDesde(isoDay(new Date()));
+                    setTempVenceFechaHasta("");
+                    // Membresía: cada solicitud agrega +1 mes (delta fijo)
                   setTempMesesExtra("1");
                 }}
               >
-                {membresiaExts.length > 0
-                  ? "Agregar nueva membresía"
-                  : "Por membresía"}
+                  {membresiaExts.length > 0
+                    ? `Agregar membresía #${(accessStats?.nextMembresiaNumber ?? membresiaExts.length + 1)}`
+                    : "Por membresía"}
               </Button>
             </div>
             <div>
@@ -3390,6 +3521,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           ? "membresia"
                           : "contractual";
                     setTempVenceTipo(next);
+                    if (next === "membresia") {
+                      setTempMesesExtra("1");
+                      setTempVenceFechaDesde(isoDay(new Date()));
+                      setTempVenceFechaHasta("");
+                    } else {
+                      setTempMesesExtra("0");
+                      setTempVenceFechaDesde(isoDay(new Date()));
+                      setTempVenceFechaHasta(isoDay(new Date()));
+                    }
                     if (next === "contractual") {
                       setTempVenceMotivo("");
                     }
@@ -3412,44 +3552,84 @@ export default function StudentDetailContent({ code }: { code: string }) {
             <div>
               <Label>
                 {tempVenceTipo === "membresia"
-                  ? "Meses de membresía"
-                  : "Meses extra"}
+                  ? "Periodo de membresía"
+                  : "Rango de extensión"}
               </Label>
-              <div className="mt-1">
-                <Select
-                  value={tempMesesExtra}
-                  onValueChange={(v) => setTempMesesExtra(v)}
-                  disabled={tempVenceTipo === "membresia"}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona meses extra" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tempVenceTipo === "membresia" ? (
-                      <SelectItem value="1">1</SelectItem>
-                    ) : (
-                      Array.from({ length: 13 }).map((_, i) => (
-                        <SelectItem key={`mes-extra-${i}`} value={String(i)}>
-                          {i}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+              <div className="mt-1 space-y-2">
+                {tempVenceTipo === "membresia" ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="vence-fecha-desde-membresia" className="text-xs text-muted-foreground">
+                        Desde
+                      </Label>
+                      <Input
+                        id="vence-fecha-desde-membresia"
+                        type="date"
+                        value={tempVenceFechaDesde}
+                        onChange={(e) => setTempVenceFechaDesde(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Hasta
+                      </Label>
+                      <Input
+                        value={
+                          tempVenceFechaDesde
+                            ? isoDay(
+                                addDays(
+                                  parseMaybe(tempVenceFechaDesde) ?? new Date(),
+                                  30,
+                                ),
+                              )
+                            : ""
+                        }
+                        disabled
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="vence-fecha-desde" className="text-xs text-muted-foreground">
+                        Desde
+                      </Label>
+                      <Input
+                        id="vence-fecha-desde"
+                        type="date"
+                        value={tempVenceFechaDesde}
+                        onChange={(e) => setTempVenceFechaDesde(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="vence-fecha-hasta" className="text-xs text-muted-foreground">
+                        Hasta
+                      </Label>
+                      <Input
+                        id="vence-fecha-hasta"
+                        type="date"
+                        value={tempVenceFechaHasta}
+                        min={isoDay(new Date())}
+                        onChange={(e) => setTempVenceFechaHasta(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {tempVenceTipo === "membresia"
-                  ? `Cada membresía agrega +1 mes adicional.`
+                  ? `La membresía se activa desde la fecha inicial elegida y dura 30 días calendario. Si ya existen registros, esta sería la #${accessStats?.nextMembresiaNumber ?? membresiaExts.length + 1}.`
                   : (() => {
-                      const currentExtra = Number(
-                        accessStats?.extraMonths ?? 0,
-                      );
-                      const nextExtra = Number(tempMesesExtra) || 0;
-                      const membresia = Number(
-                        accessStats?.membresiaMonthsTotal ?? 0,
-                      );
-                      const total = 4 + nextExtra + membresia;
-                      return `Actual: ${currentExtra} mes(es) extra. Nuevo: ${nextExtra}. Total acceso: ${total} meses`;
+                      const desde = parseMaybe(tempVenceFechaDesde);
+                      const hasta = parseMaybe(tempVenceFechaHasta);
+                      if (!desde || !hasta) {
+                        return "La extensión contractual o extraordinaria se aplica desde la fecha inicial que selecciones y vence en la fecha final.";
+                      }
+                      return `La extensión se aplica desde el ${fmtES(desde.toISOString())} y mantendrá el acceso hasta el ${fmtES(hasta.toISOString())}.`;
                     })()}
               </p>
             </div>
@@ -3470,7 +3650,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   rows={3}
                   placeholder={
                     tempVenceTipo === "extraordinaria"
-                      ? "Describe por qué se otorgan meses extra..."
+                      ? "Describe por qué se otorga esta extensión..."
                       : "Opcional: detalle o referencia..."
                   }
                 />
@@ -3483,7 +3663,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
               <Button
                 onClick={handleSaveVence}
                 disabled={
-                  tempVenceTipo === "extraordinaria" && !tempVenceMotivo.trim()
+                  (tempVenceTipo === "extraordinaria" && !tempVenceMotivo.trim()) ||
+                  !tempVenceFechaDesde ||
+                  (tempVenceTipo !== "membresia" && !tempVenceFechaHasta)
                 }
               >
                 Guardar
@@ -3552,7 +3734,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           <div>
                             <div className="text-muted-foreground">Antes</div>
                             <div className="font-medium">
-                              {h?.from_meses_extra !== undefined
+                              {h?.fecha_desde || h?.fecha_hasta
+                                ? `${fmtES(h?.fecha_desde)} → ${fmtES(h?.fecha_hasta)}`
+                                : h?.from_meses_extra !== undefined
                                 ? `${String(h.from_meses_extra ?? "—")} mes(es) extra`
                                 : (h?.from ?? "—")}
                             </div>
@@ -3560,7 +3744,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           <div>
                             <div className="text-muted-foreground">Después</div>
                             <div className="font-medium">
-                              {h?.to_meses_extra !== undefined
+                              {h?.fecha_desde || h?.fecha_hasta
+                                ? `${fmtES(h?.fecha_desde)} → ${fmtES(h?.fecha_hasta)}`
+                                : h?.to_meses_extra !== undefined
                                 ? `${String(h.to_meses_extra ?? "—")} mes(es) extra`
                                 : (h?.to ?? "—")}
                             </div>
@@ -3639,6 +3825,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       const months = Number(
                         m?.payload?.meses ?? m?.payload?.meses_extra ?? 0,
                       );
+                      const membershipNumber =
+                        Number(m?.payload?.numero_membresia) > 0
+                          ? Number(m.payload.numero_membresia)
+                          : membresiaExts.length - idx;
                       const isAnulado =
                         Boolean(m?.payload?.anulado) ||
                         !Number.isFinite(months) ||
@@ -3673,7 +3863,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           className="rounded-md border border-border bg-muted/20 p-3 text-sm"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <div className="font-medium">{who}</div>
+                            <div className="font-medium">
+                              Membresía #{membershipNumber}
+                            </div>
                             <div className="flex items-center gap-2">
                               {isAnulado ? (
                                 <Badge
@@ -3709,11 +3901,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           <div className="mt-2 text-xs">
                             <div>
                               <span className="text-muted-foreground">
-                                Meses:{" "}
+                                Periodo:{" "}
                               </span>
                               <span className="font-medium">
-                                {Number.isFinite(months) ? months : 0}
+                                {fmtES(m?.payload?.fecha_desde)} → {fmtES(m?.payload?.fecha_hasta)}
                               </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Registró: </span>
+                              <span className="font-medium">{who}</span>
                             </div>
                             {motivo ? (
                               <div className="mt-1">

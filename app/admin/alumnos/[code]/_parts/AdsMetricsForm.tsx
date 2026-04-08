@@ -137,7 +137,9 @@ function AdsMetricsCallout({
         };
 
   return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${palette.shell}`}>
+    <div
+      className={`rounded-xl border p-3 shadow-sm sm:rounded-2xl sm:p-4 ${palette.shell}`}
+    >
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span
@@ -149,7 +151,7 @@ function AdsMetricsCallout({
         </div>
         <div className="space-y-1">
           <div className="text-sm font-semibold text-foreground">{title}</div>
-          <div className="rounded-xl border border-white/50 bg-white/60 p-3 backdrop-blur-sm">
+          <div className="rounded-lg border border-white/50 bg-white/60 p-2.5 backdrop-blur-sm sm:rounded-xl sm:p-3">
             <p className="whitespace-pre-line text-sm leading-6 text-muted-foreground">
               {description}
             </p>
@@ -159,13 +161,13 @@ function AdsMetricsCallout({
           className={
             items.length <= 1
               ? "grid gap-3"
-              : "grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
+              : "grid gap-3 md:grid-cols-2 xl:grid-cols-3"
           }
         >
           {items.map((item) => (
             <div
               key={item.title}
-              className={`rounded-xl border p-3 backdrop-blur-sm ${palette.card} ${
+              className={`rounded-lg border p-2.5 backdrop-blur-sm sm:rounded-xl sm:p-3 ${palette.card} ${
                 item.featured ? "lg:col-span-2 xl:col-span-2" : ""
               }`}
             >
@@ -184,14 +186,14 @@ function AdsMetricsCallout({
                     <ul
                       className={`text-xs leading-5 text-muted-foreground ${
                         item.featured
-                          ? "grid gap-x-4 gap-y-2 md:grid-cols-2"
+                          ? "grid gap-x-4 gap-y-2 sm:grid-cols-2"
                           : "space-y-1"
                       }`}
                     >
                       {item.details.map((detail) => (
                         <li
                           key={detail}
-                          className="flex gap-2 rounded-lg bg-background/70 px-2.5 py-2"
+                          className="flex gap-2 rounded-lg bg-background/70 px-2 py-1.5 sm:px-2.5 sm:py-2"
                         >
                           <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
                           <span>{detail}</span>
@@ -1525,8 +1527,8 @@ export default function AdsMetricsForm({
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between gap-3">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
             {isReadOnly
               ? "Solo lectura"
@@ -1536,7 +1538,7 @@ export default function AdsMetricsForm({
                   ? "Guardando…"
                   : "Cambios guardados"}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {metadataLoading ? (
               <Badge variant="secondary">metadata…</Badge>
             ) : matchedMetadata?.id != null ? (
@@ -1600,8 +1602,8 @@ export default function AdsMetricsForm({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <fieldset disabled={isReadOnly} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <fieldset disabled={isReadOnly} className="space-y-4 sm:space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label>Fecha inicio</Label>
                   <Input
@@ -1635,8 +1637,8 @@ export default function AdsMetricsForm({
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm">Rendimiento</CardTitle>
                   </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="md:col-span-4">
+                  <CardContent className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <div className="sm:col-span-2 xl:col-span-4">
                       <AdsMetricsCallout
                         eyebrow="Importante"
                         title="Inversión y facturación"
@@ -1724,7 +1726,7 @@ export default function AdsMetricsForm({
                         Se guarda en USD: {fmtMoney(data.facturacion)}
                       </div>
                     </div>
-                    <div className="space-y-1 md:col-span-4">
+                    <div className="space-y-1 sm:col-span-2 xl:col-span-4">
                       <Label>ROAS</Label>
                       <Input
                         inputMode="decimal"
@@ -1737,7 +1739,7 @@ export default function AdsMetricsForm({
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm">Embudo</CardTitle>
@@ -1750,7 +1752,7 @@ export default function AdsMetricsForm({
                       items={FUNNEL_DISCLAIMER_ITEMS}
                       tone="sky"
                     />
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label>Alcance</Label>
                         <Input
@@ -1793,7 +1795,7 @@ export default function AdsMetricsForm({
                       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         Compras
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <div className="space-y-1.5">
                           <Label>Carnada</Label>
                           <Input
@@ -1958,7 +1960,7 @@ export default function AdsMetricsForm({
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm">Estado</CardTitle>
@@ -1986,7 +1988,7 @@ export default function AdsMetricsForm({
                         onCheckedChange={(v) => onChange("requiere_interv", v)}
                       />
                     </div>
-                    <div className="space-y-3 rounded-2xl border border-border/70 bg-gradient-to-br from-background via-background to-muted/30 p-4 shadow-sm">
+                    <div className="space-y-3 rounded-xl border border-border/70 bg-gradient-to-br from-background via-background to-muted/30 p-3 shadow-sm sm:rounded-2xl sm:p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
                           <Label className="text-sm font-medium">
@@ -2015,7 +2017,7 @@ export default function AdsMetricsForm({
                         </div>
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <div className="space-y-1.5">
                           <Label>Fase</Label>
                           <Select
@@ -2171,7 +2173,7 @@ export default function AdsMetricsForm({
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Vista previa</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5 text-sm">
+          <CardContent className="space-y-4 text-sm sm:space-y-5">
             <div className="space-y-1.5">
               <div className="font-medium text-muted-foreground">
                 Rendimiento
@@ -2218,10 +2220,10 @@ export default function AdsMetricsForm({
 
             <Separator />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <div className="font-medium text-muted-foreground">Embudo</div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
                   <div>
                     Alcance: <b>{fmtNum(data.alcance)}</b>
                   </div>
@@ -2260,7 +2262,7 @@ export default function AdsMetricsForm({
 
             <Separator />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div>
                 <div className="font-medium text-muted-foreground mb-2">
                   Compras
