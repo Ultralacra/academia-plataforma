@@ -189,8 +189,13 @@ export default function EditOptionModal({
         return;
       }
 
+      // Solo pedir calendario de pausa si realmente se está editando el estado
+      // hacia una pausa, o si ya estaba pausado y se está agregando una pausa nueva.
+      const shouldRequestPauseDetails =
+        (wantsEstado && isPaused) || isAddingPauseToAlreadyPaused;
+
       // Si se selecciona PAUSADO y no tenemos rango/tipo/motivo, primero pedirlos
-      if (isPaused && !hasPauseDetails) {
+      if (shouldRequestPauseDetails && !hasPauseDetails) {
         setPendingSaveAfterPauseDetails(true);
         setPauseOpen(true);
         setSaving(false);

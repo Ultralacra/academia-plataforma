@@ -192,6 +192,17 @@ function diffDays(a: Date, b: Date) {
 
 const MORA_GRACE_DAYS = 5;
 
+const HIDDEN_PAYMENT_CODES = new Set([
+  "L4SzLGXEXLa7in1C",
+  "Rqcc9iY9aSpNG_bz",
+  "o1AMJ3P-5-kynF83",
+]);
+
+function isHiddenPaymentCode(code: string | null | undefined) {
+  const normalized = String(code || "").trim();
+  return normalized ? HIDDEN_PAYMENT_CODES.has(normalized) : false;
+}
+
 function isClosedOrPaidStatus(raw: unknown) {
   const s = normalizePaymentStatus(raw);
   if (!s) return false;
@@ -877,8 +888,11 @@ function PaymentsContent() {
       if (cuotasReqIdRef.current !== reqId) return;
 
       const raw = Array.isArray(json?.data) ? json.data : [];
+      const visible = raw.filter(
+        (r) => !isHiddenPaymentCode(r?.payment_codigo),
+      );
       // “Cuotas por vencer”: por defecto ocultamos PAGADA.
-      const filtered = raw.filter((r) => {
+      const filtered = visible.filter((r) => {
         const s = String(r?.estatus ?? "").toLowerCase();
         if (!s) return true;
         return !s.includes("pagad");
@@ -889,7 +903,7 @@ function PaymentsContent() {
       );
       setCuotasPage(Number(json?.page ?? opts.page) || opts.page);
       setCuotasTotalPages(Number(json?.totalPages ?? 1) || 1);
-      setCuotasTotal(Number(json?.total ?? filtered.length) || 0);
+      setCuotasTotal(filtered.length);
       setCuotasLoadedMonth(cuotasMonth);
     } catch (e: any) {
       if (cuotasReqIdRef.current !== reqId) return;
@@ -1296,8 +1310,11 @@ function PaymentsContent() {
         // No enviamos filtros al backend porque no los soporta
         // El filtrado se hace localmente
       });
-      setRows(Array.isArray(json?.data) ? json.data : []);
-      setTotal(Number(json?.total ?? 0));
+      const visibleRows = Array.isArray(json?.data)
+        ? json.data.filter((r) => !isHiddenPaymentCode(r?.codigo))
+        : [];
+      setRows(visibleRows);
+      setTotal(visibleRows.length);
       // La paginación ahora es solo visual (frontend)
       const ps = next?.pageSize ?? pageSize;
       setPage(1);
@@ -1344,7 +1361,7 @@ function PaymentsContent() {
 
       const totalPagesFromApi = Number(first?.totalPages ?? 1);
       const all: PaymentRow[] = Array.isArray(first?.data)
-        ? [...first.data]
+        ? first.data.filter((r) => !isHiddenPaymentCode(r?.codigo))
         : [];
 
       for (let p = 2; p <= totalPagesFromApi; p++) {
@@ -1355,7 +1372,7 @@ function PaymentsContent() {
         });
         if (metricsReqIdRef.current !== reqId) return;
         if (Array.isArray(next?.data) && next.data.length) {
-          all.push(...next.data);
+          all.push(...next.data.filter((r) => !isHiddenPaymentCode(r?.codigo)));
         }
       }
 
