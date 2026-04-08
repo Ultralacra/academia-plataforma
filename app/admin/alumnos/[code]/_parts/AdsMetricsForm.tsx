@@ -445,8 +445,22 @@ export default function AdsMetricsForm({
 }) {
   const { user } = useAuth();
   const isReadOnly = Boolean(readOnly);
+  const normalizedUserRole = String((user as any)?.role ?? "")
+    .trim()
+    .toLowerCase();
+  const normalizedUserTipo = String((user as any)?.tipo ?? "")
+    .trim()
+    .toLowerCase();
   const canEditInterventionSwitch =
-    !isReadOnly && String((user as any)?.role ?? "") !== "student";
+    !isReadOnly &&
+    [
+      normalizedUserRole,
+      normalizedUserTipo,
+    ].some((value) =>
+      ["admin", "administrator", "superadmin", "equipo", "team"].includes(
+        value,
+      ),
+    );
 
   type Metrics = {
     fecha_inicio?: string;
@@ -1289,13 +1303,16 @@ export default function AdsMetricsForm({
     [data, view.roas],
   );
 
-  const requiresInterventionEffective =
-    automaticInterventionDecision ?? !!data.requiere_interv;
+  const requiresInterventionEffective = !!data.requiere_interv;
 
   const optimizationPhaseSelected = isOptimizationPhase(data.fase);
 
   function onChange<K extends keyof Metrics>(k: K, v: Metrics[K]) {
     const next = { ...data, [k]: v } as Metrics;
+    if (k === "requiere_interv") {
+      persist(next);
+      return;
+    }
     const nextAutomaticInterventionDecision =
       computeAutomaticInterventionDecision({ ...next, roas: view.roas });
     if (nextAutomaticInterventionDecision !== null) {

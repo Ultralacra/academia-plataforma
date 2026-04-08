@@ -20,7 +20,22 @@ import {
   Calendar as CalendarIcon,
   ChevronDown,
   FileSpreadsheet,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Charts } from "./charts";
 import KPIs from "./kpis";
 import TeamsTable from "./teams-table";
@@ -136,6 +151,248 @@ function Select({
     </div>
   );
 }
+
+function areaChipClass(area?: string | null) {
+  const key = normText(area);
+  if (key.includes("copy")) {
+    return "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700";
+  }
+  if (key.includes("tecnico") || key.includes("tecnico")) {
+    return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+  if (key.includes("ads")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (key.includes("atencion") || key.includes("cliente")) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function statusBadgeClass(status?: string | null) {
+  const key = normText(status);
+  if (key.includes("resuelto")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (key.includes("progreso") || key.includes("proceso")) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (key.includes("envio")) {
+    return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+  if (key.includes("paus")) {
+    return "border-violet-200 bg-violet-50 text-violet-700";
+  }
+  if (key.includes("pend")) {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+        {label}
+      </div>
+      <div className="text-sm font-medium text-gray-900">{value}</div>
+    </div>
+  );
+}
+
+function FancySelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  emptyLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value) ?? null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50/70 px-3 text-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100">
+          <span className="truncate text-left">
+            {selected?.label ?? placeholder}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandList>
+            <CommandEmpty>{emptyLabel}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={`${option.label} ${option.value}`}
+                  onSelect={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="truncate">{option.label}</span>
+                  <Check
+                    className={`h-4 w-4 ${
+                      option.value === value ? "opacity-100" : "opacity-0"
+                    }`}
+                  />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CoachSelect({
+  value,
+  onChange,
+  coaches,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  coaches: CoachItem[];
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = coaches.find((coach) => coach.codigo === value) ?? null;
+  const grouped = coaches.reduce<Record<string, CoachItem[]>>((acc, coach) => {
+    const area = String(coach.area || coach.puesto || "Sin area").trim();
+    if (!acc[area]) acc[area] = [];
+    acc[area].push(coach);
+    return acc;
+  }, {});
+
+  const sortedAreas = Object.keys(grouped).sort((a, b) =>
+    a.localeCompare(b, "es", { sensitivity: "base" }),
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gradient-to-r from-white to-slate-50 px-3 text-sm transition hover:border-sky-200 hover:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100">
+          <div className="flex min-w-0 items-center gap-2">
+            {selected?.area ? (
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${areaChipClass(
+                  selected.area,
+                )}`}
+              >
+                {selected.area}
+              </span>
+            ) : null}
+            <span className="truncate text-left">
+              {selected
+                ? `${selected.nombre}${selected.puesto ? ` · ${selected.puesto}` : ""}`
+                : "Todos los coaches"}
+            </span>
+          </div>
+          <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[420px] max-w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput placeholder="Buscar coach o area..." />
+          <CommandList>
+            <CommandEmpty>No se encontraron coaches.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="Todos los coaches"
+                onSelect={() => {
+                  onChange("all");
+                  setOpen(false);
+                }}
+                className="flex items-center justify-between gap-2"
+              >
+                <span>Todos los coaches</span>
+                <Check
+                  className={`h-4 w-4 ${value === "all" ? "opacity-100" : "opacity-0"}`}
+                />
+              </CommandItem>
+            </CommandGroup>
+            {sortedAreas.map((area) => (
+              <CommandGroup key={area} heading={area}>
+                {grouped[area]
+                  .slice()
+                  .sort((a, b) =>
+                    String(a.nombre || "").localeCompare(
+                      String(b.nombre || ""),
+                      "es",
+                      {
+                        sensitivity: "base",
+                      },
+                    ),
+                  )
+                  .map((coach) => (
+                    <CommandItem
+                      key={coach.codigo}
+                      value={`${coach.nombre} ${coach.puesto || ""} ${coach.area || ""} ${coach.codigo}`}
+                      onSelect={() => {
+                        onChange(coach.codigo);
+                        setOpen(false);
+                      }}
+                      className="flex items-center justify-between gap-3 py-2"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${areaChipClass(
+                            coach.area || area,
+                          )}`}
+                        >
+                          {coach.area || area}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {coach.nombre}
+                          </div>
+                          <div className="truncate text-xs text-gray-500">
+                            {coach.puesto || "Coach"}
+                          </div>
+                        </div>
+                      </div>
+                      <Check
+                        className={`h-4 w-4 ${
+                          coach.codigo === value ? "opacity-100" : "opacity-0"
+                        }`}
+                      />
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function Button({
   children,
   onClick,
@@ -731,7 +988,7 @@ export default function TicketsContent() {
                 />
               </div>
               <div className="md:col-span-2">
-                <Select
+                <FancySelect
                   value={estado}
                   onChange={(v) => {
                     setPage(1);
@@ -741,10 +998,13 @@ export default function TicketsContent() {
                     value: e,
                     label: e === "all" ? "Todos los estados" : e.toUpperCase(),
                   }))}
+                  placeholder="Todos los estados"
+                  searchPlaceholder="Buscar estado..."
+                  emptyLabel="No se encontraron estados"
                 />
               </div>
               <div className="md:col-span-2">
-                <Select
+                <FancySelect
                   value={tipo}
                   onChange={(v) => {
                     setPage(1);
@@ -754,32 +1014,32 @@ export default function TicketsContent() {
                     value: t,
                     label: t === "all" ? "Todos los tipos" : t.toUpperCase(),
                   }))}
+                  placeholder="Todos los tipos"
+                  searchPlaceholder="Buscar tipo..."
+                  emptyLabel="No se encontraron tipos"
                 />
               </div>
               <div className="md:col-span-2">
-                <Select
+                <CoachSelect
                   value={coachFiltro}
                   onChange={(v) => {
                     setPage(1);
                     setCoachFiltro(v);
                   }}
-                  options={[
-                    { value: "all", label: "Todos los coaches" },
-                    ...coaches.map((c) => ({
-                      value: c.codigo,
-                      label: `${c.nombre}${c.puesto ? ` · ${c.puesto}` : ""}${c.area ? ` (${c.area})` : ""}`,
-                    })),
-                  ]}
+                  coaches={coaches}
                 />
               </div>
               <div className="md:col-span-2">
-                <Select
+                <FancySelect
                   value={informanteFiltro}
                   onChange={(v) => {
                     setPage(1);
                     setInformanteFiltro(v);
                   }}
                   options={informanteOpts}
+                  placeholder="Todos los informantes"
+                  searchPlaceholder="Buscar informante..."
+                  emptyLabel="No se encontraron informantes"
                 />
               </div>
               <div className="md:col-span-1">
@@ -944,10 +1204,10 @@ export default function TicketsContent() {
           }
         }}
       >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl w-[96vw] max-h-[92vh] overflow-hidden p-0">
+          <DialogHeader className="border-b border-gray-200 bg-white px-6 py-5">
             <DialogTitle>
-              {selectedTicket?.nombre ?? "Ticket"}
+              {ticketDetail?.nombre ?? selectedTicket?.nombre ?? "Ticket"}
               {selectedTicket?.id_externo ? (
                 <span className="ml-2 text-xs text-muted-foreground">
                   ({selectedTicket.id_externo})
@@ -963,111 +1223,342 @@ export default function TicketsContent() {
               Cargando detalle…
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-xl border p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm text-muted-foreground">Alumno</div>
-                    <div className="text-sm font-medium">
-                      {selectedTicket.alumno_nombre ?? "—"}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-muted-foreground">
-                      Estado / Tipo
-                    </div>
-                    <div className="text-sm font-medium">
-                      {(selectedTicket.estado ?? "—").toUpperCase()} ·{" "}
-                      {(selectedTicket.tipo ?? "—").toUpperCase()}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="max-h-[calc(92vh-88px)] overflow-y-auto px-6 py-5">
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(
+                            ticketDetail?.estado ?? selectedTicket?.estado,
+                          )}`}
+                        >
+                          {String(
+                            ticketDetail?.estado ??
+                              selectedTicket?.estado ??
+                              "—",
+                          ).toUpperCase()}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                          {String(
+                            ticketDetail?.tipo ?? selectedTicket?.tipo ?? "—",
+                          ).toUpperCase()}
+                        </span>
+                        {ticketDetail?.plazo_info?.estado_plazo ? (
+                          <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                            {String(
+                              ticketDetail.plazo_info.estado_plazo,
+                            ).toUpperCase()}
+                          </span>
+                        ) : null}
+                      </div>
 
-              <div className="rounded-xl border p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold">Descripción</div>
-                  {!descEditing && (
-                    <button
-                      className="text-xs rounded-lg border px-3 py-1 hover:bg-gray-50"
-                      onClick={() => {
-                        setDescDraft(String(ticketDetail?.descripcion ?? ""));
-                        setDescEditing(true);
-                      }}
-                    >
-                      Editar
-                    </button>
-                  )}
-                </div>
-                {!descEditing ? (
-                  <div className="whitespace-pre-wrap text-sm">
-                    {String(ticketDetail?.descripcion ?? "—")}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Textarea
-                      rows={8}
-                      value={descDraft}
-                      onChange={(e) => setDescDraft(e.target.value)}
-                      placeholder="Escribe la descripción del ticket…"
-                    />
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        className="text-xs rounded-lg px-3 py-1 hover:bg-gray-100"
-                        onClick={() => {
-                          setDescEditing(false);
-                          setDescDraft("");
-                        }}
-                        disabled={savingDesc}
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        className="text-xs rounded-lg bg-sky-600 px-3 py-1 text-white hover:bg-sky-700 disabled:opacity-60"
-                        onClick={async () => {
-                          if (!selectedTicket?.id_externo) return;
-                          setSavingDesc(true);
-                          try {
-                            await updateTicket(
-                              String(selectedTicket.id_externo),
-                              { descripcion: (descDraft || "").trim() },
-                            );
-                            toast({ title: "Descripción actualizada" });
-                            // recargar detalle
-                            setTicketModalOpen(true); // mantener abierto
-                            const url = buildUrl(
-                              `/ticket/get/ticket/${encodeURIComponent(
-                                String(selectedTicket.id_externo),
-                              )}`,
-                            );
-                            const token =
-                              typeof window !== "undefined"
-                                ? getAuthToken()
-                                : null;
-                            const res = await fetch(url, {
-                              method: "GET",
-                              cache: "no-store",
-                              headers: token
-                                ? { Authorization: `Bearer ${token}` }
-                                : undefined,
-                            });
-                            const json = await res.json().catch(() => ({}));
-                            setTicketDetail(json?.data ?? json ?? null);
-                            setDescEditing(false);
-                          } catch (e) {
-                            console.error(e);
-                            toast({ title: "Error al actualizar descripción" });
-                          } finally {
-                            setSavingDesc(false);
-                          }
-                        }}
-                        disabled={savingDesc}
-                      >
-                        {savingDesc ? "Guardando…" : "Guardar"}
-                      </button>
+                      <div>
+                        <div className="text-2xl font-semibold tracking-tight text-gray-900">
+                          {ticketDetail?.nombre ??
+                            selectedTicket?.nombre ??
+                            "—"}
+                        </div>
+                        <div className="mt-1 text-sm text-gray-500">
+                          Ticket #
+                          {ticketDetail?.id ?? selectedTicket?.id ?? "—"} ·
+                          Código{" "}
+                          {ticketDetail?.codigo ??
+                            selectedTicket?.id_externo ??
+                            "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:w-[420px]">
+                      <DetailItem
+                        label="Alumno"
+                        value={
+                          ticketDetail?.alumno_nombre ??
+                          selectedTicket?.alumno_nombre ??
+                          "—"
+                        }
+                      />
+                      <DetailItem
+                        label="Informante"
+                        value={ticketDetail?.informante_nombre ?? "—"}
+                      />
+                      <DetailItem
+                        label="Creado"
+                        value={fmtDateTime(
+                          ticketDetail?.created_at ?? selectedTicket?.creacion,
+                        )}
+                      />
+                      <DetailItem
+                        label="Deadline"
+                        value={fmtDateTime(
+                          ticketDetail?.deadline ?? selectedTicket?.deadline,
+                        )}
+                      />
+                      <DetailItem
+                        label="Resuelto por"
+                        value={ticketDetail?.resuelto_por_nombre ?? "—"}
+                      />
+                      <DetailItem
+                        label="Último estado"
+                        value={fmtDateTime(ticketDetail?.ultimo_estado?.fecha)}
+                      />
                     </div>
                   </div>
-                )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-gray-900">
+                          Descripción completa
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {ticketDetail?.descripcion
+                            ? `${String(ticketDetail.descripcion).length} caracteres`
+                            : "Sin descripción"}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold">Contenido</div>
+                        {!descEditing && (
+                          <button
+                            className="text-xs rounded-lg border border-gray-200 bg-white px-3 py-1 hover:bg-gray-50"
+                            onClick={() => {
+                              setDescDraft(
+                                String(ticketDetail?.descripcion ?? ""),
+                              );
+                              setDescEditing(true);
+                            }}
+                          >
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                      {!descEditing ? (
+                        <div className="whitespace-pre-wrap rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-sm leading-7 text-gray-800">
+                          {String(ticketDetail?.descripcion ?? "—")}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Textarea
+                            rows={12}
+                            value={descDraft}
+                            onChange={(e) => setDescDraft(e.target.value)}
+                            placeholder="Escribe la descripción del ticket…"
+                          />
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              className="text-xs rounded-lg px-3 py-1 hover:bg-gray-100"
+                              onClick={() => {
+                                setDescEditing(false);
+                                setDescDraft("");
+                              }}
+                              disabled={savingDesc}
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              className="text-xs rounded-lg bg-sky-600 px-3 py-1 text-white hover:bg-sky-700 disabled:opacity-60"
+                              onClick={async () => {
+                                if (!selectedTicket?.id_externo) return;
+                                setSavingDesc(true);
+                                try {
+                                  await updateTicket(
+                                    String(selectedTicket.id_externo),
+                                    { descripcion: (descDraft || "").trim() },
+                                  );
+                                  toast({ title: "Descripción actualizada" });
+                                  const url = buildUrl(
+                                    `/ticket/get/ticket/${encodeURIComponent(
+                                      String(selectedTicket.id_externo),
+                                    )}`,
+                                  );
+                                  const token =
+                                    typeof window !== "undefined"
+                                      ? getAuthToken()
+                                      : null;
+                                  const res = await fetch(url, {
+                                    method: "GET",
+                                    cache: "no-store",
+                                    headers: token
+                                      ? { Authorization: `Bearer ${token}` }
+                                      : undefined,
+                                  });
+                                  const json = await res
+                                    .json()
+                                    .catch(() => ({}));
+                                  setTicketDetail(json?.data ?? json ?? null);
+                                  setDescEditing(false);
+                                } catch (e) {
+                                  console.error(e);
+                                  toast({
+                                    title: "Error al actualizar descripción",
+                                  });
+                                } finally {
+                                  setSavingDesc(false);
+                                }
+                              }}
+                              disabled={savingDesc}
+                            >
+                              {savingDesc ? "Guardando…" : "Guardar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <div className="mb-3 text-sm font-semibold text-gray-900">
+                        Historial de estados
+                      </div>
+                      {Array.isArray(ticketDetail?.estados) &&
+                      ticketDetail.estados.length > 0 ? (
+                        <div className="space-y-2">
+                          {ticketDetail.estados.map((estadoItem: any) => (
+                            <div
+                              key={estadoItem.id}
+                              className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(
+                                    estadoItem?.estatus_id,
+                                  )}`}
+                                >
+                                  {String(
+                                    estadoItem?.estatus_id ?? "—",
+                                  ).replaceAll("_", " ")}
+                                </span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {fmtDateTime(estadoItem?.created_at)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">
+                          Sin historial de estados.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <div className="mb-3 text-sm font-semibold text-gray-900">
+                        Coaches relacionados
+                      </div>
+                      {Array.isArray(ticketDetail?.coaches) &&
+                      ticketDetail.coaches.length > 0 ? (
+                        <div className="space-y-2">
+                          {ticketDetail.coaches.map((coach: any) => (
+                            <div
+                              key={String(
+                                coach?.codigo_equipo ??
+                                  coach?.nombre ??
+                                  Math.random(),
+                              )}
+                              className="rounded-xl border border-gray-100 bg-gray-50/70 p-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {coach?.nombre ?? "Coach"}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {coach?.puesto ?? "—"}
+                                  </div>
+                                </div>
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${areaChipClass(
+                                    coach?.area,
+                                  )}`}
+                                >
+                                  {coach?.area ?? "Sin área"}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">
+                          Sin coaches asociados.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <div className="mb-3 text-sm font-semibold text-gray-900">
+                        Archivos adjuntos
+                      </div>
+                      {Array.isArray(ticketDetail?.archivos) &&
+                      ticketDetail.archivos.length > 0 ? (
+                        <div className="space-y-2">
+                          {ticketDetail.archivos.map((file: any) => (
+                            <a
+                              key={file?.id}
+                              href={file?.url || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 transition hover:border-sky-200 hover:bg-sky-50"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-gray-900">
+                                  {file?.nombre_archivo ?? "Archivo"}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {file?.mime_type ?? "—"}
+                                  {file?.tamano_bytes
+                                    ? ` · ${Math.round(Number(file.tamano_bytes) / 1024)} KB`
+                                    : ""}
+                                </div>
+                              </div>
+                              <span className="text-xs font-medium text-sky-700">
+                                Abrir
+                              </span>
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">
+                          Sin archivos adjuntos.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <div className="mb-3 text-sm font-semibold text-gray-900">
+                        Datos adicionales
+                      </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        <DetailItem
+                          label="Horas restantes SLA"
+                          value={
+                            ticketDetail?.plazo_info?.horas_restantes ?? "—"
+                          }
+                        />
+                        <DetailItem
+                          label="Respondido"
+                          value={
+                            ticketDetail?.plazo_info?.fue_respondido
+                              ? "Sí"
+                              : "No"
+                          }
+                        />
+                        <DetailItem
+                          label="Primera respuesta"
+                          value={fmtDateTime(
+                            ticketDetail?.plazo_info?.fecha_primera_respuesta,
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

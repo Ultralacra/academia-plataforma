@@ -126,10 +126,12 @@ type Summary = {
   savedAt: string | null;
   inversion: number | null;
   facturacion: number | null;
+  roas: number | null;
   fase: string | null;
   subfase: string | null;
   color: string | null;
   trascendencia: string | null;
+  requiereInterv: boolean | null;
 };
 
 function asText(value: unknown): string | null {
@@ -172,6 +174,20 @@ function pickTrascendencia(payload: any): string | null {
   );
 }
 
+function parseBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "si", "sí", "yes"].includes(normalized)) return true;
+    if (["false", "0", "no"].includes(normalized)) return false;
+  }
+  return null;
+}
+
 function getSavedAt(meta: any): string | null {
   const p = meta?.payload;
   const raw =
@@ -195,10 +211,12 @@ function pickBest(prev: Summary | undefined, cand: Summary): Summary {
 
   return {
     ...newer,
+    roas: newer.roas ?? older.roas ?? null,
     fase: newer.fase ?? older.fase ?? null,
     subfase: newer.subfase ?? older.subfase ?? null,
     color: newer.color ?? older.color ?? null,
     trascendencia: newer.trascendencia ?? older.trascendencia ?? null,
+    requiereInterv: newer.requiereInterv ?? older.requiereInterv ?? null,
   };
 }
 
@@ -403,10 +421,12 @@ export async function POST(req: NextRequest) {
         savedAt: getSavedAt(m),
         inversion: parseAmount(payload?.inversion),
         facturacion: parseAmount(payload?.facturacion),
+        roas: parseAmount(payload?.roas),
         fase: asText(payload?.fase),
         subfase: normalizeSubfase(payload?.subfase),
         color: pickColor(payload),
         trascendencia: pickTrascendencia(payload),
+        requiereInterv: parseBoolean(payload?.requiere_interv),
       };
       byAlumnoId[matchKey] = pickBest(byAlumnoId[matchKey], summary);
     }
@@ -420,10 +440,12 @@ export async function POST(req: NextRequest) {
           savedAt: null,
           inversion: null,
           facturacion: null,
+          roas: null,
           fase: null,
           subfase: null,
           color: null,
           trascendencia: null,
+          requiereInterv: null,
         };
       }
     }
@@ -454,10 +476,12 @@ export async function POST(req: NextRequest) {
           savedAt: getSavedAt(m),
           inversion: parseAmount(payload?.inversion),
           facturacion: parseAmount(payload?.facturacion),
+          roas: parseAmount(payload?.roas),
           fase: asText(payload?.fase),
           subfase: normalizeSubfase(payload?.subfase),
           color: pickColor(payload),
           trascendencia: pickTrascendencia(payload),
+          requiereInterv: parseBoolean(payload?.requiere_interv),
         };
         best = pickBest(best, summary);
       }
@@ -470,10 +494,12 @@ export async function POST(req: NextRequest) {
           savedAt: null,
           inversion: null,
           facturacion: null,
+          roas: null,
           fase: null,
           subfase: null,
           color: null,
           trascendencia: null,
+          requiereInterv: null,
         } satisfies Summary);
     }),
   );

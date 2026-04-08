@@ -231,11 +231,212 @@ type AdsMetricsSummary = {
   savedAt: string | null;
   inversion: number | null;
   facturacion: number | null;
+  roas: number | null;
   fase: string | null;
   subfase: string | null;
   color: string | null;
   trascendencia: string | null;
+  requiereInterv: boolean | null;
 };
+
+type SpecialFilterKey = "casos_exito" | "requiere_interv";
+
+type MultiSelectFilterProps = {
+  label: string;
+  options: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  onClear: () => void;
+  className?: string;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  emptyLabel?: string;
+};
+
+function toggleSelection(current: string[], value: string) {
+  return current.includes(value)
+    ? current.filter((item) => item !== value)
+    : [...current, value];
+}
+
+function summarizeSelection(selected: string[], placeholder: string) {
+  if (selected.length === 0) return placeholder;
+  if (selected.length === 1) return selected[0];
+  return `${selected.length} seleccionados`;
+}
+
+function matchesSelectedValue(
+  selected: string[],
+  actualValue: string,
+  emptyToken?: string,
+) {
+  if (selected.length === 0) return true;
+  return selected.some((item) => {
+    if (emptyToken && item === emptyToken) return !actualValue;
+    return item === actualValue;
+  });
+}
+
+function getSpecialFilterReasons(
+  summary: AdsMetricsSummary | undefined,
+  activeFilters: SpecialFilterKey[],
+) {
+  const reasons: Array<"casos_exito" | "requiere_interv"> = [];
+  const facturacion = summary?.facturacion ?? null;
+  const requiereInterv = summary?.requiereInterv === true;
+
+  if (activeFilters.includes("casos_exito")) {
+    if (facturacion != null && facturacion > 5000) {
+      reasons.push("casos_exito");
+    }
+  }
+
+  if (activeFilters.includes("requiere_interv")) {
+    if (requiereInterv) {
+      reasons.push("requiere_interv");
+    }
+  }
+
+  return reasons;
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onToggle,
+  onClear,
+  className,
+  placeholder,
+  searchPlaceholder,
+  emptyLabel,
+}: MultiSelectFilterProps) {
+  const hasSelection = selected.length > 0;
+  const triggerLabel = summarizeSelection(
+    selected,
+    placeholder ?? `Seleccionar ${label.toLowerCase()}`,
+  );
+
+  return (
+    <div className={cn("space-y-1", className)}>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className={cn(
+              "h-9 w-full justify-between gap-2 px-3 text-left text-xs font-medium transition-colors",
+              hasSelection
+                ? "border-blue-200 bg-blue-50 text-blue-950 hover:bg-blue-100"
+                : "border-border bg-card text-foreground hover:bg-accent",
+            )}
+          >
+            <span
+              className={cn(
+                "truncate",
+                hasSelection ? "text-blue-950" : "text-muted-foreground",
+              )}
+            >
+              {triggerLabel}
+            </span>
+            <div className="flex items-center gap-2">
+              {hasSelection ? (
+                <Badge className="h-5 rounded-full border-blue-200 bg-white px-1.5 text-[10px] text-blue-700">
+                  {selected.length}
+                </Badge>
+              ) : null}
+              <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[260px] p-0">
+          <Command>
+            <CommandInput
+              placeholder={
+                searchPlaceholder ?? `Buscar ${label.toLowerCase()}...`
+              }
+            />
+            <CommandList>
+              <CommandEmpty>{emptyLabel ?? "No hay opciones"}</CommandEmpty>
+              <CommandGroup>
+                {options.map((option) => {
+                  const active = selected.includes(option);
+                  return (
+                    <CommandItem
+                      key={option}
+                      value={option}
+                      onSelect={() => onToggle(option)}
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-md border px-2 py-2 transition-colors",
+                        active
+                          ? "border-blue-200 bg-blue-50 text-blue-950"
+                          : "border-transparent bg-transparent text-foreground hover:border-border hover:bg-accent/60",
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={cn(
+                            "flex h-4 w-4 items-center justify-center rounded border transition-colors",
+                            active
+                              ? "border-blue-600 bg-blue-600 text-white"
+                              : "border-slate-300 bg-white text-transparent",
+                          )}
+                        >
+                          <Check className="h-3 w-3" />
+                        </span>
+                        <span
+                          className={cn(
+                            "truncate",
+                            active
+                              ? "font-semibold text-blue-950"
+                              : "font-medium text-foreground",
+                          )}
+                        >
+                          {option}
+                        </span>
+                      </div>
+                      {active ? (
+                        <Badge className="border-blue-200 bg-white text-[10px] font-medium text-blue-700">
+                          Activo
+                        </Badge>
+                      ) : null}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+            {hasSelection ? (
+              <div className="border-t border-border p-2">
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {selected.map((item) => (
+                    <Badge
+                      key={item}
+                      variant="secondary"
+                      className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-800"
+                    >
+                      {item}
+                    </Badge>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 w-full justify-center text-xs"
+                  onClick={onClear}
+                >
+                  Limpiar selección
+                </Button>
+              </div>
+            ) : null}
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 function chunk<T>(arr: T[], size: number): T[] {
   return arr.length > size ? arr.slice(0, size) : arr;
@@ -311,18 +512,14 @@ export default function StudentsContent() {
   const [serverTotalPages, setServerTotalPages] = useState<number | null>(null);
   const [loadingCoachAll, setLoadingCoachAll] = useState(false);
   const [coachAllProgress, setCoachAllProgress] = useState<number>(0);
-  const [filterStage, setFilterStage] = useState<string | null>(null);
-  const [filterState, setFilterState] = useState<string | null>(null);
-  const [filterMetaFase, setFilterMetaFase] = useState<string | null>(null);
-  const [filterMetaSubfase, setFilterMetaSubfase] = useState<string | null>(
-    null,
-  );
-  const [filterMetaTrasc, setFilterMetaTrasc] = useState<string | null>(null);
-  const [specialFilter, setSpecialFilter] = useState<"casos_exito" | null>(
-    null,
-  );
-  const [filterTag, setFilterTag] = useState<string | null>(null);
-  const [filterBono, setFilterBono] = useState<string | null>(null);
+  const [filterStage, setFilterStage] = useState<string[]>([]);
+  const [filterState, setFilterState] = useState<string[]>([]);
+  const [filterMetaFase, setFilterMetaFase] = useState<string[]>([]);
+  const [filterMetaSubfase, setFilterMetaSubfase] = useState<string[]>([]);
+  const [filterMetaTrasc, setFilterMetaTrasc] = useState<string[]>([]);
+  const [specialFilter, setSpecialFilter] = useState<SpecialFilterKey[]>([]);
+  const [filterTag, setFilterTag] = useState<string[]>([]);
+  const [filterBono, setFilterBono] = useState<string[]>([]);
   const [openCoach, setOpenCoach] = useState(false);
 
   // Cache local: dataset "todos" para volver sin refetch.
@@ -948,6 +1145,14 @@ export default function StudentsContent() {
     return hasNo ? [NO_VALUE, ...base] : base;
   }, [all, adsSummaryByAlumnoId]);
 
+  const specialFilterOptions = useMemo(
+    () => [
+      { key: "casos_exito" as const, label: "Casos de éxito" },
+      { key: "requiere_interv" as const, label: "Requiere intervención" },
+    ],
+    [],
+  );
+
   // aplicar filtro por fase adicional
   const finalRows = useMemo(() => {
     const NO_STAGE = "Sin fase";
@@ -957,16 +1162,24 @@ export default function StudentsContent() {
     const NO_META_TRASC = "sin trascendencia";
     const base = filtered.filter((s) => {
       // estado
-      if (filterState) {
-        if (filterState === NO_STATE) {
-          if (s.state && String(s.state).trim()) return false;
-        } else if (s.state !== filterState) return false;
+      if (
+        !matchesSelectedValue(
+          filterState,
+          String(s.state ?? "").trim(),
+          NO_STATE,
+        )
+      ) {
+        return false;
       }
       // fase
-      if (filterStage) {
-        if (filterStage === NO_STAGE) {
-          if (s.stage && String(s.stage).trim()) return false;
-        } else if (s.stage !== filterStage) return false;
+      if (
+        !matchesSelectedValue(
+          filterStage,
+          String(s.stage ?? "").trim(),
+          NO_STAGE,
+        )
+      ) {
+        return false;
       }
 
       const id = s.code
@@ -981,43 +1194,31 @@ export default function StudentsContent() {
         summary?.trascendencia ?? summary?.color ?? "",
       ).trim();
 
-      if (filterMetaFase) {
-        if (filterMetaFase === NO_META_FASE) {
-          if (metaFase) return false;
-        } else if (metaFase !== filterMetaFase) {
-          return false;
-        }
-      }
+      if (!matchesSelectedValue(filterMetaFase, metaFase, NO_META_FASE))
+        return false;
 
-      if (filterMetaSubfase) {
-        if (filterMetaSubfase === NO_META_SUBFASE) {
-          if (metaSubfase) return false;
-        } else if (metaSubfase !== filterMetaSubfase) {
-          return false;
-        }
-      }
+      if (
+        !matchesSelectedValue(filterMetaSubfase, metaSubfase, NO_META_SUBFASE)
+      )
+        return false;
 
-      if (filterMetaTrasc) {
-        if (filterMetaTrasc === NO_META_TRASC) {
-          if (metaTrasc) return false;
-        } else if (metaTrasc !== filterMetaTrasc) {
-          return false;
-        }
-      }
+      if (!matchesSelectedValue(filterMetaTrasc, metaTrasc, NO_META_TRASC))
+        return false;
 
       // tag
-      if (filterTag) {
-        if (filterTag === NO_TAG_FILTER) {
-          if (normalizeTagKey(s.tag)) return false;
-        } else if (normalizeTagKey(s.tag) !== normalizeTagKey(filterTag)) {
-          return false;
-        }
+      if (filterTag.length > 0) {
+        const tagKey = normalizeTagKey(s.tag);
+        const tagMatches = filterTag.some((item) => {
+          if (item === NO_TAG_FILTER) return !tagKey;
+          return tagKey === normalizeTagKey(item);
+        });
+        if (!tagMatches) return false;
       }
 
       // bono
-      if (filterBono) {
-        const hasBono = s.bonos?.some(
-          (b) => String(b.nombre ?? "").trim() === filterBono,
+      if (filterBono.length > 0) {
+        const hasBono = s.bonos?.some((b) =>
+          filterBono.includes(String(b.nombre ?? "").trim()),
         );
         if (!hasBono) return false;
       }
@@ -1026,19 +1227,16 @@ export default function StudentsContent() {
     });
 
     const withSpecial = (() => {
-      if (!specialFilter) return base;
-      if (specialFilter === "casos_exito") {
-        return base.filter((student) => {
-          const id = student.code
-            ? String(student.code).trim()
-            : student.id != null
-              ? String(student.id).trim()
-              : "";
-          const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
-          return facturacion != null && facturacion > 5000;
-        });
-      }
-      return base;
+      if (specialFilter.length === 0) return base;
+      return base.filter((student) => {
+        const id = student.code
+          ? String(student.code).trim()
+          : student.id != null
+            ? String(student.id).trim()
+            : "";
+        const summary = id ? adsSummaryByAlumnoId[id] : undefined;
+        return getSpecialFilterReasons(summary, specialFilter).length > 0;
+      });
     })();
 
     // Orden por fase (y por nombre dentro de cada fase)
@@ -1067,6 +1265,53 @@ export default function StudentsContent() {
     specialFilter,
     adsSummaryByAlumnoId,
   ]);
+
+  useEffect(() => {
+    if (!specialFilter.includes("requiere_interv")) return;
+
+    const debugRows = filtered.map((student) => {
+      const id = student.code
+        ? String(student.code).trim()
+        : student.id != null
+          ? String(student.id).trim()
+          : "";
+      const summary = id ? adsSummaryByAlumnoId[id] : undefined;
+      const reasons = getSpecialFilterReasons(summary, specialFilter);
+
+      return {
+        code: student.code ?? null,
+        name: student.name ?? null,
+        requiereInterv: summary?.requiereInterv ?? null,
+        roas: summary?.roas ?? null,
+        inversion: summary?.inversion ?? null,
+        facturacion: summary?.facturacion ?? null,
+        reasons,
+        included: reasons.length > 0,
+      };
+    });
+
+    const includedRows = debugRows.filter((row) => row.included);
+    const interventionRows = debugRows.filter((row) =>
+      row.reasons.includes("requiere_interv"),
+    );
+    const nonInterventionRows = includedRows.filter(
+      (row) => !row.reasons.includes("requiere_interv"),
+    );
+
+    console.groupCollapsed("[Alumnos] Debug filtro requiere intervención");
+    console.log("Filtros especiales activos:", specialFilter);
+    console.log(
+      "El filtro requiere_interv se basa en summary.requiereInterv === true",
+    );
+    console.table(interventionRows);
+    if (nonInterventionRows.length > 0) {
+      console.warn(
+        "Estos alumnos entraron por otro filtro especial activo, no por requiere_interv:",
+      );
+      console.table(nonInterventionRows);
+    }
+    console.groupEnd();
+  }, [filtered, adsSummaryByAlumnoId, specialFilter]);
 
   // Ordenamiento local por columnas: Última actividad / Días inactividad
   const [lastActivitySort, setLastActivitySort] = useState<
@@ -1354,28 +1599,28 @@ export default function StudentsContent() {
   const reset = () => {
     setSearch("");
     setCoach("todos");
-    setFilterState(null);
-    setFilterStage(null);
-    setFilterTag(null);
-    setFilterBono(null);
-    setFilterMetaFase(null);
-    setFilterMetaSubfase(null);
-    setFilterMetaTrasc(null);
-    setSpecialFilter(null);
+    setFilterState([]);
+    setFilterStage([]);
+    setFilterTag([]);
+    setFilterBono([]);
+    setFilterMetaFase([]);
+    setFilterMetaSubfase([]);
+    setFilterMetaTrasc([]);
+    setSpecialFilter([]);
     setPage(1);
   };
 
   const hasFilters = Boolean(
     search ||
     coach !== "todos" ||
-    filterStage ||
-    filterState ||
-    filterTag ||
-    filterBono ||
-    filterMetaFase ||
-    filterMetaSubfase ||
-    filterMetaTrasc ||
-    specialFilter,
+    filterStage.length > 0 ||
+    filterState.length > 0 ||
+    filterTag.length > 0 ||
+    filterBono.length > 0 ||
+    filterMetaFase.length > 0 ||
+    filterMetaSubfase.length > 0 ||
+    filterMetaTrasc.length > 0 ||
+    specialFilter.length > 0,
   );
 
   useEffect(() => {
@@ -1461,15 +1706,23 @@ export default function StudentsContent() {
         });
 
     const byFilters = sourceFiltered.filter((s) => {
-      if (filterState) {
-        if (filterState === NO_STATE) {
-          if (s.state && String(s.state).trim()) return false;
-        } else if (s.state !== filterState) return false;
+      if (
+        !matchesSelectedValue(
+          filterState,
+          String(s.state ?? "").trim(),
+          NO_STATE,
+        )
+      ) {
+        return false;
       }
-      if (filterStage) {
-        if (filterStage === NO_STAGE) {
-          if (s.stage && String(s.stage).trim()) return false;
-        } else if (s.stage !== filterStage) return false;
+      if (
+        !matchesSelectedValue(
+          filterStage,
+          String(s.stage ?? "").trim(),
+          NO_STAGE,
+        )
+      ) {
+        return false;
       }
 
       const id = s.code
@@ -1484,48 +1737,38 @@ export default function StudentsContent() {
         summary?.trascendencia ?? summary?.color ?? "",
       ).trim();
 
-      if (filterMetaFase) {
-        if (filterMetaFase === NO_META_FASE) {
-          if (metaFase) return false;
-        } else if (metaFase !== filterMetaFase) {
-          return false;
-        }
+      if (!matchesSelectedValue(filterMetaFase, metaFase, NO_META_FASE))
+        return false;
+
+      if (
+        !matchesSelectedValue(filterMetaSubfase, metaSubfase, NO_META_SUBFASE)
+      )
+        return false;
+
+      if (!matchesSelectedValue(filterMetaTrasc, metaTrasc, NO_META_TRASC))
+        return false;
+
+      if (filterTag.length > 0) {
+        const tagKey = normalizeTagKey(s.tag);
+        const tagMatches = filterTag.some((item) => {
+          if (item === NO_TAG_FILTER) return !tagKey;
+          return tagKey === normalizeTagKey(item);
+        });
+        if (!tagMatches) return false;
       }
 
-      if (filterMetaSubfase) {
-        if (filterMetaSubfase === NO_META_SUBFASE) {
-          if (metaSubfase) return false;
-        } else if (metaSubfase !== filterMetaSubfase) {
-          return false;
-        }
-      }
-
-      if (filterMetaTrasc) {
-        if (filterMetaTrasc === NO_META_TRASC) {
-          if (metaTrasc) return false;
-        } else if (metaTrasc !== filterMetaTrasc) {
-          return false;
-        }
-      }
-
-      if (filterTag) {
-        if (filterTag === NO_TAG_FILTER) {
-          if (normalizeTagKey(s.tag)) return false;
-        } else if (normalizeTagKey(s.tag) !== normalizeTagKey(filterTag)) {
-          return false;
-        }
-      }
-
-      if (filterBono) {
-        const hasBono = s.bonos?.some(
-          (b) => String(b.nombre ?? "").trim() === filterBono,
+      if (filterBono.length > 0) {
+        const hasBono = s.bonos?.some((b) =>
+          filterBono.includes(String(b.nombre ?? "").trim()),
         );
         if (!hasBono) return false;
       }
 
-      if (specialFilter === "casos_exito") {
-        const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
-        if (!(facturacion != null && facturacion > 5000)) return false;
+      if (specialFilter.length > 0) {
+        const summary = id ? adsSummaryByAlumnoId[id] : undefined;
+        const specialMatches =
+          getSpecialFilterReasons(summary, specialFilter).length > 0;
+        if (!specialMatches) return false;
       }
       return true;
     });
@@ -2211,285 +2454,141 @@ export default function StudentsContent() {
         </div>
       </div>
 
-      {/* Filtro por Estado (chips) */}
-      {uniqueStates.length > 0 && (
-        <div className="mb-2">
-          <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Estado
-            </span>
-            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-              {uniqueStates.map((it) => {
-                const active = filterState === it;
-                return (
-                  <button
-                    key={it}
-                    onClick={() => setFilterState(active ? null : it)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                      active
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-card text-foreground border-border hover:bg-accent",
-                    )}
-                  >
-                    {it}
-                  </button>
-                );
-              })}
-              {filterState && (
-                <button
-                  onClick={() => setFilterState(null)}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
-                >
-                  Limpiar
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {uniqueStates.length > 0 ? (
+          <MultiSelectFilter
+            label="Estado"
+            options={uniqueStates}
+            selected={filterState}
+            onToggle={(value) => {
+              setFilterState((prev) => toggleSelection(prev, value));
+              setPage(1);
+            }}
+            onClear={() => {
+              setFilterState([]);
+              setPage(1);
+            }}
+          />
+        ) : null}
 
-      {/* Filtro por Fase (chips) */}
-      {uniqueStages.length > 0 && (
-        <div className="mb-3">
-          <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Fase
-            </span>
-            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-              {uniqueStages.map((it) => {
-                const active = filterStage === it;
-                return (
-                  <button
-                    key={it}
-                    onClick={() => setFilterStage(active ? null : it)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                      active
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-card text-foreground border-border hover:bg-accent",
-                    )}
-                  >
-                    {it}
-                  </button>
-                );
-              })}
-              {filterStage && (
-                <button
-                  onClick={() => setFilterStage(null)}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
-                >
-                  Limpiar
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        {uniqueStages.length > 0 ? (
+          <MultiSelectFilter
+            label="Fase"
+            options={uniqueStages}
+            selected={filterStage}
+            onToggle={(value) => {
+              setFilterStage((prev) => toggleSelection(prev, value));
+              setPage(1);
+            }}
+            onClear={() => {
+              setFilterStage([]);
+              setPage(1);
+            }}
+          />
+        ) : null}
 
-      {/* Filtro por Tag (chips) */}
-      {uniqueTags.length > 0 && (
-        <div className="mb-2">
-          <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Tag
-            </span>
-            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-              {uniqueTags.map((it) => {
-                const active = filterTag === it;
-                return (
-                  <button
-                    key={it}
-                    onClick={() => setFilterTag(active ? null : it)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                      active
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-card text-foreground border-border hover:bg-accent",
-                    )}
-                  >
-                    {it}
-                  </button>
-                );
-              })}
-              {filterTag && (
-                <button
-                  onClick={() => setFilterTag(null)}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
-                >
-                  Limpiar
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        {uniqueTags.length > 0 ? (
+          <MultiSelectFilter
+            label="Tag"
+            options={uniqueTags}
+            selected={filterTag}
+            onToggle={(value) => {
+              setFilterTag((prev) => toggleSelection(prev, value));
+              setPage(1);
+            }}
+            onClear={() => {
+              setFilterTag([]);
+              setPage(1);
+            }}
+          />
+        ) : null}
 
-      {/* Filtro por Bono (chips) */}
-      {uniqueBonos.length > 0 && (
-        <div className="mb-2">
-          <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Bono
-            </span>
-            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-              {uniqueBonos.map((it) => {
-                const active = filterBono === it;
-                return (
-                  <button
-                    key={it}
-                    onClick={() => setFilterBono(active ? null : it)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                      active
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-card text-foreground border-border hover:bg-accent",
-                    )}
-                  >
-                    {it}
-                  </button>
-                );
-              })}
-              {filterBono && (
-                <button
-                  onClick={() => setFilterBono(null)}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
-                >
-                  Limpiar
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        {uniqueBonos.length > 0 ? (
+          <MultiSelectFilter
+            label="Bono"
+            options={uniqueBonos}
+            selected={filterBono}
+            onToggle={(value) => {
+              setFilterBono((prev) => toggleSelection(prev, value));
+              setPage(1);
+            }}
+            onClear={() => {
+              setFilterBono([]);
+              setPage(1);
+            }}
+          />
+        ) : null}
 
-      {(uniqueMetaFases.length > 0 ||
-        uniqueMetaSubfases.length > 0 ||
-        uniqueMetaTrasc.length > 0) && (
-        <div className="mb-3 space-y-2">
-          {uniqueMetaFases.length > 0 && (
-            <div className="flex items-center gap-2 w-full">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                fase
-              </span>
-              <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-                {uniqueMetaFases.map((it) => {
-                  const active = filterMetaFase === it;
-                  return (
-                    <button
-                      key={it}
-                      onClick={() => setFilterMetaFase(active ? null : it)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                        active
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-card text-foreground border-border hover:bg-accent",
-                      )}
-                    >
-                      {it}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+        {uniqueMetaFases.length > 0 ? (
+          <MultiSelectFilter
+            label="Fase ADS"
+            options={uniqueMetaFases}
+            selected={filterMetaFase}
+            onToggle={(value) => {
+              setFilterMetaFase((prev) => toggleSelection(prev, value));
+              setPage(1);
+            }}
+            onClear={() => {
+              setFilterMetaFase([]);
+              setPage(1);
+            }}
+          />
+        ) : null}
+
+        {uniqueMetaSubfases.length > 0 ? (
+          <MultiSelectFilter
+            label="Subfase ADS"
+            options={uniqueMetaSubfases}
+            selected={filterMetaSubfase}
+            onToggle={(value) => {
+              setFilterMetaSubfase((prev) => toggleSelection(prev, value));
+              setPage(1);
+            }}
+            onClear={() => {
+              setFilterMetaSubfase([]);
+              setPage(1);
+            }}
+          />
+        ) : null}
+
+        {uniqueMetaTrasc.length > 0 ? (
+          <MultiSelectFilter
+            label="Trascendencia ADS"
+            options={uniqueMetaTrasc}
+            selected={filterMetaTrasc}
+            onToggle={(value) => {
+              setFilterMetaTrasc((prev) => toggleSelection(prev, value));
+              setPage(1);
+            }}
+            onClear={() => {
+              setFilterMetaTrasc([]);
+              setPage(1);
+            }}
+          />
+        ) : null}
+
+        <MultiSelectFilter
+          label="Filtros especiales"
+          options={specialFilterOptions.map((item) => item.label)}
+          selected={specialFilter.map(
+            (item) =>
+              specialFilterOptions.find((option) => option.key === item)
+                ?.label ?? item,
           )}
-
-          {uniqueMetaSubfases.length > 0 && (
-            <div className="flex items-center gap-2 w-full">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                subfase
-              </span>
-              <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-                {uniqueMetaSubfases.map((it) => {
-                  const active = filterMetaSubfase === it;
-                  return (
-                    <button
-                      key={it}
-                      onClick={() => setFilterMetaSubfase(active ? null : it)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                        active
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-card text-foreground border-border hover:bg-accent",
-                      )}
-                    >
-                      {it}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {uniqueMetaTrasc.length > 0 && (
-            <div className="flex items-center gap-2 w-full">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                trascendencia
-              </span>
-              <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-                {uniqueMetaTrasc.map((it) => {
-                  const active = filterMetaTrasc === it;
-                  return (
-                    <button
-                      key={it}
-                      onClick={() => setFilterMetaTrasc(active ? null : it)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                        active
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-card text-foreground border-border hover:bg-accent",
-                      )}
-                    >
-                      {it}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Filtros especiales */}
-      <div className="mb-3">
-        <div className="flex items-center gap-2 w-full">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Filtros especiales
-          </span>
-          <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
-            <button
-              type="button"
-              onClick={() => {
-                setSpecialFilter((prev) =>
-                  prev === "casos_exito" ? null : "casos_exito",
-                );
-                setPage(1);
-              }}
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                specialFilter === "casos_exito"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-card text-foreground border-border hover:bg-accent",
-              )}
-              title="Muestra alumnos con facturación > 5000"
-            >
-              Casos de éxito
-            </button>
-
-            {specialFilter && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSpecialFilter(null);
-                  setPage(1);
-                }}
-                className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
-              >
-                Limpiar
-              </button>
-            )}
-          </div>
-        </div>
+          onToggle={(label) => {
+            const option = specialFilterOptions.find(
+              (item) => item.label === label,
+            );
+            if (!option) return;
+            setSpecialFilter((prev) => toggleSelection(prev, option.key));
+            setPage(1);
+          }}
+          onClear={() => {
+            setSpecialFilter([]);
+            setPage(1);
+          }}
+          placeholder="Seleccionar filtros especiales"
+        />
       </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
