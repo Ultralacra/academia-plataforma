@@ -453,10 +453,7 @@ export default function AdsMetricsForm({
     .toLowerCase();
   const canEditInterventionSwitch =
     !isReadOnly &&
-    [
-      normalizedUserRole,
-      normalizedUserTipo,
-    ].some((value) =>
+    [normalizedUserRole, normalizedUserTipo].some((value) =>
       ["admin", "administrator", "superadmin", "equipo", "team"].includes(
         value,
       ),
