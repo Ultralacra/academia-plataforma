@@ -414,6 +414,26 @@ function fmtMoneyByCurrency(n: number | null, currency: CurrencyCode) {
   }).format(n);
 }
 
+function computeAutomaticInterventionDecision(next: {
+  inversion?: string;
+  facturacion?: string;
+  roas?: string;
+}) {
+  const inversionUsd = toNumFlexible(next.inversion);
+  const facturacionUsd = toNumFlexible(next.facturacion);
+  const roasCalculated =
+    inversionUsd != null && inversionUsd > 0 && facturacionUsd != null
+      ? facturacionUsd / inversionUsd
+      : null;
+  const roasValue = roasCalculated ?? toNumFlexible(next.roas);
+
+  if (inversionUsd == null || roasValue == null) return null;
+  if (inversionUsd <= 150) return null;
+  if (roasValue < 0.4) return true;
+  if (roasValue > 0.6) return false;
+  return null;
+}
+
 export default function AdsMetricsForm({
   studentCode,
   studentName,
@@ -548,7 +568,7 @@ export default function AdsMetricsForm({
       next.inversion != null &&
       next.facturacion != null;
 
-    return {
+    const synced: Metrics = {
       ...next,
       moneda: currency,
       tipo_cambio_usd:
@@ -572,6 +592,14 @@ export default function AdsMetricsForm({
         ? String(next.facturacion ?? "")
         : toMoneyStorageString(facturacionUsd),
     };
+
+    const automaticInterventionDecision =
+      computeAutomaticInterventionDecision(synced);
+    if (automaticInterventionDecision !== null) {
+      synced.requiere_interv = automaticInterventionDecision;
+    }
+
+    return synced;
   }
 
   function applyMetadataToForm(record: MetadataRecord<any> | null) {
@@ -872,6 +900,7 @@ export default function AdsMetricsForm({
 
     const sanitizedData: any = {
       ...data,
+      requiere_interv: requiresInterventionEffective,
       subfase_color: normalizeSubphaseColor(data.subfase_color),
       auto_roas: true,
       auto_eff: true,
@@ -1255,10 +1284,24 @@ export default function AdsMetricsForm({
     eff_compra: effCompraCalc ?? data.eff_compra,
   } as const;
 
+  const automaticInterventionDecision = useMemo(
+    () => computeAutomaticInterventionDecision({ ...data, roas: view.roas }),
+    [data, view.roas],
+  );
+
+  const requiresInterventionEffective =
+    automaticInterventionDecision ?? !!data.requiere_interv;
+
   const optimizationPhaseSelected = isOptimizationPhase(data.fase);
 
   function onChange<K extends keyof Metrics>(k: K, v: Metrics[K]) {
-    persist({ ...data, [k]: v });
+    const next = { ...data, [k]: v } as Metrics;
+    const nextAutomaticInterventionDecision =
+      computeAutomaticInterventionDecision({ ...next, roas: view.roas });
+    if (nextAutomaticInterventionDecision !== null) {
+      next.requiere_interv = nextAutomaticInterventionDecision;
+    }
+    persist(next);
   }
 
   useEffect(() => {
@@ -1924,7 +1967,7 @@ export default function AdsMetricsForm({
                     <div className="flex items-center justify-between">
                       <Label>¿Requiere intervención?</Label>
                       <Switch
-                        checked={!!data.requiere_interv}
+                        checked={requiresInterventionEffective}
                         disabled={!canEditInterventionSwitch}
                         onCheckedChange={(v) => onChange("requiere_interv", v)}
                       />
@@ -2254,12 +2297,12 @@ export default function AdsMetricsForm({
                   </span>
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
-                      data.requiere_interv
+                      requiresInterventionEffective
                         ? "bg-rose-900/20 text-rose-300"
                         : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {data.requiere_interv
+                    {requiresInterventionEffective
                       ? "Requiere intervención"
                       : "Sin intervención"}
                   </span>

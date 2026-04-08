@@ -3204,8 +3204,15 @@ export default function TicketsBoard({
                                         </Badge>
                                         <Badge
                                           variant="outline"
-                                          className="text-xs"
+                                          className={`text-xs inline-flex items-center gap-1 ${
+                                            admPayload?.requiere_interv
+                                              ? "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/35 dark:text-rose-200 dark:border-rose-900/60"
+                                              : "border-slate-200 bg-slate-50 text-slate-700 dark:bg-slate-950/35 dark:text-slate-200 dark:border-slate-900/60"
+                                          }`}
                                         >
+                                          {admPayload?.requiere_interv ? (
+                                            <AlertTriangle className="h-3.5 w-3.5" />
+                                          ) : null}
                                           {`Requiere intervención: ${admPayload?.requiere_interv ? "Sí" : "No"}`}
                                         </Badge>
                                       </div>
@@ -3845,13 +3852,16 @@ export default function TicketsBoard({
                               </Badge>
 
                               <Badge
-                                variant={
+                                variant="outline"
+                                className={`text-sm inline-flex items-center gap-1 ${
                                   admPayload?.requiere_interv
-                                    ? "destructive"
-                                    : "secondary"
-                                }
-                                className="text-sm"
+                                    ? "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/35 dark:text-rose-200 dark:border-rose-900/60"
+                                    : "border-slate-200 bg-slate-50 text-slate-700 dark:bg-slate-950/35 dark:text-slate-200 dark:border-slate-900/60"
+                                }`}
                               >
+                                {admPayload?.requiere_interv ? (
+                                  <AlertTriangle className="h-4 w-4" />
+                                ) : null}
                                 <span className="truncate max-w-[200px]">
                                   {admPayload?.requiere_interv
                                     ? "Requiere intervención"
