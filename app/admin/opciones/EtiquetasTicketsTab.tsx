@@ -4,6 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableHeader,
@@ -12,8 +21,14 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
-import { getEtiquetasTickets, type EtiquetaTicket } from "./api";
+import { Search, ChevronLeft, ChevronRight, Plus, Pencil, Loader2 } from "lucide-react";
+import {
+  getEtiquetasTickets,
+  createEtiquetaTicket,
+  updateEtiquetaTicket,
+  type EtiquetaTicket,
+} from "./api";
+import { toast } from "@/components/ui/use-toast";
 
 export default function EtiquetasTicketsTab() {
   const [items, setItems] = useState<EtiquetaTicket[]>([]);
@@ -24,6 +39,60 @@ export default function EtiquetasTicketsTab() {
   const [totalPages, setTotalPages] = useState(0);
   const [total, setTotal] = useState(0);
   const pageSize = 25;
+
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<EtiquetaTicket | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [formNombre, setFormNombre] = useState("");
+  const [formDescripcion, setFormDescripcion] = useState("");
+  const [formColor, setFormColor] = useState("#3B82F6");
+
+  function openCreate() {
+    setEditing(null);
+    setFormNombre("");
+    setFormDescripcion("");
+    setFormColor("#3B82F6");
+    setModalOpen(true);
+  }
+
+  function openEdit(item: EtiquetaTicket) {
+    setEditing(item);
+    setFormNombre(String(item.nombre ?? ""));
+    setFormDescripcion(String((item as any).descripcion ?? ""));
+    setFormColor(String(item.color ?? "#3B82F6"));
+    setModalOpen(true);
+  }
+
+  async function handleSave() {
+    const nombre = formNombre.trim();
+    if (!nombre) return;
+    setSaving(true);
+    try {
+      const payload = {
+        nombre,
+        descripcion: formDescripcion.trim(),
+        color: formColor,
+      };
+      if (editing?.codigo) {
+        await updateEtiquetaTicket(String(editing.codigo), payload);
+        toast({ title: "Etiqueta actualizada" });
+      } else {
+        await createEtiquetaTicket(payload);
+        toast({ title: "Etiqueta creada" });
+      }
+      setModalOpen(false);
+      load();
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.message ?? "No se pudo guardar",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -57,6 +126,8 @@ export default function EtiquetasTicketsTab() {
     );
   }, [items, q]);
 
+  const HIDDEN_COLS = new Set(["codigo"]);
+
   // Detect column keys dynamically from the first items
   const columns = useMemo(() => {
     if (items.length === 0) return ["id", "nombre", "color"];
@@ -64,8 +135,21 @@ export default function EtiquetasTicketsTab() {
     items.forEach((it) => {
       Object.keys(it).forEach((k) => keys.add(k));
     });
-    return Array.from(keys);
+    return Array.from(keys).filter((k) => !HIDDEN_COLS.has(k));
   }, [items]);
+
+  function fmtDate(val: unknown): string {
+    if (!val) return "—";
+    const d = new Date(String(val));
+    if (isNaN(d.getTime())) return String(val);
+    return d.toLocaleDateString("es-CL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -79,6 +163,9 @@ export default function EtiquetasTicketsTab() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-1" /> Crear etiqueta
+          </Button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -105,6 +192,7 @@ export default function EtiquetasTicketsTab() {
                   {col.replace(/_/g, " ")}
                 </TableHead>
               ))}
+              <TableHead className="px-3 py-2 text-left">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -116,12 +204,15 @@ export default function EtiquetasTicketsTab() {
                       <div className="h-4 w-24 rounded bg-muted" />
                     </TableCell>
                   ))}
+                  <TableCell className="px-3 py-3">
+                    <div className="h-4 w-8 rounded bg-muted" />
+                  </TableCell>
                 </TableRow>
               ))
             ) : visible.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={columns.length}
+                  colSpan={columns.length + 1}
                   className="px-3 py-4 text-sm text-neutral-500"
                 >
                   No hay etiquetas registradas.
@@ -143,11 +234,23 @@ export default function EtiquetasTicketsTab() {
                           />
                           {it[col] as string}
                         </span>
+                      ) : col === "created_at" || col === "updated_at" ? (
+                        fmtDate(it[col])
                       ) : (
                         String(it[col] ?? "—")
                       )}
                     </TableCell>
                   ))}
+                  <TableCell className="px-3 py-2">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => openEdit(it)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -179,6 +282,75 @@ export default function EtiquetasTicketsTab() {
           </Button>
         </div>
       )}
+      {/* Modal crear / editar */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? "Editar etiqueta" : "Crear etiqueta"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="etiq-nombre">Nombre</Label>
+              <Input
+                id="etiq-nombre"
+                value={formNombre}
+                onChange={(e) => setFormNombre(e.target.value)}
+                placeholder="Ej: Urgente"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="etiq-desc">Descripción</Label>
+              <Textarea
+                id="etiq-desc"
+                value={formDescripcion}
+                onChange={(e) => setFormDescripcion(e.target.value)}
+                placeholder="Descripción de la etiqueta"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="etiq-color">Color</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  id="etiq-color"
+                  type="color"
+                  value={formColor}
+                  onChange={(e) => setFormColor(e.target.value)}
+                  className="h-9 w-12 cursor-pointer rounded border p-0.5"
+                />
+                <Input
+                  value={formColor}
+                  onChange={(e) => setFormColor(e.target.value)}
+                  className="w-28 font-mono text-sm"
+                  maxLength={7}
+                />
+                <span
+                  className="inline-block h-6 w-6 rounded-full border"
+                  style={{ backgroundColor: formColor }}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setModalOpen(false)}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !formNombre.trim()}
+            >
+              {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              {editing ? "Guardar cambios" : "Crear"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

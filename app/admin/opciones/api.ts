@@ -104,3 +104,27 @@ export async function getEtiquetasTickets(page = 1, pageSize = 25) {
   const json = await fetchJson<EtiquetasResponse>(`/ticket/get/etiqueta${qs}`);
   return json;
 }
+
+export async function createEtiquetaTicket(payload: {
+  nombre: string;
+  descripcion: string;
+  color: string;
+}) {
+  return fetchJson<any>("/ticket/create/etiqueta", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateEtiquetaTicket(
+  codigo: string,
+  payload: { nombre: string; descripcion: string; color: string },
+) {
+  return fetchJson<any>(
+    `/ticket/update/etiqueta/${encodeURIComponent(codigo)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
