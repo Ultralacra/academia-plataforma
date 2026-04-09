@@ -22,6 +22,8 @@ import {
   type InternalNote,
   deleteTicketLink,
   createTicketLink,
+  assignEtiquetaToTicket,
+  unassignEtiquetaFromTicket,
 } from "./api";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +63,8 @@ import {
   Tag,
   Gift,
   Pencil,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import {
@@ -137,6 +141,10 @@ import {
 } from "@/components/ui/command";
 import { ChevronsUpDown, Check } from "lucide-react";
 import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
+import {
+  getEtiquetasTickets,
+  type EtiquetaTicket,
+} from "@/app/admin/opciones/api";
 import { CreateTicketModal } from "./CreateTicketModal";
 
 type StatusKey =
@@ -316,6 +324,9 @@ export default function TicketsBoard({
   }, [searchParams]);
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
   const [coachFiltro, setCoachFiltro] = useState<string>("");
+  // Etiquetas
+  const [allEtiquetas, setAllEtiquetas] = useState<EtiquetaTicket[]>([]);
+  const [etiquetaFiltro, setEtiquetaFiltro] = useState<string>("");
   const [openFiles, setOpenFiles] = useState<null | string>(null);
   const [filesLoading, setFilesLoading] = useState(false);
   const [files, setFiles] = useState<
@@ -673,6 +684,10 @@ export default function TicketsBoard({
   // Ref para evitar consultas duplicadas del alumno
   const alumnoInfoFetchedRef = useRef<string | null>(null);
 
+  // Etiquetas del ticket (detalle)
+  const [openEtiquetaPopover, setOpenEtiquetaPopover] = useState(false);
+  const [assigningEtiqueta, setAssigningEtiqueta] = useState(false);
+
   // Estados para bonos del alumno
   type AlumnoBono = {
     id: number;
@@ -942,21 +957,39 @@ export default function TicketsBoard({
   };
 
   const visibleTickets = useMemo(() => {
+    let result = tickets;
+
     if (onlyMyTickets) {
       const my = {
         code: String((user as any)?.codigo ?? "").trim(),
         id: String((user as any)?.id ?? "").trim(),
         atc: isUserAtc,
       };
-      return filterTicketsForViewer(tickets, my);
+      result = filterTicketsForViewer(result, my);
+    } else if (coachFiltro) {
+      result = filterTicketsForViewer(result, selectedCoachUser);
     }
 
-    if (coachFiltro) {
-      return filterTicketsForViewer(tickets, selectedCoachUser);
+    if (etiquetaFiltro) {
+      result = result.filter(
+        (t) =>
+          Array.isArray((t as any).etiquetas) &&
+          (t as any).etiquetas.some(
+            (e: any) => String(e.etiqueta_codigo) === etiquetaFiltro,
+          ),
+      );
     }
 
-    return tickets;
-  }, [tickets, onlyMyTickets, user, isUserAtc, coachFiltro, selectedCoachUser]);
+    return result;
+  }, [
+    tickets,
+    onlyMyTickets,
+    user,
+    isUserAtc,
+    coachFiltro,
+    selectedCoachUser,
+    etiquetaFiltro,
+  ]);
 
   // Debug: imprimir en consola el coach seleccionado y los tickets "de ese coach"
   // Activar con ?debugCoach=1
@@ -1047,6 +1080,16 @@ export default function TicketsBoard({
       } catch (e) {
         /* console.error("Error cargando opciones de etapa:", e); */
       }
+    })();
+  }, []);
+
+  // Cargar etiquetas disponibles al montar
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getEtiquetasTickets(1, 200);
+        setAllEtiquetas(Array.isArray(res?.data) ? res.data : []);
+      } catch {}
     })();
   }, []);
 
@@ -2660,32 +2703,47 @@ export default function TicketsBoard({
             </select>
           )}
 
+          {!isStudent && allEtiquetas.length > 0 && (
+            <select
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-auto sm:min-w-[160px]"
+              value={etiquetaFiltro}
+              onChange={(e) => setEtiquetaFiltro(e.target.value)}
+              title="Filtrar por etiqueta"
+            >
+              <option value="">Todas las etiquetas</option>
+              {allEtiquetas.map((et) => (
+                <option
+                  key={et.codigo ?? et.id}
+                  value={String(et.codigo ?? "")}
+                >
+                  {et.nombre}
+                </option>
+              ))}
+            </select>
+          )}
+
           {!isStudent && (
             <>
               <Button
-                size="sm"
+                size="icon"
                 onClick={handleCreateTicket}
-                className="h-9 w-full gap-2 sm:w-auto"
+                className="h-8 w-8"
                 title={`Crear nuevo ${uiTicketLower}`}
               >
                 <Plus className="h-4 w-4" />
-                Nuevo {uiTicket}
               </Button>
 
               <Button
                 variant={onlyMyTickets ? "default" : "outline"}
-                size="sm"
+                size="icon"
                 onClick={() => {
-                  // "Mis tickets" debe seguir funcionando: si hay un coach seleccionado,
-                  // lo limpiamos para evitar intersección confusa.
                   if (coachFiltro) setCoachFiltro("");
                   setOnlyMyTickets((prev) => !prev);
                 }}
-                className="h-9 w-full gap-2 sm:w-auto dark:bg-primary dark:text-primary-foreground dark:border-primary/50 dark:hover:bg-primary/90"
+                className="h-8 w-8"
                 title={`Mostrar solo mis ${uiTicketsLower} creados`}
               >
                 <User className="h-4 w-4" />
-                Mis {uiTickets}
               </Button>
             </>
           )}
@@ -2694,19 +2752,21 @@ export default function TicketsBoard({
             <div className="flex w-full items-center gap-2 sm:w-auto">
               <Button
                 variant={viewMode === "kanban" ? "default" : "outline"}
-                size="sm"
-                className="h-9 flex-1 sm:flex-none"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => setViewMode("kanban")}
+                title="Vista Kanban"
               >
-                Kanban
+                <LayoutGrid className="h-4 w-4" />
               </Button>
               <Button
                 variant={viewMode === "table" ? "default" : "outline"}
-                size="sm"
-                className="h-9 flex-1 sm:flex-none"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => setViewMode("table")}
+                title="Vista Tabla"
               >
-                Tabla
+                <List className="h-4 w-4" />
               </Button>
             </div>
           )}
@@ -2736,11 +2796,11 @@ export default function TicketsBoard({
               }
             }}
             variant="outline"
-            size="sm"
-            className="h-9 w-full gap-2 sm:w-auto dark:bg-primary dark:text-primary-foreground dark:border-primary/50 dark:hover:bg-primary/90"
+            size="icon"
+            className="h-8 w-8"
+            title="Recargar"
           >
             <RefreshCw className="h-4 w-4" />
-            Recargar
           </Button>
         </div>
       </div>
@@ -3270,6 +3330,32 @@ export default function TicketsBoard({
                                   )}
                                 </div>
                               )}
+
+                              {/* Etiquetas */}
+                              {Array.isArray((t as any).etiquetas) &&
+                                (t as any).etiquetas.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 pt-1">
+                                    {(t as any).etiquetas.map((et: any) => (
+                                      <span
+                                        key={
+                                          et.etiqueta_codigo ??
+                                          et.codigo ??
+                                          et.id
+                                        }
+                                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                                        style={{
+                                          backgroundColor: et.color
+                                            ? `${et.color}20`
+                                            : "#e2e8f0",
+                                          color: et.color || "#475569",
+                                          border: `1px solid ${et.color || "#cbd5e1"}`,
+                                        }}
+                                      >
+                                        {et.nombre ?? et.etiqueta_codigo ?? "—"}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                             </div>
                           </div>
                         ))}
@@ -4379,6 +4465,211 @@ export default function TicketsBoard({
                         ) : (
                           <span className="text-slate-400 text-xs">—</span>
                         )}
+                      </div>
+
+                      {/* Etiquetas del ticket */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Tag className="h-4 w-4" /> <span>Etiquetas</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center flex-wrap gap-1">
+                        {Array.isArray(ticketDetail?.etiquetas) &&
+                          ticketDetail.etiquetas.map((et: any) => (
+                            <span
+                              key={et.etiqueta_codigo ?? et.codigo ?? et.id}
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                              style={{
+                                backgroundColor: et.color
+                                  ? `${et.color}20`
+                                  : "#e2e8f0",
+                                color: et.color || "#475569",
+                                border: `1px solid ${et.color || "#cbd5e1"}`,
+                              }}
+                            >
+                              {et.nombre ?? et.etiqueta_codigo ?? "—"}
+                              <button
+                                type="button"
+                                className="ml-0.5 hover:opacity-70"
+                                disabled={assigningEtiqueta}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const cod = et.etiqueta_codigo ?? et.codigo;
+                                  if (!cod || !ticketDetail?.codigo) return;
+                                  setAssigningEtiqueta(true);
+                                  try {
+                                    await unassignEtiquetaFromTicket(
+                                      ticketDetail.codigo,
+                                      cod,
+                                    );
+                                    setTicketDetail((prev: any) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            etiquetas: (
+                                              prev.etiquetas || []
+                                            ).filter(
+                                              (x: any) =>
+                                                (x.etiqueta_codigo ??
+                                                  x.codigo) !== cod,
+                                            ),
+                                          }
+                                        : prev,
+                                    );
+                                    // Actualizar también en la lista principal
+                                    setTickets((prev) =>
+                                      prev.map((tk) =>
+                                        tk.codigo === ticketDetail.codigo
+                                          ? {
+                                              ...tk,
+                                              etiquetas: (
+                                                (tk as any).etiquetas || []
+                                              ).filter(
+                                                (x: any) =>
+                                                  (x.etiqueta_codigo ??
+                                                    x.codigo) !== cod,
+                                              ),
+                                            }
+                                          : tk,
+                                      ),
+                                    );
+                                    toast({ title: "Etiqueta removida" });
+                                  } catch (err: any) {
+                                    toast({
+                                      title: "Error",
+                                      description:
+                                        err?.message ||
+                                        "No se pudo remover la etiqueta",
+                                      variant: "destructive",
+                                    });
+                                  } finally {
+                                    setAssigningEtiqueta(false);
+                                  }
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        <Popover
+                          open={openEtiquetaPopover}
+                          onOpenChange={setOpenEtiquetaPopover}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs gap-1"
+                              disabled={assigningEtiqueta}
+                            >
+                              <Plus className="h-3 w-3" />
+                              Añadir
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-52 p-0"
+                            align="start"
+                            sideOffset={4}
+                          >
+                            <Command>
+                              <CommandInput
+                                placeholder="Buscar etiqueta..."
+                                className="text-xs h-8"
+                              />
+                              <CommandList className="max-h-48">
+                                <CommandEmpty>
+                                  Sin etiquetas disponibles.
+                                </CommandEmpty>
+                                <CommandGroup heading="Etiquetas">
+                                  {allEtiquetas
+                                    .filter(
+                                      (et) =>
+                                        !Array.isArray(
+                                          ticketDetail?.etiquetas,
+                                        ) ||
+                                        !ticketDetail.etiquetas.some(
+                                          (a: any) =>
+                                            (a.etiqueta_codigo ?? a.codigo) ===
+                                            et.codigo,
+                                        ),
+                                    )
+                                    .map((et) => (
+                                      <CommandItem
+                                        key={et.codigo}
+                                        value={`${et.codigo} ${et.nombre}`}
+                                        onSelect={async () => {
+                                          if (!ticketDetail?.codigo) return;
+                                          setAssigningEtiqueta(true);
+                                          try {
+                                            await assignEtiquetaToTicket(
+                                              ticketDetail.codigo,
+                                              String(et.codigo ?? ""),
+                                            );
+                                            const newEt = {
+                                              etiqueta_codigo: et.codigo,
+                                              nombre: et.nombre,
+                                              color: et.color,
+                                            };
+                                            setTicketDetail((prev: any) =>
+                                              prev
+                                                ? {
+                                                    ...prev,
+                                                    etiquetas: [
+                                                      ...(prev.etiquetas || []),
+                                                      newEt,
+                                                    ],
+                                                  }
+                                                : prev,
+                                            );
+                                            setTickets((prev) =>
+                                              prev.map((tk) =>
+                                                tk.codigo ===
+                                                ticketDetail.codigo
+                                                  ? {
+                                                      ...tk,
+                                                      etiquetas: [
+                                                        ...((tk as any)
+                                                          .etiquetas || []),
+                                                        newEt,
+                                                      ],
+                                                    }
+                                                  : tk,
+                                              ),
+                                            );
+                                            toast({
+                                              title: "Etiqueta asignada",
+                                              description: et.nombre,
+                                            });
+                                            setOpenEtiquetaPopover(false);
+                                          } catch (err: any) {
+                                            toast({
+                                              title: "Error",
+                                              description:
+                                                err?.message ||
+                                                "No se pudo asignar la etiqueta",
+                                              variant: "destructive",
+                                            });
+                                          } finally {
+                                            setAssigningEtiqueta(false);
+                                          }
+                                        }}
+                                        className="cursor-pointer text-xs"
+                                      >
+                                        <span
+                                          className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
+                                          style={{
+                                            backgroundColor:
+                                              et.color || "#94a3b8",
+                                          }}
+                                        />
+                                        <span className="truncate">
+                                          {et.nombre}
+                                        </span>
+                                      </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
 
                       {/* Bonos del alumno */}

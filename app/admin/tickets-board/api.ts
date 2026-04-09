@@ -73,6 +73,13 @@ export type TicketBoardItem = {
         area?: string | null;
       }
   > | null;
+  etiquetas?: {
+    id: number;
+    codigo: string;
+    nombre: string;
+    descripcion?: string | null;
+    color: string;
+  }[];
 };
 
 export type TicketBoardResponse = {
@@ -153,6 +160,7 @@ export async function getTickets(opts: {
       informante_nombre: null,
       plazo_info: null,
       coaches_override: null,
+      etiquetas: Array.isArray(r.etiquetas) ? r.etiquetas : [],
     }));
 
     // Deduplicar por id para evitar keys duplicadas en React
@@ -274,6 +282,7 @@ export async function getTickets(opts: {
           return String(x).trim();
         });
       })(),
+      etiquetas: Array.isArray(r.etiquetas) ? r.etiquetas : [],
   }));
 
   // Deduplicar por id para evitar keys duplicadas en React
@@ -440,6 +449,32 @@ export async function getTickets(opts: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: payload.url, title: payload.title }),
     });
+  }
+
+  // --- Etiquetas de tickets ---
+
+  export async function assignEtiquetaToTicket(
+    ticketCodigo: string,
+    etiquetaCodigo: string,
+  ) {
+    if (!ticketCodigo) throw new Error("ticketCodigo requerido");
+    if (!etiquetaCodigo) throw new Error("etiquetaCodigo requerido");
+    const path = `/ticket/assign/etiqueta/${encodeURIComponent(ticketCodigo)}`;
+    return apiFetch<any>(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ etiqueta_codigo: etiquetaCodigo }),
+    });
+  }
+
+  export async function unassignEtiquetaFromTicket(
+    ticketCodigo: string,
+    etiquetaCodigo: string,
+  ) {
+    if (!ticketCodigo) throw new Error("ticketCodigo requerido");
+    if (!etiquetaCodigo) throw new Error("etiquetaCodigo requerido");
+    const path = `/ticket/unassign/etiqueta/${encodeURIComponent(ticketCodigo)}/${encodeURIComponent(etiquetaCodigo)}`;
+    return apiFetch<any>(path, { method: "DELETE" });
   }
 
   // --- Observaciones 2.3 (Metadata/Tareas) ---
