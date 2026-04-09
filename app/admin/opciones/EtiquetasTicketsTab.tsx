@@ -21,7 +21,14 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import { Search, ChevronLeft, ChevronRight, Plus, Pencil, Loader2 } from "lucide-react";
+import {
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Pencil,
+  Loader2,
+} from "lucide-react";
 import {
   getEtiquetasTickets,
   createEtiquetaTicket,
