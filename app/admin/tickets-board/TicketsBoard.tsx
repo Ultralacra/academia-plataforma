@@ -6340,24 +6340,28 @@ export default function TicketsBoard({
 
                 {/* Tab: ADS - Métricas ADS (editable) */}
                 <div className={detailTab === "ads" ? "block" : "hidden"}>
-                  <div className="p-6">
-                    {selectedTicket?.id_alumno || studentCode ? (
-                      <AdsMetricsForm
-                        studentCode={String(
-                          studentCode || selectedTicket?.id_alumno || "",
-                        )}
-                        studentName={String(
-                          selectedTicket?.alumno_nombre ||
-                            (selectedTicket as any)?.alumno_name ||
-                            "",
-                        )}
-                        readOnly={!canEdit}
-                      />
-                    ) : (
-                      <div className="text-sm text-slate-500">
-                        No hay información del alumno para mostrar métricas ADS.
-                      </div>
-                    )}
+                  <div className="overflow-x-hidden p-3 sm:p-6">
+                    <div className="mx-auto w-full max-w-full overflow-x-hidden">
+                      {selectedTicket?.id_alumno || studentCode ? (
+                        <AdsMetricsForm
+                          studentCode={String(
+                            studentCode || selectedTicket?.id_alumno || "",
+                          )}
+                          studentName={String(
+                            selectedTicket?.alumno_nombre ||
+                              (selectedTicket as any)?.alumno_name ||
+                              "",
+                          )}
+                          readOnly={!canEdit}
+                          compact
+                        />
+                      ) : (
+                        <div className="text-sm text-slate-500">
+                          No hay información del alumno para mostrar métricas
+                          ADS.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

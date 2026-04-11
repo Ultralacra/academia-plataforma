@@ -157,46 +157,32 @@ function AdsMetricsCallout({
             </p>
           </div>
         </div>
-        <div
-          className={
-            items.length <= 1
-              ? "grid gap-3"
-              : "grid gap-3 md:grid-cols-2 xl:grid-cols-3"
-          }
-        >
+        <div className="flex flex-col gap-3">
           {items.map((item) => (
             <div
               key={item.title}
-              className={`rounded-lg border p-2.5 backdrop-blur-sm sm:rounded-xl sm:p-3 ${palette.card} ${
-                item.featured ? "lg:col-span-2 xl:col-span-2" : ""
-              }`}
+              className={`w-full min-w-0 rounded-lg border p-2.5 backdrop-blur-sm sm:rounded-xl sm:p-3 ${palette.card}`}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex min-w-0 items-start gap-3">
                 <span
                   className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${palette.accent}`}
                 />
-                <div className="space-y-1.5">
+                <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="text-sm font-medium text-foreground">
                     {item.title}
                   </div>
-                  <p className="whitespace-pre-line text-xs leading-5 text-muted-foreground">
+                  <p className="whitespace-pre-line break-words text-xs leading-5 text-muted-foreground sm:text-sm">
                     {item.description}
                   </p>
                   {item.details?.length ? (
-                    <ul
-                      className={`text-xs leading-5 text-muted-foreground ${
-                        item.featured
-                          ? "grid gap-x-4 gap-y-2 sm:grid-cols-2"
-                          : "space-y-1"
-                      }`}
-                    >
+                    <ul className="flex flex-col gap-2 text-xs leading-5 text-muted-foreground sm:text-sm">
                       {item.details.map((detail) => (
                         <li
                           key={detail}
-                          className="flex gap-2 rounded-lg bg-background/70 px-2 py-1.5 sm:px-2.5 sm:py-2"
+                          className="flex w-full items-start gap-2 rounded-lg bg-background/70 px-2 py-1.5 sm:px-2.5 sm:py-2"
                         >
                           <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
-                          <span>{detail}</span>
+                          <span className="break-words">{detail}</span>
                         </li>
                       ))}
                     </ul>
@@ -440,10 +426,12 @@ export default function AdsMetricsForm({
   studentCode,
   studentName,
   readOnly,
+  compact,
 }: {
   studentCode: string;
   studentName?: string;
   readOnly?: boolean;
+  compact?: boolean;
 }) {
   const { user } = useAuth();
   const isReadOnly = Boolean(readOnly);
@@ -2017,7 +2005,13 @@ export default function AdsMetricsForm({
                         </div>
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <div
+                        className={
+                          compact
+                            ? "grid gap-3"
+                            : "grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                        }
+                      >
                         <div className="space-y-1.5">
                           <Label>Fase</Label>
                           <Select
