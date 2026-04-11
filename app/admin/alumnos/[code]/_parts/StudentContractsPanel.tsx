@@ -1238,16 +1238,6 @@ function DocCard({
             {doc.signed_file_name ? (
               <p>Archivo: {doc.signed_file_name}</p>
             ) : null}
-            <p>
-              <Link
-                href="/admin/crm/contracts"
-                target="_blank"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                Ver en CRM Contratos
-                <ExternalLink className="h-2.5 w-2.5" />
-              </Link>
-            </p>
           </div>
         </div>
       )}

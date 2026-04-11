@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { CreditCard, MessageSquare, Hammer } from "lucide-react";
+import { ClipboardList, CreditCard, MessageSquare, Hammer } from "lucide-react";
 
 function AdminDashboard() {
   const router = useRouter();
@@ -22,7 +22,7 @@ function AdminDashboard() {
       </div>
 
       {/* Acciones rápidas (solo admin) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Button
           variant="outline"
           className="h-20 flex-col space-y-2 bg-transparent"
@@ -38,6 +38,14 @@ function AdminDashboard() {
         >
           <MessageSquare className="h-6 w-6" />
           <span>Tickets de Soporte</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-20 flex-col space-y-2 bg-transparent"
+          onClick={() => router.push("/admin/formularios-avanzados")}
+        >
+          <ClipboardList className="h-6 w-6" />
+          <span>Formularios avanzados</span>
         </Button>
       </div>
 

@@ -717,17 +717,49 @@ export async function listLeadDropboxSignDocuments() {
   );
 }
 
+export async function listClientDropboxSignDocuments() {
+  return await apiFetch<LeadDropboxSignDocumentsResponse>(
+    "/client/dropboxsign/documents",
+    {
+      method: "GET",
+    },
+  );
+}
+
+function extractDropboxSignDocuments(payload: any): LeadDropboxSignDocument[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.documents)) return payload.documents;
+  if (Array.isArray(payload?.items)) return payload.items;
+  return [];
+}
+
 /**
  * Devuelve todos los documentos Dropbox Sign vinculados a un recipient_codigo
- * (código del alumno). Reutiliza el mismo endpoint global y filtra en cliente.
+ * (código del alumno). Para el perfil del alumno consulta primero el endpoint
+ * de clientes y mantiene un fallback al endpoint legado de leads.
  */
 export async function listDropboxSignDocumentsByRecipient(
   recipientCodigo: string,
 ): Promise<LeadDropboxSignDocument[]> {
-  const res = await listLeadDropboxSignDocuments();
-  const all = Array.isArray(res.data) ? res.data : [];
+  let all: LeadDropboxSignDocument[] = [];
+
+  try {
+    const res = await listClientDropboxSignDocuments();
+    all = extractDropboxSignDocuments(res);
+  } catch {
+    const res = await listLeadDropboxSignDocuments();
+    all = extractDropboxSignDocuments(res);
+  }
+
   const normalized = String(recipientCodigo ?? "").trim().toLowerCase();
   if (!normalized) return all;
+
+  const hasRecipientCodigo = all.some((d) =>
+    Boolean(String(d.recipient_codigo ?? "").trim()),
+  );
+  if (!hasRecipientCodigo) return all;
+
   return all.filter(
     (d) =>
       String(d.recipient_codigo ?? "").trim().toLowerCase() === normalized,

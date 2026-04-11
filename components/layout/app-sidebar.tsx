@@ -91,6 +91,11 @@ const adminItems: MenuItem[] = [
   { title: "Roles y permisos", url: "/admin/access/roles", icon: Settings },
   { title: "CRM", url: "/admin/crm", icon: Users },
   {
+    title: "Formularios avanzados",
+    url: "/admin/formularios-avanzados",
+    icon: ClipboardList,
+  },
+  {
     title: "Contratos enviados",
     url: "/admin/crm/contracts",
     icon: FileSignature,

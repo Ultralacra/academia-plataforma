@@ -35,6 +35,9 @@ export const endpoints = {
   metrics: {
     get: "/metrics/get/metrics",
   },
+  adsForms: {
+    list: "/ads-forms/get/ads-forms",
+  },
   client: { list: "/client/get/clients" },
   ticket: { list: "/ticket/get/ticket" },
   coachClient: {

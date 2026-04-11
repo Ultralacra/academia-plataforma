@@ -319,9 +319,12 @@ export function StudentInactivityModal() {
     }
     openedForRef.current = identity;
 
-    // Debe abrir apenas conecta el alumno, aunque luego estemos cargando datos.
-    console.log("[InactivityModal] opening modal, fetching data for", identity);
-    setOpen(true);
+    // Primero resolvemos si realmente aplica para evitar que el modal parpadee.
+    console.log(
+      "[InactivityModal] checking eligibility before opening for",
+      identity,
+    );
+    setOpen(false);
 
     let cancelled = false;
     (async () => {
