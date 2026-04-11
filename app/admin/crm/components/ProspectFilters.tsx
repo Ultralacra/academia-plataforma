@@ -22,13 +22,12 @@ interface ProspectFiltersProps {
   setQuestionsQ: (v: string) => void;
   closer: string;
   setCloser: (v: string) => void;
-  etapa: string;
-  setEtapa: (v: string) => void;
+  combinedEtapa: string;
+  setCombinedEtapa: (v: string) => void;
   createdFrom: string;
   setCreatedFrom: (v: string) => void;
   createdTo: string;
   setCreatedTo: (v: string) => void;
-  etapas: string[];
   closers: string[];
   onClear: () => void;
 }
@@ -85,13 +84,12 @@ export function ProspectFilters({
   setQuestionsQ,
   closer,
   setCloser,
-  etapa,
-  setEtapa,
+  combinedEtapa,
+  setCombinedEtapa,
   createdFrom,
   setCreatedFrom,
   createdTo,
   setCreatedTo,
-  etapas,
   closers,
   onClear,
 }: ProspectFiltersProps) {
@@ -101,7 +99,7 @@ export function ProspectFilters({
     phoneQ,
     questionsQ,
     closer !== "all" ? closer : "",
-    etapa !== "all" ? etapa : "",
+    combinedEtapa !== "all" ? combinedEtapa : "",
     createdFrom,
     createdTo,
   ].filter(Boolean).length;
@@ -189,17 +187,31 @@ export function ProspectFilters({
       <div className="h-px bg-slate-100" />
 
       <FilterSelect
-        label="Etapa"
-        value={etapa}
-        onChange={setEtapa}
-        placeholder="Etapa"
+        label="Etapa del lead"
+        value={combinedEtapa}
+        onChange={setCombinedEtapa}
+        placeholder="Etapa del lead"
       >
-        <SelectItem value="all">Todas las etapas</SelectItem>
-        {etapas.map((e) => (
-          <SelectItem key={e} value={e}>
-            {e}
-          </SelectItem>
-        ))}
+        <SelectItem value="all">Todas</SelectItem>
+        <SelectItem value="etapa:Nuevo">Nuevo</SelectItem>
+        <SelectItem value="etapa:Contactado">Contactado</SelectItem>
+        <SelectItem value="etapa:Calificado">Calificado</SelectItem>
+        <SelectItem value="etapa:Ganado">Ganado</SelectItem>
+        <SelectItem value="etapa:Perdido">Perdido</SelectItem>
+        <SelectItem value="pipeline:agendado">Agendado</SelectItem>
+        <SelectItem value="pipeline:confirmado">Confirmado</SelectItem>
+        <SelectItem value="pipeline:no_show">No Show</SelectItem>
+        <SelectItem value="pipeline:llamada_realizada">
+          Llamada realizada
+        </SelectItem>
+        <SelectItem value="pipeline:decision">Decisión</SelectItem>
+        <SelectItem value="pipeline:seguimiento">Seguimiento</SelectItem>
+        <SelectItem value="pipeline:recuperacion">Recuperación</SelectItem>
+        <SelectItem value="pipeline:lead_dormido">Lead dormido</SelectItem>
+        <SelectItem value="pipeline:cerrado_ganado">Cerrado ganado</SelectItem>
+        <SelectItem value="pipeline:cerrado_perdido">
+          Cerrado perdido
+        </SelectItem>
       </FilterSelect>
 
       {closers.length > 0 && (

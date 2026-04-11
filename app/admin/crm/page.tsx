@@ -85,6 +85,7 @@ interface Prospect {
   saleNotes: string | null;
   detallePreguntasHubspot: Lead["detalle_preguntas_hubspot"] | null;
   remote?: boolean;
+  pipelineStatus: string | null;
 }
 
 interface CrmGlobalMetrics {
@@ -129,7 +130,7 @@ type CrmStoredFilters = {
   phoneQ?: string;
   questionsQ?: string;
   closerFiltro?: string;
-  etapaFiltro?: string;
+  combinedEtapaFiltro?: string;
   createdFrom?: string;
   createdTo?: string;
   view?: "lista" | "kanban";
@@ -212,6 +213,7 @@ const mapLeadToProspect = (lead: Lead): Prospect => ({
     (lead.sale_notes != null ? String(lead.sale_notes) : null),
   detallePreguntasHubspot: lead.detalle_preguntas_hubspot ?? null,
   remote: Boolean((lead as any)?.remote),
+  pipelineStatus: (lead as any)?.pipeline_status ?? null,
 });
 
 function normalizeQuestionText(value: unknown): string | null {
@@ -339,10 +341,10 @@ function CrmContent() {
       ? initialFiltersRef.current.closerFiltro
       : "all",
   );
-  const [etapaFiltro, setEtapaFiltro] = useState<string>(() =>
-    typeof initialFiltersRef.current.etapaFiltro === "string" &&
-    initialFiltersRef.current.etapaFiltro
-      ? initialFiltersRef.current.etapaFiltro
+  const [combinedEtapaFiltro, setCombinedEtapaFiltro] = useState<string>(() =>
+    typeof initialFiltersRef.current.combinedEtapaFiltro === "string" &&
+    initialFiltersRef.current.combinedEtapaFiltro
+      ? initialFiltersRef.current.combinedEtapaFiltro
       : "all",
   );
   const [createdFrom, setCreatedFrom] = useState<string>(() =>
@@ -385,7 +387,7 @@ function CrmContent() {
       phoneQ,
       questionsQ,
       closerFiltro,
-      etapaFiltro,
+      combinedEtapaFiltro,
       createdFrom,
       createdTo,
       view,
@@ -403,7 +405,7 @@ function CrmContent() {
     phoneQ,
     questionsQ,
     closerFiltro,
-    etapaFiltro,
+    combinedEtapaFiltro,
     createdFrom,
     createdTo,
     view,
@@ -545,8 +547,15 @@ function CrmContent() {
       const matchesCloser =
         closerFiltro === "all" ||
         String(prospect.closerName ?? "") === closerFiltro;
+      const [combinedPrefix, combinedValue] =
+        combinedEtapaFiltro !== "all"
+          ? combinedEtapaFiltro.split(":")
+          : [null, null];
       const matchesStage =
-        etapaFiltro === "all" || prospect.etapa === etapaFiltro;
+        combinedEtapaFiltro === "all" ||
+        (combinedPrefix === "etapa" && prospect.etapa === combinedValue) ||
+        (combinedPrefix === "pipeline" &&
+          String(prospect.pipelineStatus ?? "") === combinedValue);
 
       const createdAt = prospect.creado ? new Date(prospect.creado) : null;
       const from = createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
@@ -575,7 +584,7 @@ function CrmContent() {
     phoneQ,
     questionsQ,
     closerFiltro,
-    etapaFiltro,
+    combinedEtapaFiltro,
     createdFrom,
     createdTo,
   ]);
@@ -598,7 +607,7 @@ function CrmContent() {
     phoneQ,
     questionsQ,
     closerFiltro,
-    etapaFiltro,
+    combinedEtapaFiltro,
     createdFrom,
     createdTo,
   ]);
@@ -750,7 +759,7 @@ function CrmContent() {
       phoneQ,
       questionsQ,
       closerFiltro !== "all" ? closerFiltro : "",
-      etapaFiltro !== "all" ? etapaFiltro : "",
+      combinedEtapaFiltro !== "all" ? combinedEtapaFiltro : "",
       createdFrom,
       createdTo,
     ].filter(Boolean).length;
@@ -760,7 +769,7 @@ function CrmContent() {
     phoneQ,
     questionsQ,
     closerFiltro,
-    etapaFiltro,
+    combinedEtapaFiltro,
     createdFrom,
     createdTo,
   ]);
@@ -880,13 +889,12 @@ function CrmContent() {
                   setQuestionsQ={setQuestionsQ}
                   closer={closerFiltro}
                   setCloser={setCloserFiltro}
-                  etapa={etapaFiltro}
-                  setEtapa={setEtapaFiltro}
+                  combinedEtapa={combinedEtapaFiltro}
+                  setCombinedEtapa={setCombinedEtapaFiltro}
                   createdFrom={createdFrom}
                   setCreatedFrom={setCreatedFrom}
                   createdTo={createdTo}
                   setCreatedTo={setCreatedTo}
-                  etapas={PIPELINE_STAGES}
                   closers={closers}
                   onClear={() => {
                     setQ("");
@@ -894,7 +902,7 @@ function CrmContent() {
                     setPhoneQ("");
                     setQuestionsQ("");
                     setCloserFiltro("all");
-                    setEtapaFiltro("all");
+                    setCombinedEtapaFiltro("all");
                     setCreatedFrom("");
                     setCreatedTo("");
                   }}

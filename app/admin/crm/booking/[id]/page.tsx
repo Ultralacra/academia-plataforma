@@ -11,7 +11,10 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -2178,24 +2181,91 @@ function Content({ id }: { id: string }) {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-              <HeaderSelectField
-                label="Pipeline CRM"
-                value={crmPipelineStatus || "__empty__"}
-                onValueChange={(next) =>
-                  applyRecordPatch({
-                    pipeline_status: next === "__empty__" ? null : next,
-                  })
-                }
-                options={CRM_PIPELINE_OPTIONS}
-              />
-
-              <HeaderSelectField
-                label="Etapa del lead"
-                value={leadStatus}
-                onValueChange={(next) => applyRecordPatch({ status: next })}
-                options={LEAD_STATUS_OPTIONS}
-                allowEmpty={false}
-              />
+              {/* Select unificado: Etapa del lead (pipeline_status + status) */}
+              <div className="space-y-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Etapa del lead
+                </Label>
+                <Select
+                  value={
+                    crmPipelineStatus
+                      ? `pipeline:${crmPipelineStatus}`
+                      : `etapa:${leadStatus}`
+                  }
+                  onValueChange={(next) => {
+                    const [prefix, val] = next.split(":");
+                    if (prefix === "pipeline") {
+                      applyRecordPatch({ pipeline_status: val });
+                    } else {
+                      applyRecordPatch({ pipeline_status: null, status: val });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10 border-slate-200 bg-white text-sm text-slate-700">
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Estado general
+                      </SelectLabel>
+                      <SelectItem value="etapa:new">Lead Nuevo</SelectItem>
+                      <SelectItem value="etapa:contacted">
+                        Contactado
+                      </SelectItem>
+                      <SelectItem value="etapa:appointment_attended">
+                        Cita Atendida
+                      </SelectItem>
+                      <SelectItem value="etapa:active_follow_up">
+                        Seguimiento Activo
+                      </SelectItem>
+                      <SelectItem value="etapa:pending_payment">
+                        Pendiente de Pago
+                      </SelectItem>
+                      <SelectItem value="etapa:won">
+                        Cerrado – Ganado
+                      </SelectItem>
+                      <SelectItem value="etapa:lost">
+                        Cerrado – Perdido
+                      </SelectItem>
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Pipeline CRM
+                      </SelectLabel>
+                      <SelectItem value="pipeline:agendado">
+                        Agendado
+                      </SelectItem>
+                      <SelectItem value="pipeline:confirmado">
+                        Confirmado
+                      </SelectItem>
+                      <SelectItem value="pipeline:no_show">No Show</SelectItem>
+                      <SelectItem value="pipeline:llamada_realizada">
+                        Llamada realizada
+                      </SelectItem>
+                      <SelectItem value="pipeline:decision">
+                        Decisión
+                      </SelectItem>
+                      <SelectItem value="pipeline:seguimiento">
+                        Seguimiento
+                      </SelectItem>
+                      <SelectItem value="pipeline:recuperacion">
+                        Recuperación
+                      </SelectItem>
+                      <SelectItem value="pipeline:lead_dormido">
+                        Lead dormido
+                      </SelectItem>
+                      <SelectItem value="pipeline:cerrado_ganado">
+                        Cerrado ganado
+                      </SelectItem>
+                      <SelectItem value="pipeline:cerrado_perdido">
+                        Cerrado perdido
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
 
               {pipelineStageLevel >= 3 ? (
                 <HeaderSelectField
