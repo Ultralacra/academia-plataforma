@@ -4,155 +4,236 @@ import Link from "next/link";
 import {
   ArrowRight,
   Bot,
-  MessageSquare,
+  BrainCircuit,
+  ClipboardCheck,
+  FileSearch,
+  Headphones,
+  LayoutGrid,
+  Megaphone,
+  MessageCircle,
+  Monitor,
   Sparkles,
-  Workflow,
+  TrendingUp,
+  Zap,
 } from "lucide-react";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+
+const agents = [
+  {
+    name: "Copy",
+    description:
+      "Chat conversacional para generar copies adaptados a cada fase del alumno. Pide aperturas, seguimientos, objeciones o cierres según la etapa.",
+    icon: Sparkles,
+    href: "/admin/agentes/copy",
+    gradient: "from-amber-400 to-orange-400",
+    bgGlow: "bg-amber-400/10",
+    active: true,
+  },
+  {
+    name: "Seguimiento",
+    description:
+      "Redacta mensajes de seguimiento personalizados para mantener el contacto con prospectos y alumnos.",
+    icon: Megaphone,
+    href: "#",
+    gradient: "from-rose-300 to-pink-400",
+    bgGlow: "bg-rose-300/10",
+    active: false,
+  },
+  {
+    name: "Análisis",
+    description:
+      "Interpreta métricas de rendimiento del equipo y sugiere acciones de mejora basadas en datos.",
+    icon: BrainCircuit,
+    href: "#",
+    gradient: "from-violet-300 to-purple-400",
+    bgGlow: "bg-violet-300/10",
+    active: false,
+  },
+  {
+    name: "Contratos",
+    description:
+      "Genera, revisa y adapta contratos según el perfil del alumno y el programa contratado.",
+    icon: FileSearch,
+    href: "#",
+    gradient: "from-emerald-300 to-teal-400",
+    bgGlow: "bg-emerald-300/10",
+    active: false,
+  },
+  {
+    name: "ATC Administrativo",
+    description:
+      "Resuelve consultas administrativas: pagos, facturas, cambios de plan y gestiones internas.",
+    icon: ClipboardCheck,
+    href: "#",
+    gradient: "from-sky-300 to-blue-400",
+    bgGlow: "bg-sky-300/10",
+    active: false,
+  },
+  {
+    name: "Operativa",
+    description:
+      "Asiste en procesos operativos del día a día: asignaciones, calendario y coordinación de tareas.",
+    icon: LayoutGrid,
+    href: "#",
+    gradient: "from-slate-300 to-slate-400",
+    bgGlow: "bg-slate-300/10",
+    active: false,
+  },
+  {
+    name: "Atención al Cliente",
+    description:
+      "Genera respuestas empáticas y profesionales para la comunicación directa con alumnos.",
+    icon: MessageCircle,
+    href: "#",
+    gradient: "from-cyan-300 to-teal-400",
+    bgGlow: "bg-cyan-300/10",
+    active: false,
+  },
+  {
+    name: "Técnico",
+    description:
+      "Soporte técnico especializado para resolver incidencias de plataforma y herramientas digitales.",
+    icon: Monitor,
+    href: "#",
+    gradient: "from-indigo-300 to-blue-400",
+    bgGlow: "bg-indigo-300/10",
+    active: false,
+  },
+  {
+    name: "Ads",
+    description:
+      "Diseña copies para campañas publicitarias, creativos y estrategias de captación digital.",
+    icon: TrendingUp,
+    href: "#",
+    gradient: "from-fuchsia-300 to-pink-400",
+    bgGlow: "bg-fuchsia-300/10",
+    active: false,
+  },
+  {
+    name: "Mentalidad",
+    description:
+      "Genera contenido motivacional y de coaching para acompañar el desarrollo personal del alumno.",
+    icon: Zap,
+    href: "#",
+    gradient: "from-lime-300 to-green-400",
+    bgGlow: "bg-lime-300/10",
+    active: false,
+  },
+  {
+    name: "Ventas",
+    description:
+      "Asiste en estrategias de cierre, manejo de objeciones y scripts de venta efectivos.",
+    icon: Headphones,
+    href: "#",
+    gradient: "from-orange-300 to-red-400",
+    bgGlow: "bg-orange-300/10",
+    active: false,
+  },
+];
 
 function AgentsHome() {
-  const phaseCards = [
-    {
-      name: "Captación",
-      model: "Modelo Hook",
-      description: "Abre conversación y genera respuesta con fricción baja.",
-    },
-    {
-      name: "Diagnóstico",
-      model: "Modelo Discovery",
-      description: "Extrae dolor, contexto y dirección antes de redactar.",
-    },
-    {
-      name: "Cierre",
-      model: "Modelo Close",
-      description: "Empuja decisión con lenguaje más directo y útil.",
-    },
-  ];
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.22),_transparent_28%),linear-gradient(135deg,_rgba(255,255,255,1),_rgba(248,250,252,1))] p-6 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge
-            variant="outline"
-            className="border-amber-300 bg-amber-50 text-amber-700"
-          >
-            Nuevo módulo
-          </Badge>
-          <Badge variant="secondary">Claude-ready</Badge>
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-            Agentes internos para el equipo
-          </h1>
-          <p className="max-w-3xl text-sm text-slate-600">
-            Esta sección centraliza agentes especializados. El primero es Copy:
-            un chat visual que toma las fases reales desde Opciones y funciona
-            como mesa conversacional para pedir copies por etapa.
-          </p>
+    <div className="space-y-8">
+      {/* Header con disclaimer */}
+      <div className="relative overflow-hidden rounded-2xl border border-orange-200/60 bg-gradient-to-br from-[#faf6f1] via-[#f5ede4] to-[#faf6f1] p-6 shadow-sm dark:border-orange-900/30 dark:from-[#2a2017] dark:via-[#1f1a14] dark:to-[#2a2017]">
+        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-orange-400/10 blur-3xl" />
+        <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-amber-400/8 blur-3xl" />
+        <div className="relative flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#d97757] to-[#c4623f] text-white shadow-md">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight text-[#3d2e1f] dark:text-orange-100">
+              Agentes
+            </h1>
+            <p className="text-sm text-[#7a6654] dark:text-orange-200/70">
+              Asistentes especializados para el equipo. Elige uno para empezar a
+              trabajar.
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-slate-900">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <CardTitle>Agente Copy</CardTitle>
-                    <CardDescription>
-                      Chat visual para copy por fase del alumno.
-                    </CardDescription>
-                  </div>
-                </div>
-              </div>
-              <Badge className="bg-slate-900 text-white">v1</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-slate-600">
-            <p>
-              Sirve para conversar con un agente de copy por fase. Cada etapa se
-              carga desde Opciones y cambia el comportamiento visual del chat.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {phaseCards.map((phaseCard) => (
-                <div
-                  key={phaseCard.name}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium text-slate-900">
-                      {phaseCard.name}
-                    </div>
-                    <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-slate-600">
-                      {phaseCard.model}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs">{phaseCard.description}</p>
-                </div>
-              ))}
-            </div>
-            <Button asChild className="w-full sm:w-auto">
-              <Link
-                href="/admin/agentes/copy"
-                className="inline-flex items-center gap-2"
-              >
-                Abrir agente Copy
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+      {/* Grid de agentes */}
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {agents.map((agent) => {
+          const Icon = agent.icon;
+          const inner = (
+            <div
+              className={`group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-200 ${
+                agent.active
+                  ? "cursor-pointer border-border bg-card shadow-sm hover:shadow-lg hover:-translate-y-1"
+                  : "pointer-events-none select-none border-transparent bg-card/50 blur-[2px] opacity-50"
+              }`}
+            >
+              {/* Glow superior */}
+              <div
+                className={`h-1.5 w-full bg-gradient-to-r ${agent.gradient} ${agent.active ? "opacity-100" : "opacity-30"}`}
+              />
 
-        <Card className="border-dashed border-slate-300 bg-slate-50/80 shadow-sm">
-          <CardHeader>
-            <div className="flex items-center gap-2 text-slate-900">
-              <Workflow className="h-5 w-5" />
-              <CardTitle>Cómo queda armado</CardTitle>
-            </div>
-            <CardDescription>
-              La base ya queda lista para sumar más agentes o conectar modelos
-              reales.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="mb-1 flex items-center gap-2 font-medium text-slate-900">
-                <Bot className="h-4 w-4" />
-                Modelo por fase
+              <div className="flex flex-1 flex-col items-center gap-4 p-6 pb-5 text-center">
+                {/* Icono con glow */}
+                <div className="relative">
+                  <div
+                    className={`absolute inset-0 scale-150 rounded-full ${agent.bgGlow} blur-xl ${agent.active ? "opacity-60" : "opacity-0"}`}
+                  />
+                  <div
+                    className={`relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${agent.gradient} text-white shadow-md ${
+                      agent.active
+                        ? "opacity-100 group-hover:scale-105 transition-transform"
+                        : "opacity-40"
+                    }`}
+                  >
+                    <Icon className="h-7 w-7" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2
+                    className={`text-lg font-semibold ${agent.active ? "" : "text-muted-foreground"}`}
+                  >
+                    {agent.name}
+                  </h2>
+                  <p className="text-[13px] leading-relaxed text-muted-foreground">
+                    {agent.description}
+                  </p>
+                </div>
               </div>
-              <p className="text-xs">
-                Las fases reales salen del grupo etapa dentro de Opciones y cada
-                una cambia el look del chat.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="mb-1 flex items-center gap-2 font-medium text-slate-900">
-                <MessageSquare className="h-4 w-4" />
-                Interfaz tipo chat
+
+              {/* Footer */}
+              <div
+                className={`border-t px-6 py-3 text-center text-xs font-medium ${
+                  agent.active
+                    ? "bg-muted/30 text-primary group-hover:bg-primary/5"
+                    : "bg-muted/20 text-muted-foreground/60"
+                }`}
+              >
+                {agent.active ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    Abrir agente{" "}
+                    <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                ) : (
+                  "Próximamente"
+                )}
               </div>
-              <p className="text-xs">
-                El equipo ve fases a la izquierda y conversación al centro, sin
-                paneles de prompt ni formularios pesados.
-              </p>
             </div>
-          </CardContent>
-        </Card>
+          );
+
+          return agent.active ? (
+            <Link
+              key={agent.name}
+              href={agent.href}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl"
+            >
+              {inner}
+            </Link>
+          ) : (
+            <div key={agent.name}>{inner}</div>
+          );
+        })}
       </div>
     </div>
   );
