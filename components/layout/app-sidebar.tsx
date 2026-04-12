@@ -96,9 +96,20 @@ const adminItems: MenuItem[] = [
     icon: ClipboardList,
   },
   {
-    title: "Contratos enviados",
-    url: "/admin/crm/contracts",
+    title: "Contratos",
     icon: FileSignature,
+    children: [
+      {
+        title: "Prospectos CRM",
+        url: "/admin/crm/contracts",
+        icon: FileSignature,
+      },
+      {
+        title: "Todos los contratos",
+        url: "/admin/crm/all-contracts",
+        icon: FileSignature,
+      },
+    ],
   },
   {
     title: "Estado correos",
@@ -192,9 +203,20 @@ export function AppSidebar() {
         return [
           { title: "CRM", url: "/admin/crm", icon: Users },
           {
-            title: "Contratos enviados",
-            url: "/admin/crm/contracts",
+            title: "Contratos",
             icon: FileSignature,
+            children: [
+              {
+                title: "Prospectos CRM",
+                url: "/admin/crm/contracts",
+                icon: FileSignature,
+              },
+              {
+                title: "Todos los contratos",
+                url: "/admin/crm/all-contracts",
+                icon: FileSignature,
+              },
+            ],
           },
         ] as MenuItem[];
       case "admin": {
