@@ -1438,8 +1438,7 @@ function Content({ id }: { id: string }) {
     } catch (err: any) {
       toast({
         title: "Error",
-        description:
-          err?.message || "No se pudo guardar en backend.",
+        description: err?.message || "No se pudo guardar en backend.",
         variant: "destructive",
       });
     } finally {

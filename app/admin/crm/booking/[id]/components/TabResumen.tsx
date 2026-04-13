@@ -1284,7 +1284,9 @@ export function TabResumen({
                 </div>
                 <Input
                   type="datetime-local"
-                  value={toDateTimeLocalValue(record.created_at || p.created_at)}
+                  value={toDateTimeLocalValue(
+                    record.created_at || p.created_at,
+                  )}
                   onChange={(e) =>
                     applyRecordPatch({
                       created_at: toIsoOrNull(e.target.value),
