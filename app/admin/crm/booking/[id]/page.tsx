@@ -275,59 +275,9 @@ function Content({ id }: { id: string }) {
     requestKey: number;
   } | null>(null);
 
-  // Guardado en navegador (localStorage) como fallback.
-  const localStorageKey = React.useMemo(() => `crm:booking:${id}`, [id]);
-  const hydratedRef = React.useRef<string | null>(null);
-  const didHydrateFromLocalStorageRef = React.useRef(false);
-
-  const hydrateFromLocalStorage = React.useCallback(() => {
-    try {
-      const raw = localStorage.getItem(localStorageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      didHydrateFromLocalStorageRef.current = true;
-      if (parsed?.record) setRecord(parsed.record);
-      if (parsed?.draft) setDraft(parsed.draft);
-      if (parsed?.saleDraftPayload)
-        setSaleDraftPayload(parsed.saleDraftPayload);
-    } catch {}
-  }, [localStorageKey]);
-
   React.useEffect(() => {
-    if (hydratedRef.current === id) return;
-    hydratedRef.current = id;
-    didHydrateFromLocalStorageRef.current = false;
     setFrozenSaleInitial(null);
-    hydrateFromLocalStorage();
-  }, [hydrateFromLocalStorage, id]);
-
-  React.useEffect(() => {
-    if (!record) return;
-    const t = window.setTimeout(() => {
-      try {
-        // Preservar last_snapshot del guardado anterior para que load()
-        // siempre tenga acceso al payload_current completo más reciente.
-        let lastSnapshot: any = undefined;
-        try {
-          const existing = localStorage.getItem(localStorageKey);
-          if (existing) {
-            const parsed = JSON.parse(existing);
-            lastSnapshot = parsed?.last_snapshot;
-          }
-        } catch {}
-        const next: Record<string, any> = {
-          version: 1,
-          saved_at: new Date().toISOString(),
-          record,
-          draft,
-          saleDraftPayload,
-        };
-        if (lastSnapshot !== undefined) next.last_snapshot = lastSnapshot;
-        localStorage.setItem(localStorageKey, JSON.stringify(next));
-      } catch {}
-    }, 250);
-    return () => window.clearTimeout(t);
-  }, [draft, localStorageKey, record, saleDraftPayload]);
+  }, [id]);
 
   React.useEffect(() => {
     if (record) {
@@ -668,7 +618,7 @@ function Content({ id }: { id: string }) {
     };
   }, [record]);
 
-  /** Mergea datos frescos del backend con campos del snapshot/localStorage que
+  /** Mergea datos frescos del backend con campos del snapshot que
    * el backend no devuelve (sales_flow, pipeline_status, activity_log, etc.)  */
   const mergeWithPreserved = React.useCallback(
     (fresh: any, source: Record<string, any> | null | undefined): any => {
@@ -696,24 +646,9 @@ function Content({ id }: { id: string }) {
       if (!silent) setLoading(true);
       try {
         const lead = await getLead(id);
-        // Leer campos del último snapshot guardado en localStorage
-        let snapshotFields: Record<string, any> | null = null;
-        try {
-          const raw = localStorage.getItem(localStorageKey);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            // Tomar payload_current del último snapshot O el record guardado
-            snapshotFields =
-              parsed?.last_snapshot?.payload_current ?? parsed?.record ?? null;
-          }
-        } catch {}
-        const merged = mergeWithPreserved(lead, snapshotFields);
-        setRecord(merged as any);
+        setRecord(lead as any);
       } catch (e) {
-        if (!silent) {
-          // Si falla el backend, intentamos usar el borrador local.
-          hydrateFromLocalStorage();
-        } else {
+        if (silent) {
           toast({
             title: "Error",
             description: "No se pudo refrescar el lead",
@@ -724,7 +659,7 @@ function Content({ id }: { id: string }) {
         if (!silent) setLoading(false);
       }
     },
-    [hydrateFromLocalStorage, id, localStorageKey, mergeWithPreserved],
+    [id, toast],
   );
 
   const toLeadIsoDateOrNull = (v?: string | null) => {
@@ -1491,20 +1426,7 @@ function Content({ id }: { id: string }) {
         snapshot,
       });
 
-      try {
-        const next = {
-          version: 1,
-          saved_at: new Date().toISOString(),
-          record,
-          draft,
-          saleDraftPayload,
-          last_snapshot: snapshot,
-        };
-        localStorage.setItem(localStorageKey, JSON.stringify(next));
-      } catch {}
-
-      // Reload desde backend — load() leerá el localStorage actualizado y
-      // mergeWithPreserved dará prioridad al snapshot recién guardado.
+      // Reload desde backend para reflejar el snapshot recién guardado.
       try {
         await load({ silent: true });
       } catch {}
@@ -1514,22 +1436,10 @@ function Content({ id }: { id: string }) {
         description: "Se guardó el snapshot y se actualizó el lead.",
       });
     } catch (err: any) {
-      try {
-        const next = {
-          version: 1,
-          saved_at: new Date().toISOString(),
-          record,
-          draft,
-          saleDraftPayload,
-        };
-        localStorage.setItem(localStorageKey, JSON.stringify(next));
-      } catch {}
-
       toast({
         title: "Error",
         description:
-          err?.message ||
-          "No se pudo guardar en backend (se dejó un borrador local)",
+          err?.message || "No se pudo guardar en backend.",
         variant: "destructive",
       });
     } finally {
@@ -1543,8 +1453,6 @@ function Content({ id }: { id: string }) {
     id,
     leadForUi,
     load,
-    localStorageKey,
-    mergeWithPreserved,
     record,
     saleDraftPayload,
     snapshotSaving,
@@ -1740,24 +1648,8 @@ function Content({ id }: { id: string }) {
     if (frozenSaleInitial) return;
     if (!record) return;
 
-    // Si el draft viene de localStorage (hidratación), lo aplicamos UNA sola vez.
-    if (
-      didHydrateFromLocalStorageRef.current &&
-      draft &&
-      typeof draft === "object"
-    ) {
-      setFrozenSaleInitial({
-        ...initialBase,
-        ...draft,
-        bonuses: Array.isArray((draft as any).bonuses)
-          ? (draft as any).bonuses
-          : (initialBase as any).bonuses,
-      });
-      return;
-    }
-
     setFrozenSaleInitial(initialBase);
-  }, [draft, frozenSaleInitial, initialBase, record]);
+  }, [frozenSaleInitial, initialBase, record]);
 
   React.useEffect(() => {
     if (loading || !record) return;

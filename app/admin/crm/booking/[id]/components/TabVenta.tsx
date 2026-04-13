@@ -150,7 +150,7 @@ export function TabVenta({
                   draft={draft || undefined}
                   leadCodigo={id}
                   entity="booking"
-                  persistMode="local"
+                  persistMode="api"
                   title="Contrato / resumen"
                 />
               </DialogContent>
@@ -206,7 +206,7 @@ export function TabVenta({
             entity="booking"
             initial={initial}
             autoSave={false}
-            persistMode="local"
+            persistMode="api"
             onChange={handleDraftChange}
             onSalePayloadChange={handleSalePayloadChange}
             onDone={() => {

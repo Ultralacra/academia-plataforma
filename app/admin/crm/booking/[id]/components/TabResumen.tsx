@@ -1227,30 +1227,72 @@ export function TabResumen({
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <InfoTile
-                icon={<Mail className="h-4 w-4 text-teal-600" />}
-                label="Email"
-                value={p.email || "—"}
-                accent="teal"
-              />
-              <InfoTile
-                icon={<Phone className="h-4 w-4 text-cyan-600" />}
-                label="Teléfono"
-                value={p.phone || "—"}
-                accent="cyan"
-              />
-              <InfoTile
-                icon={<Tags className="h-4 w-4 text-teal-600" />}
-                label="Fuente"
-                value={p.source || "booking"}
-                accent="teal"
-              />
-              <InfoTile
-                icon={<Calendar className="h-4 w-4 text-cyan-600" />}
-                label="Registrado"
-                value={fmtDate(record.created_at || p.created_at)}
-                accent="cyan"
-              />
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <Mail className="h-4 w-4 text-teal-600" />
+                  Email
+                </div>
+                <Input
+                  type="email"
+                  value={String(p.email ?? "")}
+                  onChange={(e) =>
+                    applyRecordPatch({
+                      email: e.target.value,
+                    })
+                  }
+                  placeholder="correo@ejemplo.com"
+                  className="border-slate-200"
+                />
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <Phone className="h-4 w-4 text-cyan-600" />
+                  Teléfono
+                </div>
+                <Input
+                  value={String(p.phone ?? "")}
+                  onChange={(e) =>
+                    applyRecordPatch({
+                      phone: e.target.value,
+                    })
+                  }
+                  placeholder="+56 9 ..."
+                  className="border-slate-200"
+                />
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <Tags className="h-4 w-4 text-teal-600" />
+                  Fuente
+                </div>
+                <Input
+                  value={String(p.source ?? p.origen ?? "")}
+                  onChange={(e) =>
+                    applyRecordPatch({
+                      source: e.target.value,
+                      origen: e.target.value,
+                    })
+                  }
+                  placeholder="calendly"
+                  className="border-slate-200"
+                />
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <Calendar className="h-4 w-4 text-cyan-600" />
+                  Registrado
+                </div>
+                <Input
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(record.created_at || p.created_at)}
+                  onChange={(e) =>
+                    applyRecordPatch({
+                      created_at: toIsoOrNull(e.target.value),
+                    })
+                  }
+                  className="border-slate-200"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

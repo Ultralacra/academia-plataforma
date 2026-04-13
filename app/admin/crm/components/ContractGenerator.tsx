@@ -14,7 +14,6 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -145,11 +144,11 @@ export function ContractGenerator({
   const [baseContractWarnings, setBaseContractWarnings] = useState<string[]>(
     [],
   );
-  const [liveLead, setLiveLead] = useState<any>(lead);
+  const [liveLead, setLiveLead] = useState<any>(null);
   const [refreshingLead, setRefreshingLead] = useState(false);
 
-  // Datos del contrato mapeados desde el lead
-  const contractData = mapLeadToContractData(liveLead ?? lead, draft);
+  // Datos del contrato mapeados solo desde CRM/snapshot persistido.
+  const contractData = mapLeadToContractData(liveLead ?? lead);
   const mergedData = React.useMemo(
     () => ({ ...contractData, ...overrides }),
     [contractData, overrides],
@@ -190,8 +189,8 @@ export function ContractGenerator({
     setSignatureSuccessData(null);
     setPreviewError(null);
 
-    // Guardamos el lead actual (puede venir "parcial" desde listados)
-    setLiveLead(lead);
+    // Al abrir, priorizamos siempre un fetch fresco del CRM.
+    setLiveLead(null);
 
     // Intentamos refrescar desde el CRM para que el detalle (pago/cuotas) sea el real
     const codigo = (lead as any)?.codigo;
@@ -200,11 +199,14 @@ export function ContractGenerator({
       getLead(String(codigo))
         .then((fresh) => setLiveLead(fresh))
         .catch(() => {
-          // Silencioso: seguimos usando el lead que llegó por props
+          // Fallback mínimo si el refresh falla.
+          setLiveLead(lead);
         })
         .finally(() => setRefreshingLead(false));
+    } else {
+      setLiveLead(lead);
     }
-  }, [open]);
+  }, [lead, open]);
 
   React.useEffect(() => {
     // Si el prop cambia mientras está abierto, reflejarlo
@@ -995,10 +997,28 @@ export function ContractGenerator({
         "Te compartimos tu contrato en PDF para revisión y firma a través de Dropbox Sign.",
       ].join("\n");
 
+      // Construir array de firmantes extra si existen contractParties
+      const partiesCandidates = [
+        (liveLead as any)?.contract_parties,
+        (lead as any)?.contract_parties,
+        (liveLead as any)?.contract?.parties,
+        (lead as any)?.contract?.parties,
+      ];
+      const parties: Array<{ name?: string; email?: string }> =
+        partiesCandidates.find((c) => Array.isArray(c) && c.length > 0) || [];
+      const extraSigners = (Array.isArray(parties) ? parties : [])
+        .filter((p: any) => p?.email && p?.name)
+        .map((p: any, i: number) => ({
+          email_address: String(p.email),
+          name: String(p.name),
+          order: i + 1,
+        }));
+
       const response = await sendLeadContractForSignature(
         codigo,
         pdfFile,
         message,
+        extraSigners.length > 0 ? extraSigners : undefined,
       );
       showSignatureSuccessModal(response);
     } catch (error: any) {
@@ -1046,6 +1066,38 @@ export function ContractGenerator({
     if (!mergedData.paymentMode) missing.push("Modalidad de pago");
     return missing;
   }, [mergedData]);
+
+  const configuredSigners = React.useMemo(() => {
+    const candidates = [
+      (liveLead as any)?.contract_parties,
+      (lead as any)?.contract_parties,
+      (liveLead as any)?.contract?.parties,
+      (lead as any)?.contract?.parties,
+    ];
+    const parties: Array<{ name?: string; email?: string }> =
+      candidates.find((c) => Array.isArray(c) && c.length > 0) || [];
+
+    const extras = parties
+      .filter((p: any) => p?.name || p?.email)
+      .map((p: any) => ({
+        name: String(p?.name || "").trim(),
+        email: String(p?.email || "").trim(),
+      }));
+
+    const primary = {
+      name: String(mergedData.fullName || (liveLead as any)?.name || "").trim(),
+      email: String(mergedData.email || (liveLead as any)?.email || "").trim(),
+    };
+
+    const all = [primary, ...extras].filter((s) => s.name || s.email);
+    const seen = new Set<string>();
+    return all.filter((s) => {
+      const key = `${s.name.toLowerCase()}|${s.email.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [lead, liveLead, mergedData.email, mergedData.fullName]);
 
   const saveOverridesToLead = React.useCallback(async () => {
     const codigo = String(
@@ -1367,6 +1419,37 @@ export function ContractGenerator({
                     </div>
                   </div>
                 )}
+
+                <div className="mt-3 pt-3 border-t">
+                  <span className="text-muted-foreground text-sm">
+                    Firmantes configurados:
+                  </span>
+                  <div className="mt-2 space-y-2">
+                    {configuredSigners.length > 0 ? (
+                      configuredSigners.map((signer, idx) => (
+                        <div
+                          key={`${signer.email || signer.name || "signer"}-${idx}`}
+                          className="rounded-md border bg-muted/30 px-3 py-2"
+                        >
+                          <div className="text-xs text-muted-foreground">
+                            Firmante{" "}
+                            {configuredSigners.length > 1 ? `#${idx + 1}` : ""}
+                          </div>
+                          <div className="text-sm font-medium">
+                            {signer.name || "Sin nombre"}
+                          </div>
+                          <div className="text-xs text-muted-foreground break-all">
+                            {signer.email || "Sin email"}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        No hay firmantes configurados.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -1734,20 +1817,6 @@ export function ContractGenerator({
                         </div>
                       </>
                     )}
-
-                    <div className="space-y-1 md:col-span-2">
-                      <Label className="text-xs" htmlFor="cg-notes">
-                        Notas (opcional)
-                      </Label>
-                      <Textarea
-                        id="cg-notes"
-                        value={overrides.notes ?? mergedData.notes ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({ ...p, notes: e.target.value }))
-                        }
-                        rows={3}
-                      />
-                    </div>
                   </div>
                 )}
                 {hasOverrides && (
@@ -1939,27 +2008,68 @@ export function ContractGenerator({
                     {signatureSuccessData?.data?.title || "Contrato enviado"}
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Firmante</div>
-                  <div className="font-medium">
-                    {signatureSuccessData?.data?.signer_name ||
-                      mergedData.fullName ||
-                      (liveLead as any)?.name ||
-                      "-"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">
-                    Email firmante
-                  </div>
-                  <div className="font-medium break-all">
-                    {signatureSuccessData?.data?.signer_email ||
-                      mergedData.email ||
-                      (liveLead as any)?.email ||
-                      "-"}
-                  </div>
-                </div>
               </div>
+
+              {/* Lista de todos los firmantes */}
+              {(() => {
+                const sigs = signatureSuccessData?.data?.signatures;
+                if (sigs && sigs.length > 0) {
+                  return (
+                    <div className="space-y-3 pt-1">
+                      {sigs.map((sig, idx) => (
+                        <div
+                          key={sig.signature_id || idx}
+                          className="grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-lg border border-emerald-100 bg-emerald-50/40 p-3"
+                        >
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              Firmante {sigs.length > 1 ? `#${idx + 1}` : ""}
+                            </div>
+                            <div className="font-medium">
+                              {sig.signer_name || "-"}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              Email firmante
+                            </div>
+                            <div className="font-medium break-all">
+                              {sig.signer_email_address || "-"}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                // Fallback: mostrar datos simples si no hay array de signatures
+                return (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        Firmante
+                      </div>
+                      <div className="font-medium">
+                        {signatureSuccessData?.data?.signer_name ||
+                          mergedData.fullName ||
+                          (liveLead as any)?.name ||
+                          "-"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        Email firmante
+                      </div>
+                      <div className="font-medium break-all">
+                        {signatureSuccessData?.data?.signer_email ||
+                          mergedData.email ||
+                          (liveLead as any)?.email ||
+                          "-"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

@@ -110,6 +110,9 @@ export interface ContractData {
 
   // Notas adicionales
   notes?: string;
+
+  // Firmantes extra (además del lead principal)
+  extraSigners?: Array<{ name?: string; email?: string }>;
 }
 
 // Función para formatear fecha en español
@@ -375,6 +378,11 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
     // Notas
     NOTAS: data.notes || "",
 
+    // Firmantes extra serializados
+    _EXTRA_SIGNERS_JSON: JSON.stringify(
+      Array.isArray(data.extraSigners) ? data.extraSigners.filter((s) => s?.name && s?.email) : [],
+    ),
+
     // Datos adicionales para el contrato (fecha actual)
     DIA: String(new Date().getDate()),
     MES: ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][new Date().getMonth()],
@@ -513,6 +521,89 @@ function buildSignatureTable(
     ],
   });
 
+  // Parsear firmantes extra si los hay
+  let extraSigners: Array<{ name?: string; email?: string }> = [];
+  try {
+    const parsed = JSON.parse(values._EXTRA_SIGNERS_JSON || "[]");
+    if (Array.isArray(parsed)) extraSigners = parsed;
+  } catch {}
+
+  const mainSignatureRow = new TableRow({
+    children: [
+      new TableCell({
+        borders: noCellBorders,
+        width: { size: 50, type: WidthType.PERCENTAGE },
+        children: [
+          new Paragraph({ children: [run("JAVIER MIRANDA", { bold: true })], alignment: AlignmentType.CENTER }),
+          new Paragraph({ children: [run("MHF GROUP LLC", { bold: true })], alignment: AlignmentType.CENTER, spacing: { after: 80 } }),
+          ...(signatureImageData
+            ? [
+                new Paragraph({
+                  children: [
+                    new ImageRun({
+                      data: signatureImageData,
+                      transformation: {
+                        width: 180,
+                        height: 52,
+                      },
+                    }),
+                  ],
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 200 },
+                }),
+              ]
+            : []),
+        ],
+      }),
+      new TableCell({
+        borders: noCellBorders,
+        width: { size: 50, type: WidthType.PERCENTAGE },
+        children: [
+          underlineParagraph(values.NOMBRE_COMPLETO ?? "", { alignment: AlignmentType.CENTER, bold: true, spacingAfter: 60 }),
+          new Paragraph({
+            children: [run("(NOMBRE Y APELLIDO)", { size: 18, bold: true })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 160 },
+          }),
+          infoTable,
+        ],
+      }),
+    ],
+  });
+
+  // Filas de firmantes extra
+  const extraRows = extraSigners.map((signer) =>
+    new TableRow({
+      children: [
+        new TableCell({
+          borders: noCellBorders,
+          width: { size: 50, type: WidthType.PERCENTAGE },
+          children: [
+            new Paragraph({ children: [], spacing: { before: 300 } }),
+          ],
+        }),
+        new TableCell({
+          borders: noCellBorders,
+          width: { size: 50, type: WidthType.PERCENTAGE },
+          children: [
+            new Paragraph({ children: [], spacing: { before: 300 } }),
+            underlineParagraph(signer.name || "", { alignment: AlignmentType.CENTER, bold: true, spacingAfter: 60 }),
+            new Paragraph({
+              children: [run("(FIRMANTE ADICIONAL)", { size: 18, bold: true })],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 60 },
+            }),
+            new Paragraph({
+              children: [run(signer.email || "")],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 160 },
+            }),
+          ],
+        }),
+      ],
+    }),
+  );
+
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: {
@@ -523,50 +614,7 @@ function buildSignatureTable(
       insideHorizontal: { style: BorderStyle.NONE, color: "FFFFFF", size: 0 },
       insideVertical: { style: BorderStyle.NONE, color: "FFFFFF", size: 0 },
     },
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            borders: noCellBorders,
-            width: { size: 50, type: WidthType.PERCENTAGE },
-            children: [
-              new Paragraph({ children: [run("JAVIER MIRANDA", { bold: true })], alignment: AlignmentType.CENTER }),
-              new Paragraph({ children: [run("MHF GROUP LLC", { bold: true })], alignment: AlignmentType.CENTER, spacing: { after: 80 } }),
-              ...(signatureImageData
-                ? [
-                    new Paragraph({
-                      children: [
-                        new ImageRun({
-                          data: signatureImageData,
-                          transformation: {
-                            width: 180,
-                            height: 52,
-                          },
-                        }),
-                      ],
-                      alignment: AlignmentType.CENTER,
-                      spacing: { after: 200 },
-                    }),
-                  ]
-                : []),
-            ],
-          }),
-          new TableCell({
-            borders: noCellBorders,
-            width: { size: 50, type: WidthType.PERCENTAGE },
-            children: [
-              underlineParagraph(values.NOMBRE_COMPLETO ?? "", { alignment: AlignmentType.CENTER, bold: true, spacingAfter: 60 }),
-              new Paragraph({
-                children: [run("(NOMBRE Y APELLIDO)", { size: 18, bold: true })],
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 160 },
-              }),
-              infoTable,
-            ],
-          }),
-        ],
-      }),
-    ],
+    rows: [mainSignatureRow, ...extraRows],
   });
 }
 
@@ -965,6 +1013,19 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
     closerName: lead?.closer?.name || lead?.closer_name || "",
     closerEmail: lead?.closer?.email || "",
     notes: d.notes || lead?.sale_notes || "",
+
+    // Firmantes extra
+    extraSigners: (() => {
+      const candidates = [
+        d.contractParties,
+        contract?.parties,
+        lead?.contract_parties,
+      ];
+      for (const c of candidates) {
+        if (Array.isArray(c) && c.length > 0) return c;
+      }
+      return [];
+    })(),
   };
 }
 

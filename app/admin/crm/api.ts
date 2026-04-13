@@ -691,6 +691,7 @@ export async function sendLeadContractForSignature(
   codigo: string,
   file: File,
   message: string,
+  signers?: Array<{ email_address: string; name: string; order: number }>,
 ) {
   if (!codigo) throw new Error("codigo requerido");
   if (!(file instanceof File)) throw new Error("file requerido");
@@ -698,6 +699,9 @@ export async function sendLeadContractForSignature(
   const formData = new FormData();
   formData.set("file", file);
   formData.set("message", message);
+  if (signers && signers.length > 0) {
+    formData.set("signers", JSON.stringify(signers));
+  }
 
   return await apiFetch<LeadContractSignatureSendResponse>(
     `/leads/dropboxsign/send-file/${encodeURIComponent(codigo)}`,
