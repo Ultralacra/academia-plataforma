@@ -279,12 +279,6 @@ function Content({ id }: { id: string }) {
     setFrozenSaleInitial(null);
   }, [id]);
 
-  React.useEffect(() => {
-    if (record) {
-      console.log("[CRM] Lead detail:", record);
-    }
-  }, [record]);
-
   const applyRecordPatch = React.useCallback((patch: Record<string, any>) => {
     setRecord((prev: any | null) => {
       if (!prev) return prev;
@@ -294,6 +288,22 @@ function Content({ id }: { id: string }) {
       };
     });
   }, []);
+
+  const hydrateFromSnapshot = React.useCallback(
+    (snapshotPayloadCurrent: Record<string, any>, snapshotSale?: any) => {
+      setRecord((prev: any | null) => {
+        const base = prev && typeof prev === "object" ? prev : {};
+        return {
+          ...base,
+          ...snapshotPayloadCurrent,
+          ...(snapshotSale ? { sale: snapshotSale } : {}),
+        };
+      });
+      setSaleDraftPayload(snapshotSale ?? null);
+      setFrozenSaleInitial(null);
+    },
+    [],
+  );
 
   const handleNavigate = React.useCallback(
     (target: {
@@ -1416,6 +1426,13 @@ function Content({ id }: { id: string }) {
         draft: draft ?? undefined,
       };
 
+      console.log("[CRM booking] snapshot save", {
+        leadCodigo: id,
+        draft,
+        snapshotPayloadCurrent,
+        snapshotSale,
+      });
+
       await createLeadSnapshot({
         codigo: id,
         source: {
@@ -1426,15 +1443,17 @@ function Content({ id }: { id: string }) {
         snapshot,
       });
 
-      // Reload desde backend para reflejar el snapshot recién guardado.
-      try {
-        await load({ silent: true });
-      } catch {}
+      // Reflejar inmediatamente la fuente de verdad del snapshot en UI,
+      // incluso si el backend tarda en devolver el lead ya actualizado.
+      hydrateFromSnapshot(snapshotPayloadCurrent, snapshotSale);
 
       toast({
         title: "Guardado",
         description: "Se guardó el snapshot y se actualizó el lead.",
       });
+
+      // Refresco en background: no bloquea el estado del botón.
+      void load({ silent: true });
     } catch (err: any) {
       toast({
         title: "Error",
@@ -1449,6 +1468,7 @@ function Content({ id }: { id: string }) {
     buildSnapshotPayloadCurrent,
     draft,
     draftToLeadPatch,
+    hydrateFromSnapshot,
     id,
     leadForUi,
     load,
@@ -1944,7 +1964,12 @@ function Content({ id }: { id: string }) {
   })();
 
   const displayName = (() => {
-    const raw = String(p.name || salePayload?.name || "Detalle del lead");
+    const raw = String(
+      (draft as any)?.fullName ||
+        p.name ||
+        salePayload?.name ||
+        "Detalle del lead",
+    );
     return raw
       .replace(/\s+(none|null|undefined)$/i, "")
       .replace(/\s{2,}/g, " ")

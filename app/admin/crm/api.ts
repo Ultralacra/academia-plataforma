@@ -310,22 +310,43 @@ export interface LeadsListResponse {
   totalPages?: number;
 }
 
+function extractLeadPayloadFromMetadata(raw: any) {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw.payload && typeof raw.payload === "object" ? raw.payload : null;
+  if (!payload) return null;
+
+  if (raw.entity === "crm_lead_snapshot") {
+    const current = payload.payload_current;
+    return current && typeof current === "object" ? current : payload;
+  }
+
+  return payload;
+}
+
 // Normaliza el objeto raw del backend al tipo Lead
 function mapLead(raw: any): Lead {
   const isMetadata = raw && typeof raw === "object" && "payload" in raw;
   if (isMetadata) {
-    const p = raw.payload || {};
+    const p = extractLeadPayloadFromMetadata(raw) || {};
     return {
-      // Usar el ID real del registro de metadata para poder consultar /v1/metadata/:id
-      codigo: String(raw?.id ?? raw?.codigo ?? raw?.entity_id ?? ""),
+      codigo: String(
+        p?.codigo ?? raw?.codigo ?? raw?.entity_id ?? raw?.id ?? "",
+      ),
       name: p?.name || "(Sin nombre)",
       email: p?.email ?? null,
       phone: p?.phone ?? null,
       source: p?.source ?? "metadata",
       status: p?.status ?? "new",
-      owner_codigo: null,
+      owner_codigo: p?.owner_codigo ?? null,
       created_at: raw?.created_at ?? p?.created_at ?? null,
-      updated_at: raw?.updated_at ?? null,
+      updated_at: raw?.updated_at ?? p?.updated_at ?? null,
+      instagram_user: p?.instagram_user ?? null,
+      monthly_budget: p?.monthly_budget ?? null,
+      main_obstacle: p?.main_obstacle ?? null,
+      invite_others: p?.invite_others ?? null,
+      closer_name: p?.closer_name ?? null,
+      sale_notes: p?.sale_notes ?? null,
+      detalle_preguntas_hubspot: p?.detalle_preguntas_hubspot ?? null,
     };
   }
   return {
@@ -416,7 +437,11 @@ export async function getLead(codigo: string) {
         "payload" in (data as any) &&
         "entity" in (data as any) &&
         ("id" in (data as any) || "entity_id" in (data as any));
-      if (isMetadataLike) return data as LeadDetail;
+      if (isMetadataLike) {
+        const base = mapLead(data);
+        const metadataPayload = extractLeadPayloadFromMetadata(data) || {};
+        return { ...(data as any), ...(metadataPayload as any), ...base } as LeadDetail;
+      }
 
       const base = mapLead(data);
       return { ...(data as any), ...base } as LeadDetail;
@@ -431,7 +456,11 @@ export async function getLead(codigo: string) {
       method: "GET",
     });
     const data = (one as any)?.data ?? one;
-    if (data && data.entity) return mapLead(data);
+    if (data && data.entity) {
+      const base = mapLead(data);
+      const metadataPayload = extractLeadPayloadFromMetadata(data) || {};
+      return { ...(data as any), ...(metadataPayload as any), ...base } as LeadDetail;
+    }
   } catch {}
   try {
     const raw = await apiFetch<any>(`/metadata`, { method: "GET" });
@@ -439,7 +468,11 @@ export async function getLead(codigo: string) {
     const found = Array.isArray(arr)
       ? arr.find((r: any) => r?.entity_id === codigo || r?.id === codigo)
       : null;
-    if (found) return mapLead(found);
+    if (found) {
+      const base = mapLead(found);
+      const metadataPayload = extractLeadPayloadFromMetadata(found) || {};
+      return { ...(found as any), ...(metadataPayload as any), ...base } as LeadDetail;
+    }
   } catch {}
 
   throw new Error("Lead no encontrado");

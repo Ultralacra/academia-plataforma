@@ -104,6 +104,7 @@ import {
   type AccessExpiryDay,
 } from "@/lib/email-templates/access-expiry";
 import StudentBrevoEvents from "./_parts/StudentBrevoEvents";
+import StudentProfileDataPanel from "./_parts/StudentProfileDataPanel";
 
 function extractStudentTag(raw: any): string | null {
   const pick = (value: any): string | null => {
@@ -3341,6 +3342,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 onChangeMember={(idx, candidate) => changeCoach(idx, candidate)}
               />
             </div>
+
+            {/* Encuesta de bienvenida */}
+            <StudentProfileDataPanel studentCode={student.code || code} />
 
             {/* Historial de emails (Brevo) */}
             {canSeeAdminAccessInfo && (

@@ -2909,7 +2909,7 @@ export function CloseSaleForm({
         </div>
       </Tabs>
 
-      {persistMode === "api" ? (
+      {persistMode === "api" && mode !== "edit" ? (
         <div className="flex justify-end">
           <Button type="submit" disabled={submitting}>
             {submitting ? "Guardando..." : submitLabel}
