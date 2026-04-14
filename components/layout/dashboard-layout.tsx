@@ -1207,8 +1207,8 @@ export function DashboardLayout({
           </header>
           <div
             className={`flex-1 ${
-              contentClassName ?? "p-6"
-            } overflow-x-hidden overflow-y-auto min-h-0 flex flex-col`}
+              contentClassName ?? "p-6 overflow-x-hidden overflow-y-auto"
+            } min-h-0 flex flex-col`}
           >
             {children}
           </div>

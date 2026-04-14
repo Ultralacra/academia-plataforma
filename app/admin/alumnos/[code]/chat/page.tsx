@@ -11,7 +11,7 @@ export default function StudentChatFullPage() {
 
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
-      <DashboardLayout contentClassName="p-0">
+      <DashboardLayout contentClassName="p-0 overflow-x-hidden overflow-y-auto">
         <div className="h-full">
           <ChatPanel code={code} fullHeight />
         </div>

@@ -60,7 +60,6 @@ import {
 } from "../api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import PersonalMetrics from "../PersonalMetrics";
 import CoachStudentsTable from "../components/CoachStudentsTable";
 import CoachCurrentLoadTab from "../components/CoachCurrentLoadTab";
 import { fetchMetrics } from "@/app/admin/teams/teamsApi";
@@ -1859,113 +1858,98 @@ export default function CoachDetailPage({
 
   return (
     <ProtectedRoute allowedRoles={["admin", "equipo", "coach"]}>
-      <DashboardLayout>
+      <DashboardLayout contentClassName="p-6 overflow-x-hidden overflow-hidden">
         {/* Layout flexible: alto completo con scroll interno en tabs */}
-        <div className="flex flex-col h-full min-h-0 space-y-6 overflow-hidden">
-          <div className="flex items-start gap-6">
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-lg bg-neutral-100 grid place-items-center text-2xl font-bold text-neutral-800">
-                {(coach?.nombre
-                  ? String(coach.nombre).slice(0, 1)
-                  : String(code).slice(0, 1)
-                ).toUpperCase()}
+        <div className="flex flex-col h-full min-h-0 space-y-3 overflow-hidden">
+          {/* Header compacto del coach */}
+          <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white/80 px-4 py-2.5 shadow-sm flex-shrink-0">
+            {/* Avatar */}
+            <div className="h-9 w-9 shrink-0 rounded-lg bg-neutral-100 grid place-items-center text-base font-bold text-neutral-700">
+              {(coach?.nombre
+                ? String(coach.nombre).slice(0, 1)
+                : String(code).slice(0, 1)
+              ).toUpperCase()}
+            </div>
+
+            {/* Nombre + datos inline */}
+            <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-base font-semibold leading-tight truncate max-w-[200px]">
+                  {coach?.nombre ?? code}
+                </span>
+                {canEditCoach && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditOpen(true)}
+                    aria-label="Editar nombre"
+                    className="h-6 w-6 p-0"
+                  >
+                    <Edit className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-semibold leading-tight">
-                    {coach?.nombre ?? code}
-                  </h2>
-                  {canEditCoach && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setEditOpen(true)}
-                      aria-label="Editar nombre"
-                      className="p-2"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <div className="text-sm text-neutral-500 flex items-center gap-3">
-                  <span>
-                    Código: <span className="font-mono">{code}</span>
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-neutral-100 text-neutral-700">
-                    {coach?.created_at
-                      ? new Date(coach.created_at).toLocaleDateString()
-                      : "—"}
-                  </span>
-                </div>
-                <div className="mt-4 grid gap-2 rounded-xl border border-neutral-200 bg-white/80 px-4 py-3 text-sm text-neutral-700 shadow-sm">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                    <span className="font-medium text-neutral-500">Email:</span>
-                    <span className="break-all text-neutral-900">
-                      {coachEmail || "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                    <span className="font-medium text-neutral-500">Rol:</span>
-                    <span className="text-neutral-900">{coachRole || "—"}</span>
-                  </div>
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                    <span className="font-medium text-neutral-500">Área:</span>
-                    {coach?.area ? (
-                      <Badge
-                        variant="outline"
-                        className="w-fit rounded-md border-border bg-muted/40 text-foreground"
-                      >
-                        {coach.area}
-                      </Badge>
-                    ) : (
-                      <span className="text-foreground">—</span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                    <span className="font-medium text-neutral-500">
-                      Puesto:
-                    </span>
-                    {coach?.puesto ? (
-                      <Badge
-                        variant="outline"
-                        className="w-fit rounded-md border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-200"
-                      >
-                        {coach.puesto}
-                      </Badge>
-                    ) : (
-                      <span className="text-foreground">—</span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                    <span className="font-medium text-neutral-500">
-                      Contraseña:
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground">••••••••</span>
-                      {canEditCoach && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setPasswordOpen(true)}
-                          aria-label="Editar contraseña"
-                          className="h-7 px-2 text-neutral-600"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+
+              {/* Código */}
+              <span className="text-xs text-neutral-400 font-mono truncate hidden sm:inline">
+                {code}
+              </span>
+
+              {/* Email */}
+              {coachEmail && (
+                <span className="text-xs text-neutral-500 truncate hidden md:inline max-w-[180px]">
+                  {coachEmail}
+                </span>
+              )}
+
+              {/* Badges inline */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {coach?.puesto && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-1.5 text-[10px] rounded border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-200"
+                  >
+                    {coach.puesto}
+                  </Badge>
+                )}
+                {coach?.area && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-1.5 text-[10px] rounded border-border bg-muted/40 text-foreground"
+                  >
+                    {coach.area}
+                  </Badge>
+                )}
+                {coachRole && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-1.5 text-[10px] rounded border-border bg-muted/40 text-foreground"
+                  >
+                    {coachRole}
+                  </Badge>
+                )}
               </div>
             </div>
 
-            <div className="ml-auto flex items-center gap-2">
+            {/* Acciones a la derecha */}
+            <div className="flex items-center gap-1 shrink-0">
+              {canEditCoach && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPasswordOpen(true)}
+                  aria-label="Editar contraseña"
+                  className="h-7 px-2 text-xs text-neutral-500 hidden sm:flex"
+                >
+                  Contraseña
+                </Button>
+              )}
               {isAdmin && (
                 <Button
                   size="sm"
                   variant="destructive"
                   onClick={() => setDeleteOpen(true)}
-                  className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400"
+                  className="h-7 px-2.5 text-xs bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400"
                 >
                   Eliminar
                 </Button>
@@ -1986,24 +1970,24 @@ export default function CoachDetailPage({
                 >
                   Tickets
                 </TabsTrigger>
-                <TabsTrigger
+                {/* <TabsTrigger
                   value="metricas"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Métricas
-                </TabsTrigger>
+                </TabsTrigger> */}
                 <TabsTrigger
                   value="carga"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Carga actual
                 </TabsTrigger>
-                <TabsTrigger
+                {/* <TabsTrigger
                   value="alumnos"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Alumnos
-                </TabsTrigger>
+                </TabsTrigger> */}
                 <TabsTrigger
                   value="chat"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
@@ -2043,7 +2027,7 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
-            <TabsContent value="metricas" className="mt-0 flex-1 min-h-0">
+            {/* <TabsContent value="metricas" className="mt-0 flex-1 min-h-0">
               <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
                 {loading ? (
                   <div>Cargando...</div>
@@ -2060,7 +2044,7 @@ export default function CoachDetailPage({
                   </div>
                 )}
               </div>
-            </TabsContent>
+            </TabsContent> */}
 
             <TabsContent value="chat" className="mt-0 flex-1 min-h-0">
               {/* Altura fija basada en viewport para evitar scroll de la pestaña */}
@@ -2831,29 +2815,31 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
-            <TabsContent value="alumnos" className="mt-0 flex-1 min-h-0">
-              {/* Detalles: ocupar pantalla completa con scroll interno */}
-              <div className="h-full">
-                <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
-                  {loading ? (
-                    <div>Cargando...</div>
-                  ) : error ? (
-                    <div className="text-sm text-destructive">{error}</div>
-                  ) : coach ? (
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-sm font-medium mb-2">Alumnos</h3>
-                        <CoachStudentsInline coachCode={code} />
+            {false && (
+              <TabsContent value="alumnos" className="mt-0 flex-1 min-h-0">
+                {/* Detalles: ocupar pantalla completa con scroll interno */}
+                <div className="h-full">
+                  <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
+                    {loading ? (
+                      <div>Cargando...</div>
+                    ) : error ? (
+                      <div className="text-sm text-destructive">{error}</div>
+                    ) : coach ? (
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="text-sm font-medium mb-2">Alumnos</h3>
+                          <CoachStudentsInline coachCode={code} />
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      No se encontró información del coach.
-                    </div>
-                  )}
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        No se encontró información del coach.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </TabsContent>
+              </TabsContent>
+            )}
 
             <TabsContent value="carga" className="mt-0 flex-1 min-h-0">
               <div className="h-full">

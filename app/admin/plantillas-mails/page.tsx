@@ -44,6 +44,14 @@ import {
   ACCESS_EXPIRY_TEMPLATES,
   DEFAULT_RENEWAL_LINK,
 } from "@/lib/email-templates/access-expiry";
+import {
+  getOnboardingWorkflowSource,
+  ONBOARDING_WORKFLOW_TEMPLATES,
+} from "@/lib/email-templates/onboarding-workflow";
+import {
+  getStarterWorkflowSource,
+  STARTER_WORKFLOW_TEMPLATES,
+} from "@/lib/email-templates/starter-workflow";
 
 type MailTemplateKey =
   | "welcome"
@@ -60,15 +68,32 @@ type MailTemplateKey =
   | "acceso_dia_m3"
   | "acceso_dia_0"
   | "acceso_dia_p1"
-  | "acceso_dia_p5";
+  | "acceso_dia_p5"
+  | "onboarding_bienvenida"
+  | "onboarding_acceso"
+  | "onboarding_mentalidad"
+  | "onboarding_modulo0"
+  | "onboarding_cierre"
+  | "starter_bienvenida"
+  | "starter_acceso"
+  | "starter_metodologia"
+  | "starter_cierre";
 
-type TemplateCategory = "general" | "cobros" | "accesos" | "contrasena";
+type TemplateCategory =
+  | "general"
+  | "cobros"
+  | "accesos"
+  | "contrasena"
+  | "onboarding"
+  | "starter";
 
 const TEMPLATE_CATEGORIES: { id: TemplateCategory; label: string }[] = [
   { id: "general", label: "General" },
   { id: "cobros", label: "Cobros" },
   { id: "accesos", label: "Accesos" },
   { id: "contrasena", label: "Contraseña" },
+  { id: "onboarding", label: "Workflow Correos - Onboarding" },
+  { id: "starter", label: "Workflow Correos - Starter" },
 ];
 
 const TEMPLATE_CATEGORY_MAP: Record<MailTemplateKey, TemplateCategory> = {
@@ -87,6 +112,15 @@ const TEMPLATE_CATEGORY_MAP: Record<MailTemplateKey, TemplateCategory> = {
   acceso_dia_0: "accesos",
   acceso_dia_p1: "accesos",
   acceso_dia_p5: "accesos",
+  onboarding_bienvenida: "onboarding",
+  onboarding_acceso: "onboarding",
+  onboarding_mentalidad: "onboarding",
+  onboarding_modulo0: "onboarding",
+  onboarding_cierre: "onboarding",
+  starter_bienvenida: "starter",
+  starter_acceso: "starter",
+  starter_metodologia: "starter",
+  starter_cierre: "starter",
 };
 
 type MetadataTemplatePayload = {
@@ -264,6 +298,47 @@ const TEMPLATE_SPECIFIC_VARIABLES: Record<MailTemplateKey, TemplateVariable[]> =
     acceso_dia_0: ACCESS_EXPIRY_VARS,
     acceso_dia_p1: ACCESS_EXPIRY_VARS,
     acceso_dia_p5: ACCESS_EXPIRY_VARS,
+    onboarding_bienvenida: [],
+    onboarding_acceso: [
+      {
+        key: "{{recipientUsername}}",
+        description: "Usuario de acceso",
+        example: "user@mail.com",
+      },
+      {
+        key: "{{recipientPassword}}",
+        description: "Contraseña inicial",
+        example: "Abc123",
+      },
+      {
+        key: "{{coachName}}",
+        description: "Nombre del coach asignado (opcional)",
+        example: "Carlos López",
+      },
+      {
+        key: "{{coachEmail}}",
+        description: "Email del coach asignado (opcional)",
+        example: "coach@hotselling.com",
+      },
+    ],
+    onboarding_mentalidad: [],
+    onboarding_modulo0: [],
+    onboarding_cierre: [],
+    starter_bienvenida: [],
+    starter_acceso: [
+      {
+        key: "{{skoolLink}}",
+        description: "Enlace de acceso a Skool",
+        example: "https://www.skool.com/hotselling",
+      },
+      {
+        key: "{{notionLink}}",
+        description: "Enlace de acceso a Notion",
+        example: "https://www.notion.so/hotselling",
+      },
+    ],
+    starter_metodologia: [],
+    starter_cierre: [],
   };
 
 /* ── Interpolación de variables para preview / test ────────────── */
@@ -452,6 +527,48 @@ function getDefaultTemplates(): MailTemplateItem[] {
       headerImageUrl: extractFirstImageSrc(src.html),
       activo: true,
       orden: 11 + i,
+      fromMetadata: false,
+    });
+  }
+
+  // Agregar las 5 plantillas de workflow de onboarding
+  for (let i = 0; i < ONBOARDING_WORKFLOW_TEMPLATES.length; i++) {
+    const meta = ONBOARDING_WORKFLOW_TEMPLATES[i];
+    const src = getOnboardingWorkflowSource(meta.step);
+    base.push({
+      key: meta.key as MailTemplateKey,
+      entityId: meta.key,
+      name: meta.name,
+      description: meta.description,
+      endpoint: "/api/brevo/send-preview",
+      source: "lib/email-templates/onboarding-workflow.ts",
+      subject: src.subject,
+      html: src.html,
+      text: src.text,
+      headerImageUrl: extractFirstImageSrc(src.html),
+      activo: true,
+      orden: 16 + i,
+      fromMetadata: false,
+    });
+  }
+
+  // Agregar las 4 plantillas de workflow Starter
+  for (let i = 0; i < STARTER_WORKFLOW_TEMPLATES.length; i++) {
+    const meta = STARTER_WORKFLOW_TEMPLATES[i];
+    const src = getStarterWorkflowSource(meta.step);
+    base.push({
+      key: meta.key as MailTemplateKey,
+      entityId: meta.key,
+      name: meta.name,
+      description: meta.description,
+      endpoint: "/api/brevo/send-preview",
+      source: "lib/email-templates/starter-workflow.ts",
+      subject: src.subject,
+      html: src.html,
+      text: src.text,
+      headerImageUrl: extractFirstImageSrc(src.html),
+      activo: true,
+      orden: 21 + i,
       fromMetadata: false,
     });
   }

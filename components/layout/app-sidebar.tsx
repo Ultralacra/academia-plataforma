@@ -55,19 +55,13 @@ type MenuItem = {
   icon?: any;
   children?: MenuItem[];
   isSeparator?: boolean;
+  disabled?: boolean;
 };
 
 const agentsMenuItem: MenuItem = {
   title: "Agentes",
   url: "/admin/agentes",
   icon: Sparkles,
-  children: [
-    {
-      title: "Copy",
-      url: "/admin/agentes/copy",
-      icon: MessageSquare,
-    },
-  ],
 };
 
 /* ====================== Menús (admin con top-level Coachs/Alumnos/Tickets + grupo “Métricas”) ====================== */
@@ -140,10 +134,10 @@ const adminItems: MenuItem[] = [
 
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
-  // Grupo colapsable renombrado a “Métricas”
   {
     title: "Métricas",
     icon: BarChart3,
+    disabled: true,
     children: [
       { title: "Alumnos", url: "/admin/students", icon: GraduationCap },
       { title: "Coachs", url: "/admin/teams", icon: Users },
@@ -386,6 +380,7 @@ export function AppSidebar() {
               {
                 title: "Métricas",
                 icon: BarChart3,
+                disabled: true,
                 children: [
                   {
                     title: "Alumnos",
@@ -465,6 +460,7 @@ export function AppSidebar() {
               {
                 title: "Métricas",
                 icon: BarChart3,
+                disabled: true,
                 children: [
                   {
                     title: "Alumnos",
@@ -875,6 +871,7 @@ export function AppSidebar() {
                     // Enlace simple
                     if (!item.children?.length) {
                       const active = !!item.url && bestActiveUrl === item.url;
+                      const disabled = !!item.disabled;
 
                       return (
                         <SidebarMenuItem key={item.title}>
@@ -884,6 +881,9 @@ export function AppSidebar() {
                                 asChild
                                 className={cn(
                                   "group relative overflow-hidden rounded-lg px-3 py-2 text-sm transition-all duration-150",
+                                  disabled
+                                    ? "pointer-events-none opacity-45"
+                                    : "",
                                   active
                                     ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
                                     : "hover:bg-sidebar-accent/40 text-sidebar-foreground",
@@ -959,13 +959,17 @@ export function AppSidebar() {
                           item.url.endsWith("/") ? item.url : `${item.url}/`,
                         ));
                     const isGroupActive = isParentActive || isAnyChildActive;
-                    const isGroupOpen = !!openGroups[item.title];
+                    const isGroupDisabled = !!item.disabled;
+                    const isGroupOpen = isGroupDisabled
+                      ? false
+                      : !!openGroups[item.title];
 
                     return (
                       <SidebarMenuItem key={item.title}>
                         <div
                           className={cn(
                             "group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
+                            isGroupDisabled ? "opacity-45" : "",
                             isGroupOpen || isGroupActive
                               ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
                               : "hover:bg-sidebar-accent/40 text-sidebar-foreground",
@@ -974,7 +978,12 @@ export function AppSidebar() {
                           {item.url ? (
                             <Link
                               href={item.url}
-                              className="flex min-w-0 flex-1 items-center gap-3"
+                              className={cn(
+                                "flex min-w-0 flex-1 items-center gap-3",
+                                isGroupDisabled ? "pointer-events-none" : "",
+                              )}
+                              aria-disabled={isGroupDisabled}
+                              tabIndex={isGroupDisabled ? -1 : undefined}
                             >
                               <span
                                 className={cn(
@@ -1006,7 +1015,12 @@ export function AppSidebar() {
                                   [item.title]: !prev[item.title],
                                 }))
                               }
-                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                              className={cn(
+                                "flex min-w-0 flex-1 items-center gap-3 text-left",
+                                isGroupDisabled ? "cursor-not-allowed" : "",
+                              )}
+                              disabled={isGroupDisabled}
+                              aria-disabled={isGroupDisabled}
                             >
                               <span
                                 className={cn(
@@ -1039,7 +1053,13 @@ export function AppSidebar() {
                               }))
                             }
                             aria-label={`Expandir ${item.title}`}
-                            className="ml-2 flex h-8 w-8 items-center justify-center rounded-md hover:bg-sidebar-accent/60"
+                            className={cn(
+                              "ml-2 flex h-8 w-8 items-center justify-center rounded-md hover:bg-sidebar-accent/60",
+                              isGroupDisabled
+                                ? "cursor-not-allowed hover:bg-transparent"
+                                : "",
+                            )}
+                            disabled={isGroupDisabled}
                           >
                             <ChevronDown
                               className={cn(
