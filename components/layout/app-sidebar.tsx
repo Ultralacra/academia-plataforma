@@ -222,13 +222,9 @@ export function AppSidebar() {
         const baseAdmin = isAdminAtc
           ? adminItems.filter(
               (item) =>
-                ![
-                  "Opciones",
-                  "Roles",
-                  "CRM",
-                  "Usuarios sistema",
-                  "Pagos",
-                ].includes(item.title),
+                !["Opciones", "Roles", "Usuarios sistema", "Pagos"].includes(
+                  item.title,
+                ),
             )
           : adminItems;
 

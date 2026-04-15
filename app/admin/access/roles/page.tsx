@@ -174,7 +174,7 @@ const ROLE_DOCS: {
     ],
     restrictions: [
       "No puede gestionar roles y permisos",
-      'Según el área (ej. ATENCION_AL_CLIENTE), se filtran módulos como "Opciones", "CRM", "Usuarios sistema" y "Pagos"',
+      'Según el área (ej. ATENCION_AL_CLIENTE), se filtran módulos como "Opciones", "Usuarios sistema" y "Pagos"',
       "No puede acceder a configuraciones del sistema",
       "No puede gestionar usuarios del sistema",
     ],
@@ -795,7 +795,7 @@ const SIDEBAR_DOCS: { role: string; label: string; items: string[] }[] = [
       "Pagos (/admin/payments) — según área",
       "Bonos y solicitudes de bonos",
       "CRM (/admin/crm) — según área",
-      "Nota: se filtran módulos según el área del usuario (ej. ATENCION_AL_CLIENTE no ve Opciones, CRM, Usuarios, Pagos)",
+      "Nota: se filtran módulos según el área del usuario (ej. ATENCION_AL_CLIENTE no ve Opciones, Usuarios, Pagos)",
     ],
   },
   {
