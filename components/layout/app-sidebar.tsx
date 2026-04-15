@@ -349,6 +349,7 @@ export function AppSidebar() {
                   },
                   { title: "Bonos", url: "/admin/bonos", icon: Users },
                   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
+                  { title: "CRM", url: "/admin/crm", icon: Users },
                   {
                     title: "Usuarios sistema",
                     url: "/admin/users",

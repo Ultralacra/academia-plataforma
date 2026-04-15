@@ -89,6 +89,7 @@ const TOTAL_STEPS = 3;
 /* ────────────────────────── componente ────────────────────────── */
 
 const LS_KEY = "student_welcome_completed";
+const RESET_EVENT = "reset-welcome-survey";
 
 function getLocalCompleted(code: string): boolean {
   try {
@@ -189,6 +190,18 @@ export function StudentWelcomeModal() {
       cancelled = true;
     };
   }, [isLoading, user, userCode, userRole]);
+
+  /* ── escuchar evento de reinicio de encuesta ── */
+  React.useEffect(() => {
+    const handler = () => {
+      if (userCode) clearLocalCompleted(userCode);
+      setDraft({ ...EMPTY_DRAFT });
+      setStep(1);
+      setOpen(true);
+    };
+    window.addEventListener(RESET_EVENT, handler);
+    return () => window.removeEventListener(RESET_EVENT, handler);
+  }, [userCode]);
 
   /* ── helpers de draft ── */
   const patch = (partial: Partial<ProfileDraft>) =>

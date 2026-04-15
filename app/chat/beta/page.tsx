@@ -581,6 +581,74 @@ export default function AdminChatPage() {
     return { title: `Chat ${id}` };
   }
 
+  function getDuplicatePairKey(
+    it: any,
+    context?: {
+      selectedCoachCode?: string | null;
+      selectedStudentCode?: string | null;
+      targetKind?: TargetKind | null;
+    },
+  ): string | null {
+    try {
+      const parts = [
+        ...(Array.isArray(it?.participants) ? it.participants : []),
+        ...(Array.isArray(it?.participantes) ? it.participantes : []),
+        ...(Array.isArray(it?.otros_participantes)
+          ? it.otros_participantes
+          : []),
+      ];
+
+      const studentIds = new Set<string>();
+      const coachIds = new Set<string>();
+
+      for (const part of parts) {
+        const tipo = String(
+          part?.participante_tipo ?? part?.tipo ?? part?.participant_type ?? "",
+        )
+          .trim()
+          .toLowerCase();
+
+        if (["cliente", "alumno", "student"].includes(tipo)) {
+          const studentId = String(
+            part?.id_cliente ?? part?.id_alumno ?? part?.client_id ?? "",
+          )
+            .trim()
+            .toLowerCase();
+          if (studentId) studentIds.add(studentId);
+        }
+
+        if (tipo === "equipo" || tipo === "coach") {
+          const coachId = String(
+            part?.id_equipo ?? part?.equipo_id ?? part?.id_coach ?? "",
+          )
+            .trim()
+            .toLowerCase();
+          if (coachId) coachIds.add(coachId);
+        }
+      }
+
+      let studentId = Array.from(studentIds)[0] || "";
+      let coachId = Array.from(coachIds).sort().join("|");
+
+      if (!studentId && context?.selectedStudentCode) {
+        studentId = String(context.selectedStudentCode).trim().toLowerCase();
+      }
+
+      if (!coachId && context?.selectedCoachCode) {
+        coachId = String(context.selectedCoachCode).trim().toLowerCase();
+      }
+
+      if (!coachId && context?.targetKind === "alumno") {
+        coachId = String(ADMIN_COACH_ID).trim().toLowerCase();
+      }
+
+      if (!studentId || !coachId) return null;
+      return `${studentId}::${coachId}`;
+    } catch {
+      return null;
+    }
+  }
+
   function getReadStatusByRole(it: any): {
     coachUnread: number | null;
     alumnoUnread: number | null;
@@ -752,6 +820,32 @@ export default function AdminChatPage() {
     const code = String(s?.code ?? targetId).trim();
     return code || null;
   }, [students, targetId, targetKind]);
+
+  const duplicateCountByChatId = useMemo(() => {
+    const countByPair = new Map<string, number>();
+    const pairByChatId = new Map<string, string>();
+
+    for (const chat of adminChats) {
+      const chatId = String(chat?.id_chat ?? chat?.id ?? "").trim();
+      if (!chatId) continue;
+
+      const pairKey = getDuplicatePairKey(chat, {
+        selectedCoachCode,
+        selectedStudentCode,
+        targetKind,
+      });
+      if (!pairKey) continue;
+
+      pairByChatId.set(chatId, pairKey);
+      countByPair.set(pairKey, (countByPair.get(pairKey) || 0) + 1);
+    }
+
+    const result: Record<string, number> = {};
+    for (const [chatId, pairKey] of pairByChatId.entries()) {
+      result[chatId] = countByPair.get(pairKey) || 1;
+    }
+    return result;
+  }, [adminChats, selectedCoachCode, selectedStudentCode, targetKind]);
 
   const chatListParams = useMemo(() => {
     if (targetKind === "coach" && selectedCoachCode) {
@@ -1512,6 +1606,8 @@ export default function AdminChatPage() {
                       {visibleChats.map((it) => {
                         const id = it?.id_chat ?? it?.id;
                         const { title, subtitle } = labelForChatItem(it);
+                        const duplicateCount =
+                          duplicateCountByChatId[String(id ?? "")] || 1;
                         const { coachUnread, alumnoUnread } =
                           getReadStatusByRole(it);
                         const lastObj =
@@ -1626,15 +1722,28 @@ export default function AdminChatPage() {
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center justify-between gap-3 mb-0.5">
-                                    <span
-                                      className={`truncate text-[15px] ${
-                                        (unread || count > 0) && !isOpen
-                                          ? "font-semibold text-gray-900"
-                                          : "font-normal text-gray-900"
-                                      }`}
-                                    >
-                                      {title}
-                                    </span>
+                                    <div className="min-w-0 flex items-center gap-2">
+                                      <span
+                                        className={`truncate text-[15px] ${
+                                          (unread || count > 0) && !isOpen
+                                            ? "font-semibold text-gray-900"
+                                            : "font-normal text-gray-900"
+                                        }`}
+                                      >
+                                        {title}
+                                      </span>
+                                      <span
+                                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                          duplicateCount > 1
+                                            ? "border-rose-200 bg-rose-50 text-rose-700"
+                                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        }`}
+                                      >
+                                        {duplicateCount > 1
+                                          ? `Duplicados: ${duplicateCount}`
+                                          : "Sin duplicados"}
+                                      </span>
+                                    </div>
                                     <span className="text-[12px] text-gray-500 flex-shrink-0">
                                       {formatListTime(lastAt)}
                                     </span>

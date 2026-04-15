@@ -340,3 +340,101 @@ export async function POST(
 
   return NextResponse.json({ ok: true, created: true }, { status: 200 });
 }
+
+// ── PUT: reiniciar (limpiar) profile data de un alumno ──
+
+export async function PUT(
+  req: NextRequest,
+  ctx: { params: Promise<{ alumnoId: string }> },
+) {
+  const { alumnoId } = await ctx.params;
+  const requested = String(alumnoId ?? "").trim();
+  const auth = req.headers.get("authorization") ?? "";
+  if (!auth.trim()) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const me = await fetchMe(auth);
+  if (!me) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const role = normalizeRole(me.role, me.tipo);
+  const meId = String(me.id ?? "").trim();
+  const meCode = String(me.codigo ?? "").trim();
+
+  // Students solo pueden reiniciar su propia data
+  if (role === "student") {
+    const okById = Boolean(meId && requested === meId);
+    const okByCode = Boolean(meCode && requested === meCode);
+    if (!okById && !okByCode) {
+      return NextResponse.json({ error: "Prohibido" }, { status: 403 });
+    }
+  }
+
+  const body = (await req.json().catch(() => null)) as any;
+  if (!body?.reset) {
+    return NextResponse.json({ error: "Operación no válida" }, { status: 400 });
+  }
+
+  // Buscar el registro existente
+  const checkQs = new URLSearchParams();
+  checkQs.set("entity", ENTITY);
+  const checkRes = await fetch(buildUrl(`/metadata?${checkQs.toString()}`), {
+    method: "GET",
+    headers: { Authorization: auth, Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!checkRes.ok) {
+    return NextResponse.json(
+      { error: `HTTP ${checkRes.status}` },
+      { status: checkRes.status },
+    );
+  }
+
+  const checkJson = await checkRes.json().catch(() => null);
+  const existing = coerceList(checkJson).find((m: any) => {
+    const eid = String(m?.entity_id ?? "").trim();
+    if (eid === requested) return true;
+    const pc = String(m?.payload?.alumno_codigo ?? "").trim();
+    if (pc && pc === requested) return true;
+    return false;
+  });
+
+  if (!existing?.id) {
+    return NextResponse.json({ ok: true, reset: false }, { status: 200 });
+  }
+
+  // Actualizar el registro limpiando completedAt para que el modal vuelva a aparecer
+  const resetPayload = {
+    alumno_codigo: requested,
+    completedAt: null,
+    resetAt: new Date().toISOString(),
+  };
+
+  const upstream = await fetch(buildUrl(`/metadata/${existing.id}`), {
+    method: "PUT",
+    headers: {
+      Authorization: auth,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      entity: ENTITY,
+      entity_id: requested,
+      payload: resetPayload,
+    }),
+    cache: "no-store",
+  });
+
+  if (!upstream.ok) {
+    const text = await upstream.text().catch(() => "");
+    return NextResponse.json(
+      { error: text || `HTTP ${upstream.status}` },
+      { status: upstream.status },
+    );
+  }
+
+  return NextResponse.json({ ok: true, reset: true }, { status: 200 });
+}

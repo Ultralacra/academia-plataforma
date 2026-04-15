@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { getAuthToken } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, RotateCcw, Sparkles } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 interface SocialNetwork {
   platform: string;
@@ -41,33 +43,75 @@ export default function StudentProfileDataPanel({
 }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ProfilePayload | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  const fetchProfile = async (signal?: AbortSignal) => {
+    try {
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(studentCode)}/metadata/profile`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal,
+        },
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      setData(json?.item?.payload ?? null);
+    } catch {
+      // silently ignore
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!studentCode) return;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const token = getAuthToken();
-        const res = await fetch(
-          `/api/alumnos/${encodeURIComponent(studentCode)}/metadata/profile`,
-          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-        );
-        if (!res.ok) return;
-        const json = await res.json();
-        if (cancelled) return;
-        setData(json?.item?.payload ?? null);
-      } catch {
-        // silently ignore
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    const controller = new AbortController();
+    fetchProfile(controller.signal);
+    return () => controller.abort();
   }, [studentCode]);
+
+  const handleReset = async () => {
+    if (
+      !confirm(
+        "¿Reiniciar la encuesta de bienvenida? Se borrarán las respuestas y aparecerá el modal nuevamente.",
+      )
+    )
+      return;
+    setResetting(true);
+    try {
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(studentCode)}/metadata/profile`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ reset: true }),
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(null);
+      // Disparar evento para que StudentWelcomeModal se reabra (si el propio alumno lo resetea)
+      window.dispatchEvent(new Event("reset-welcome-survey"));
+      toast({
+        title: "Encuesta reiniciada",
+        description:
+          "La encuesta de bienvenida se ha reiniciado correctamente.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Error al reiniciar",
+        description: e?.message ?? "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -149,6 +193,21 @@ export default function StudentProfileDataPanel({
             })}
           </div>
         )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-2 gap-1.5"
+          onClick={handleReset}
+          disabled={resetting}
+        >
+          {resetting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RotateCcw className="h-3.5 w-3.5" />
+          )}
+          Reiniciar encuesta
+        </Button>
       </CardContent>
     </Card>
   );
