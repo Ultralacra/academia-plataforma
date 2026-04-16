@@ -56,6 +56,7 @@ export function SalePreview({
   entity = "sale",
   title = "Resumen de venta",
   onUpdated,
+  onStatusChange,
   persistMode = "api",
 }: {
   payload?: any;
@@ -65,6 +66,7 @@ export function SalePreview({
   entity?: "sale" | "booking";
   title?: string;
   onUpdated?: () => void;
+  onStatusChange?: (status: string) => void;
   persistMode?: "api" | "local";
 }) {
   const { toast } = useToast();
@@ -306,6 +308,8 @@ export function SalePreview({
         description: "Este cambio se guardará al presionar “Guardar cambios”.",
       });
       setLocalStatus("payment_confirmed");
+      onStatusChange?.("payment_confirmed");
+      onUpdated?.();
       return;
     }
     try {
@@ -338,6 +342,8 @@ export function SalePreview({
         description: "Este cambio se guardará al presionar “Guardar cambios”.",
       });
       setLocalStatus("payment_verification_pending");
+      onStatusChange?.("payment_verification_pending");
+      onUpdated?.();
       return;
     }
     try {

@@ -999,6 +999,8 @@ export function ContractGenerator({
 
       // Construir array de firmantes extra si existen contractParties
       const partiesCandidates = [
+        draft?.contractParties,
+        draft?.contract?.parties,
         (liveLead as any)?.contract_parties,
         (lead as any)?.contract_parties,
         (liveLead as any)?.contract?.parties,
@@ -1069,6 +1071,8 @@ export function ContractGenerator({
 
   const configuredSigners = React.useMemo(() => {
     const candidates = [
+      draft?.contractParties,
+      draft?.contract?.parties,
       (liveLead as any)?.contract_parties,
       (lead as any)?.contract_parties,
       (liveLead as any)?.contract?.parties,
@@ -1097,7 +1101,7 @@ export function ContractGenerator({
       seen.add(key);
       return true;
     });
-  }, [lead, liveLead, mergedData.email, mergedData.fullName]);
+  }, [draft, lead, liveLead, mergedData.email, mergedData.fullName]);
 
   const saveOverridesToLead = React.useCallback(async () => {
     const codigo = String(
@@ -1225,54 +1229,7 @@ export function ContractGenerator({
           visuallyHidden={previewOpen}
         >
           <DialogHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <DialogTitle>Generar Contrato</DialogTitle>
-                <DialogDescription>
-                  Genera un documento Word (.docx) con los datos del lead. El
-                  documento será completamente editable.
-                </DialogDescription>
-              </div>
-              {!!(lead as any)?.codigo && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={refreshingLead}
-                  onClick={async () => {
-                    try {
-                      setRefreshingLead(true);
-                      const fresh = await getLead(
-                        String((lead as any)?.codigo),
-                      );
-                      setLiveLead(fresh);
-                      toast({
-                        title: "Lead actualizado",
-                        description:
-                          "Se sincronizó el detalle del lead para el contrato.",
-                      });
-                    } catch (e: any) {
-                      toast({
-                        title: "No se pudo actualizar",
-                        description:
-                          e?.message ||
-                          "No se pudo refrescar el lead desde el CRM.",
-                        variant: "destructive",
-                      });
-                    } finally {
-                      setRefreshingLead(false);
-                    }
-                  }}
-                >
-                  {refreshingLead ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  <span className="ml-2">Sincronizar</span>
-                </Button>
-              )}
-            </div>
+            <DialogTitle>Generar Contrato</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -1817,25 +1774,6 @@ export function ContractGenerator({
                         </div>
                       </>
                     )}
-                  </div>
-                )}
-                {hasOverrides && (
-                  <div className="flex justify-end pt-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={savingLead}
-                      onClick={saveOverridesToLead}
-                      className="gap-2"
-                    >
-                      {savingLead ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      )}
-                      Guardar en el lead
-                    </Button>
                   </div>
                 )}
               </CardContent>

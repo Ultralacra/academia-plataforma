@@ -98,6 +98,17 @@ export function TabVenta({
     [setSaleDraftPayload],
   );
 
+  const handlePreviewStatusChange = React.useCallback(
+    (status: string) => {
+      if (!status) return;
+      setSaleDraftPayload((prev: any) => ({
+        ...(prev ?? effectiveSalePayload ?? {}),
+        status,
+      }));
+    },
+    [effectiveSalePayload, setSaleDraftPayload],
+  );
+
   return (
     <Card className="bg-white/90 backdrop-blur border-slate-200 shadow-sm overflow-hidden">
       <div className="h-1 bg-slate-200" />
@@ -150,7 +161,8 @@ export function TabVenta({
                   draft={draft || undefined}
                   leadCodigo={id}
                   entity="booking"
-                  persistMode="api"
+                  persistMode="local"
+                  onStatusChange={handlePreviewStatusChange}
                   title="Contrato / resumen"
                 />
               </DialogContent>
@@ -206,7 +218,7 @@ export function TabVenta({
             entity="booking"
             initial={initial}
             autoSave={false}
-            persistMode="api"
+            persistMode="local"
             onChange={handleDraftChange}
             onSalePayloadChange={handleSalePayloadChange}
             onDone={() => {

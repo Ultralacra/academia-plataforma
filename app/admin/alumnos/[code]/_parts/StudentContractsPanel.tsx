@@ -198,6 +198,115 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
+type TemplatePreviewBlock =
+  | { type: "h1"; text: string }
+  | { type: "h2"; text: string }
+  | { type: "p"; text: string }
+  | { type: "list"; label: string; text: string; level: number }
+  | { type: "signatures" };
+
+function parseTemplatePreviewBlocks(text: string) {
+  const lines = text.split(/\r?\n/).map((line) => line.trimEnd());
+  const blocks: TemplatePreviewBlock[] = [];
+  let buffer: string[] = [];
+  let currentNumberDepth = 0;
+
+  const flush = () => {
+    const paragraph = buffer.join(" ").trim();
+    buffer = [];
+    if (!paragraph) return;
+    blocks.push({ type: "p", text: paragraph });
+  };
+
+  const isAllCapsHeading = (line: string) => {
+    const value = line.trim();
+    if (!value) return false;
+    const letters = value.replace(/[^A-ZÁÉÍÓÚÜÑ]/g, "");
+    return letters.length >= 6 && value === value.toUpperCase();
+  };
+
+  const looksLikeClauseHeading = (line: string) => {
+    const value = line.trim();
+    return (
+      /^[A-ZÁÉÍÓÚÜÑ]+\.[\s\S]+$/.test(value) && value === value.toUpperCase()
+    );
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      flush();
+      continue;
+    }
+
+    if (trimmed === "[[FIRMAS]]") {
+      flush();
+      currentNumberDepth = 0;
+      blocks.push({ type: "signatures" });
+      continue;
+    }
+
+    if (trimmed.includes("CONTRATO") && trimmed === trimmed.toUpperCase()) {
+      flush();
+      currentNumberDepth = 0;
+      blocks.push({ type: "h1", text: trimmed });
+      continue;
+    }
+
+    if (looksLikeClauseHeading(trimmed) || isAllCapsHeading(trimmed)) {
+      flush();
+      currentNumberDepth = 0;
+      blocks.push({ type: "h2", text: trimmed });
+      continue;
+    }
+
+    const subsectionMatch =
+      /^(\d+(?:\.\d+)+)\.(?:\s+|\t+)(.*)$/.exec(trimmed) ??
+      /^(\d+(?:\.\d+)+)\s+(.*)$/.exec(trimmed);
+    if (subsectionMatch) {
+      flush();
+      const label = subsectionMatch[1];
+      currentNumberDepth = Math.max(0, label.split(".").length - 1);
+      blocks.push({
+        type: "list",
+        label,
+        text: subsectionMatch[2].trim(),
+        level: currentNumberDepth + 1,
+      });
+      continue;
+    }
+
+    const numberedMatch = /^(\d+)\.(?:\s+|\t+)(.*)$/.exec(trimmed);
+    if (numberedMatch) {
+      flush();
+      blocks.push({
+        type: "list",
+        label: `${numberedMatch[1]}.`,
+        text: numberedMatch[2].trim(),
+        level: Math.max(1, currentNumberDepth + 1),
+      });
+      continue;
+    }
+
+    const bulletMatch = /^([●•\-])\s+(.*)$/.exec(trimmed);
+    if (bulletMatch) {
+      flush();
+      blocks.push({
+        type: "list",
+        label: "•",
+        text: bulletMatch[2].trim(),
+        level: 1,
+      });
+      continue;
+    }
+
+    buffer.push(trimmed);
+  }
+
+  flush();
+  return blocks;
+}
+
 function buildTemplatePreview(
   template: string,
   studentName: string,
@@ -228,9 +337,65 @@ function buildTemplatePreview(
       return values[key] ?? `{{${key}}}`;
     })
     .replace("(30 días después)", end.toLocaleDateString("es-ES"))
-    .replace(/\[\[FIRMAS\]\]/g, "\n\n[Firmas de empresa y alumno]");
+    .replace(/\[\[FIRMAS\]\]/g, "[[FIRMAS]]");
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Vista previa</title><style>body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:24px;color:#111;background:#fff} .wrap{max-width:860px;margin:0 auto} pre{white-space:pre-wrap;line-height:1.6;font-size:14px}</style></head><body><div class="wrap"><pre>${escapeHtml(filled)}</pre></div></body></html>`;
+  const body = parseTemplatePreviewBlocks(filled)
+    .map((block) => {
+      if (block.type === "h1") {
+        return `<h1 class="h1">${escapeHtml(block.text)}</h1>`;
+      }
+      if (block.type === "h2") {
+        return `<div class="h2">${escapeHtml(block.text)}</div>`;
+      }
+      if (block.type === "p") {
+        return `<p class="p">${escapeHtml(block.text)}</p>`;
+      }
+      if (block.type === "list") {
+        const pad = Math.min(56, 12 + block.level * 14);
+        return `<div class="li" style="padding-left:${pad}px"><span class="label">${escapeHtml(block.label)}</span><span class="text">${escapeHtml(block.text)}</span></div>`;
+      }
+      return `
+        <div class="sigWrap">
+          <div class="sigGrid">
+            <div class="sigCol">
+              <div class="sigLine"></div>
+              <div class="sigCaption">MHF GROUP LLC</div>
+            </div>
+            <div class="sigCol">
+              <div class="sigLine"></div>
+              <div class="sigCaption">${escapeHtml(studentName || "Nombre del alumno")}</div>
+            </div>
+          </div>
+        </div>`;
+    })
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vista previa</title>
+  <style>
+    body{font-family:Arial,sans-serif;color:#000;margin:0;background:#e5e7eb;padding:24px;}
+    .page{max-width:820px;margin:0 auto;padding:36px 40px;background:#fff;box-shadow:0 18px 50px rgba(15,23,42,.14);border-radius:8px;}
+    .h1{text-align:center;font-weight:700;font-size:18px;margin:0 0 16px;}
+    .h2{font-weight:700;font-size:15px;margin:18px 0 8px;}
+    .p{margin:0 0 12px;text-align:justify;line-height:1.65;}
+    .li{margin:0 0 8px;text-align:justify;line-height:1.65;}
+    .label{font-weight:700;margin-right:8px;}
+    .sigWrap{margin:28px 0 0;}
+    .sigGrid{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:end;}
+    .sigCol{padding-top:28px;}
+    .sigLine{border-bottom:1px solid #000;height:28px;}
+    .sigCaption{text-align:center;font-weight:700;font-size:12px;margin-top:6px;}
+    @media print {body{background:#fff;padding:0;}.page{padding:0.75in 0.75in;box-shadow:none;border-radius:0;max-width:none;}}
+  </style>
+</head>
+<body>
+  <div class="page">${body}</div>
+</body>
+</html>`;
 }
 
 function formatDateDisplay(iso?: string) {
@@ -375,6 +540,61 @@ function buildHtmlFile(content: string, fileName: string) {
   return new File([content], fileName, { type: "text/html" });
 }
 
+function extractEditableBody(html: string) {
+  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return match?.[1]?.trim() || html;
+}
+
+function wrapEditableDocument(body: string) {
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vista previa</title>
+  <style>
+    body{font-family:Arial,sans-serif;color:#000;margin:0;background:#e5e7eb;padding:24px;}
+    .page{max-width:920px;margin:0 auto;padding:36px 40px;background:#fff;box-shadow:0 18px 50px rgba(15,23,42,.14);border-radius:8px;}
+    .h1,h1{text-align:center;font-weight:700;font-size:18px;margin:0 0 16px;}
+    .h2,h2{font-weight:700;font-size:15px;margin:18px 0 8px;}
+    .p,p{margin:0 0 12px;text-align:justify;line-height:1.65;}
+    .li{margin:0 0 8px;text-align:justify;line-height:1.65;}
+    .label{font-weight:700;margin-right:8px;}
+    .sigWrap{margin:28px 0 0;}
+    .sigGrid{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:end;}
+    .sigCol{padding-top:28px;}
+    .sigLine{border-bottom:1px solid #000;height:28px;}
+    .sigCaption{text-align:center;font-weight:700;font-size:12px;margin-top:6px;}
+    strong,b{font-weight:700;}
+    em,i{font-style:italic;}
+    u{text-decoration:underline;}
+    @media print {body{background:#fff;padding:0;}.page{padding:0.75in 0.75in;box-shadow:none;border-radius:0;max-width:none;}}
+  </style>
+</head>
+<body>
+  ${body}
+</body>
+</html>`;
+}
+
+function RichTextToolbarButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+    >
+      {label}
+    </button>
+  );
+}
+
 function PreviewDialog({
   open,
   html,
@@ -388,16 +608,16 @@ function PreviewDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-5xl h-[90vh] p-2">
-        <DialogHeader className="px-4 pt-4">
+      <DialogContent className="flex h-[94vh] w-[99vw] max-w-7xl flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b bg-background px-5 py-4">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             Vista previa del documento que se enviará al alumno.
           </DialogDescription>
         </DialogHeader>
-        <div className="h-full overflow-hidden px-4 pb-4">
+        <div className="min-h-0 flex-1 bg-slate-200/70 p-3 sm:p-4">
           <iframe
-            className="h-full w-full rounded-md border bg-white"
+            className="h-full w-full rounded-xl border border-slate-300 bg-white shadow-sm"
             srcDoc={html}
             title={title}
             sandbox="allow-same-origin"
@@ -456,7 +676,9 @@ function SendOtrosiModal({
   const [membershipContractType, setMembershipContractType] =
     useState<MembershipContractType>("hotselling-pro");
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [editorHtml, setEditorHtml] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const membershipTemplates = useMemo(
     () => templates.filter(isMembershipTemplate),
@@ -510,6 +732,11 @@ function SendOtrosiModal({
     tipoOtrosi,
     uploadedHtml,
   ]);
+
+  useEffect(() => {
+    if (sourceMode !== "template") return;
+    setEditorHtml(extractEditableBody(previewHtml));
+  }, [previewHtml, sourceMode]);
 
   // Auto-completar el asunto cuando se elige el tipo
   useEffect(() => {
@@ -599,6 +826,7 @@ function SendOtrosiModal({
     setFile(null);
     setUploadedHtml(null);
     setSourceMode("template");
+    setEditorHtml("");
   }, [open]);
 
   useEffect(() => {
@@ -637,33 +865,20 @@ function SendOtrosiModal({
       return file;
     }
 
-    if (tipoOtrosi === "membresia" && membershipMode === "continua") {
-      return buildHtmlFile(
-        buildMembershipHtml({
-          contractType: membershipContractType,
-          studentName: student?.nombre ?? student?.name ?? studentName,
-          studentId: student?.identificacion ?? student?.id_number ?? "",
-          studentAddress: student?.direccion ?? student?.address ?? "",
-          startDate,
-          endDate,
-          signatureDataUrl,
-        }),
-        `${membershipContractType}-${studentCode}.html`,
-      );
-    }
-
     const safeName = `${selectedTemplate?.id || "otrosi"}-${studentCode}.html`;
-    const htmlContent =
-      templateFormat === "html"
-        ? templateContent
-        : buildTemplatePreview(
-            templateContent,
-            studentName,
-            startDate,
-            endDate,
-          );
+    const htmlContent = wrapEditableDocument(
+      editorHtml || extractEditableBody(previewHtml),
+    );
 
     return buildHtmlFile(htmlContent, safeName);
+  }
+
+  function applyEditorCommand(command: string, value?: string) {
+    editorRef.current?.focus();
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      setEditorHtml(editorRef.current.innerHTML);
+    }
   }
 
   async function handleFileChange(nextFile: File | null) {
@@ -726,7 +941,7 @@ function SendOtrosiModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[98vw] max-w-[1440px] sm:max-w-[1440px] max-h-[94vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="h-4 w-4" />
@@ -947,26 +1162,65 @@ function SendOtrosiModal({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-xs text-muted-foreground">
-                    Edición rápida de la plantilla
+                    Edición del documento
                   </Label>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => setPreviewOpen(true)}
-                    disabled={!templateContent.trim()}
+                    disabled={!editorHtml.trim()}
                   >
                     <Eye className="mr-2 h-4 w-4" />
                     Preview
                   </Button>
                 </div>
-                <Textarea
-                  value={templateContent}
-                  onChange={(e) => setTemplateContent(e.target.value)}
-                  className="min-h-[220px] font-mono text-xs"
-                  placeholder="Contenido editable de la plantilla"
-                  disabled={availableTemplates.length === 0}
-                />
+                <div className="rounded-lg border border-slate-200 bg-slate-50">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white p-2">
+                    <RichTextToolbarButton
+                      label="B"
+                      onClick={() => applyEditorCommand("bold")}
+                    />
+                    <RichTextToolbarButton
+                      label="I"
+                      onClick={() => applyEditorCommand("italic")}
+                    />
+                    <RichTextToolbarButton
+                      label="U"
+                      onClick={() => applyEditorCommand("underline")}
+                    />
+                    <RichTextToolbarButton
+                      label="H1"
+                      onClick={() => applyEditorCommand("formatBlock", "h1")}
+                    />
+                    <RichTextToolbarButton
+                      label="H2"
+                      onClick={() => applyEditorCommand("formatBlock", "h2")}
+                    />
+                    <RichTextToolbarButton
+                      label="P"
+                      onClick={() => applyEditorCommand("formatBlock", "p")}
+                    />
+                    <RichTextToolbarButton
+                      label="Lista"
+                      onClick={() => applyEditorCommand("insertUnorderedList")}
+                    />
+                  </div>
+                  <div className="max-h-[52vh] overflow-auto bg-slate-200/70 p-3">
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="mx-auto min-h-[720px] max-w-[920px] rounded-lg bg-white px-10 py-9 text-[14px] leading-relaxed text-slate-900 shadow-[0_18px_50px_rgba(15,23,42,.14)] outline-none [&_.h1]:mb-4 [&_.h1]:text-center [&_.h1]:text-[18px] [&_.h1]:font-bold [&_.h2]:mt-5 [&_.h2]:mb-2 [&_.h2]:text-[15px] [&_.h2]:font-bold [&_.li]:mb-2 [&_.li]:text-justify [&_.p]:mb-3 [&_.p]:text-justify [&_h1]:mb-4 [&_h1]:text-center [&_h1]:text-[18px] [&_h1]:font-bold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-[15px] [&_h2]:font-bold [&_p]:mb-3 [&_p]:text-justify [&_strong]:font-bold"
+                      dangerouslySetInnerHTML={{ __html: editorHtml }}
+                      onInput={(event) =>
+                        setEditorHtml(
+                          (event.currentTarget as HTMLDivElement).innerHTML,
+                        )
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
@@ -1054,7 +1308,13 @@ function SendOtrosiModal({
 
       <PreviewDialog
         open={previewOpen}
-        html={previewHtml}
+        html={
+          sourceMode === "template"
+            ? wrapEditableDocument(
+                editorHtml || extractEditableBody(previewHtml),
+              )
+            : previewHtml
+        }
         title="Vista previa del Otrosí"
         onOpenChange={setPreviewOpen}
       />
