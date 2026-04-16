@@ -137,7 +137,6 @@ const adminItems: MenuItem[] = [
   {
     title: "Métricas",
     icon: BarChart3,
-    disabled: true,
     children: [
       { title: "Alumnos", url: "/admin/students", icon: GraduationCap },
       { title: "Coachs", url: "/admin/teams", icon: Users },
@@ -377,7 +376,6 @@ export function AppSidebar() {
               {
                 title: "Métricas",
                 icon: BarChart3,
-                disabled: true,
                 children: [
                   {
                     title: "Alumnos",
@@ -457,7 +455,6 @@ export function AppSidebar() {
               {
                 title: "Métricas",
                 icon: BarChart3,
-                disabled: true,
                 children: [
                   {
                     title: "Alumnos",

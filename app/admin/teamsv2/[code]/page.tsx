@@ -60,6 +60,7 @@ import {
 } from "../api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import PersonalMetrics from "../PersonalMetrics";
 import CoachStudentsTable from "../components/CoachStudentsTable";
 import CoachCurrentLoadTab from "../components/CoachCurrentLoadTab";
 import { fetchMetrics } from "@/app/admin/teams/teamsApi";
@@ -1970,24 +1971,24 @@ export default function CoachDetailPage({
                 >
                   Tickets
                 </TabsTrigger>
-                {/* <TabsTrigger
+                <TabsTrigger
                   value="metricas"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Métricas
-                </TabsTrigger> */}
+                </TabsTrigger>
                 <TabsTrigger
                   value="carga"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Carga actual
                 </TabsTrigger>
-                {/* <TabsTrigger
+                <TabsTrigger
                   value="alumnos"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Alumnos
-                </TabsTrigger> */}
+                </TabsTrigger>
                 <TabsTrigger
                   value="chat"
                   className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
@@ -2027,7 +2028,7 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
-            {/* <TabsContent value="metricas" className="mt-0 flex-1 min-h-0">
+            <TabsContent value="metricas" className="mt-0 flex-1 min-h-0">
               <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
                 {loading ? (
                   <div>Cargando...</div>
@@ -2044,7 +2045,7 @@ export default function CoachDetailPage({
                   </div>
                 )}
               </div>
-            </TabsContent> */}
+            </TabsContent>
 
             <TabsContent value="chat" className="mt-0 flex-1 min-h-0">
               {/* Altura fija basada en viewport para evitar scroll de la pestaña */}
@@ -2815,31 +2816,29 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
-            {false && (
-              <TabsContent value="alumnos" className="mt-0 flex-1 min-h-0">
-                {/* Detalles: ocupar pantalla completa con scroll interno */}
-                <div className="h-full">
-                  <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
-                    {loading ? (
-                      <div>Cargando...</div>
-                    ) : error ? (
-                      <div className="text-sm text-destructive">{error}</div>
-                    ) : coach ? (
-                      <div className="space-y-4">
-                        <div>
-                          <h3 className="text-sm font-medium mb-2">Alumnos</h3>
-                          <CoachStudentsInline coachCode={code} />
-                        </div>
+            <TabsContent value="alumnos" className="mt-0 flex-1 min-h-0">
+              {/* Detalles: ocupar pantalla completa con scroll interno */}
+              <div className="h-full">
+                <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
+                  {loading ? (
+                    <div>Cargando...</div>
+                  ) : error ? (
+                    <div className="text-sm text-destructive">{error}</div>
+                  ) : coach ? (
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-sm font-medium mb-2">Alumnos</h3>
+                        <CoachStudentsInline coachCode={code} />
                       </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No se encontró información del coach.
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      No se encontró información del coach.
+                    </div>
+                  )}
                 </div>
-              </TabsContent>
-            )}
+              </div>
+            </TabsContent>
 
             <TabsContent value="carga" className="mt-0 flex-1 min-h-0">
               <div className="h-full">
