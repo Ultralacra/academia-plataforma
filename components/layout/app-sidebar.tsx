@@ -170,6 +170,26 @@ const studentItems: MenuItem[] = [
   { title: "Chat", url: "/chat/student", icon: MessageSquare },
 ];
 
+const salesItems: MenuItem[] = [
+  { title: "CRM", url: "/admin/crm", icon: Users },
+  {
+    title: "Contratos",
+    icon: FileSignature,
+    children: [
+      {
+        title: "Prospectos CRM",
+        url: "/admin/crm/contracts",
+        icon: FileSignature,
+      },
+      {
+        title: "Todos los contratos",
+        url: "/admin/crm/all-contracts",
+        icon: FileSignature,
+      },
+    ],
+  },
+];
+
 /* ====================== Sidebar ====================== */
 export function AppSidebar() {
   const { user } = useAuth();
@@ -193,25 +213,9 @@ export function AppSidebar() {
 
     switch (userRole) {
       case "sales":
-        return [
-          { title: "CRM", url: "/admin/crm", icon: Users },
-          {
-            title: "Contratos",
-            icon: FileSignature,
-            children: [
-              {
-                title: "Prospectos CRM",
-                url: "/admin/crm/contracts",
-                icon: FileSignature,
-              },
-              {
-                title: "Todos los contratos",
-                url: "/admin/crm/all-contracts",
-                icon: FileSignature,
-              },
-            ],
-          },
-        ] as MenuItem[];
+      case "ventas":
+      case "venta":
+        return salesItems;
       case "admin": {
         // Filtrar ítems para admins que son de equipo con área específica
         const adminTipo = ((user as any)?.tipo || "").toLowerCase();
