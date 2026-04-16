@@ -631,48 +631,51 @@ function ContractsContent() {
                         </div>
                       </TableCell>
                       <TableCell className="align-top text-right">
-                        <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center justify-end gap-2">
                           {document.signature_request_id ? (
-                            <Button
-                              variant="default"
-                              size="sm"
+                            <button
+                              type="button"
                               onClick={() =>
                                 handleDownloadSignedDocument(document)
                               }
                               disabled={
                                 downloadingId === document.signature_request_id
                               }
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                              aria-label="Descargar contrato firmado"
+                              title="Descargar contrato firmado"
                             >
                               {downloadingId ===
                               document.signature_request_id ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
-                                <Download className="mr-2 h-4 w-4" />
+                                <Download className="h-4 w-4" />
                               )}
-                              Descargar firmado
-                            </Button>
+                            </button>
                           ) : null}
                           {document.signing_url ? (
-                            <Button asChild variant="outline" size="sm">
-                              <Link
-                                href={document.signing_url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Firma
-                              </Link>
-                            </Button>
+                            <Link
+                              href={document.signing_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                              aria-label="Abrir firma"
+                              title="Abrir firma"
+                            >
+                              <FileSignature className="h-4 w-4" />
+                            </Link>
                           ) : null}
                           {document.details_url ? (
-                            <Button asChild variant="ghost" size="sm">
-                              <Link
-                                href={document.details_url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Detalle
-                              </Link>
-                            </Button>
+                            <Link
+                              href={document.details_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                              aria-label="Ver detalle"
+                              title="Ver detalle"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Link>
                           ) : null}
                         </div>
                       </TableCell>
