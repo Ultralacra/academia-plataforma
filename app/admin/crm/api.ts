@@ -48,6 +48,7 @@ export interface Lead {
   name: string;
   email?: string | null;
   phone?: string | null;
+  metadata_id?: string | number | null;
   source?: string | null; // canal de origen (web_form, referral, ads, etc.)
   status?: LeadStatus; // estado del lead en el embudo
   owner_codigo?: string | null; // asignado a (closer / vendedor)
@@ -94,6 +95,7 @@ export interface LeadDetail extends Lead {
   deleted?: number | boolean;
   record_id?: number;
   record_entity?: string;
+  metadata_id?: string | number | null;
   source_entity_id?: string;
   source_entity?: string;
 
@@ -549,13 +551,16 @@ export async function createSale(input: SaleCreateInput) {
 // PUT /v1/leads/:codigo (se espera enviar el body completo del lead)
 export async function updateLeadFull(codigo: string, body: Partial<LeadDetail> & Record<string, any>) {
   if (!codigo) throw new Error("codigo requerido");
+  const sanitizedBody = Object.fromEntries(
+    Object.entries(body ?? {}).filter(([, value]) => value !== undefined),
+  );
   try {
       // Removed debug log to avoid printing sensitive bodies
   } catch {}
   const resp = await apiFetch<any>(`/leads/${encodeURIComponent(codigo)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
+    body: JSON.stringify(sanitizedBody),
   });
   const data = (resp as any)?.data ?? resp;
   if (data && typeof data === "object") {
@@ -575,79 +580,17 @@ export async function updateLeadPayloadPatch(
   payloadPatch: Record<string, any>
 ) {
   if (!codigo) throw new Error("codigo requerido");
-  const current = await getLead(codigo);
-  const now = new Date().toISOString();
-
-  if (current && typeof current === "object" && "payload" in (current as any)) {
-    const currPayload = (current as any)?.payload ?? {};
-    const fullBody = {
-      ...(current as any),
-      payload: {
-        ...currPayload,
-        ...payloadPatch,
-        updated_at: now,
-      },
-    };
-
-    // Algunos backends requieren source_entity_id para ubicar el record base (booking).
-    // Lo preservamos / inferimos desde el recurso actual si existe.
-    const inferredSourceEntityId =
-      (current as any)?.source_entity_id ??
-      (current as any)?.payload?.source_entity_id ??
-      (current as any)?.entity_id ??
-      (current as any)?.payload?.entity_id;
-    if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
-      (fullBody as any).source_entity_id = String(inferredSourceEntityId);
-    }
-    if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
-      (fullBody as any).source_entity = (current as any).source_entity;
-    }
-
-    return await updateLeadFull(codigo, fullBody);
-  }
-
-  // Si no hay payload, hacemos merge plano (best-effort)
-  const fullBody = {
-    ...(current as any),
-    ...payloadPatch,
-    codigo: (current as any)?.codigo ?? codigo,
-    updated_at: now,
-  };
-  return await updateLeadFull(codigo, fullBody);
+  return await updateLeadFull(codigo, payloadPatch ?? {});
 }
 
-// Helper para actualizar campos en el lead "plano" (sin payload) usando PUT /v1/leads/:codigo
-// El backend pide enviar el body completo; aquí hacemos read+merge y mandamos el objeto completo.
 export async function updateLeadPatch(
   codigo: string,
   patch: Record<string, any>,
   currentOverride?: any
 ) {
   if (!codigo) throw new Error("codigo requerido");
-  const current = currentOverride ?? (await getLead(codigo));
-  const now = new Date().toISOString();
-
-  const fullBody = {
-    ...(current as any),
-    ...(patch ?? {}),
-    codigo: (current as any)?.codigo ?? codigo,
-    updated_at: now,
-  };
-
-  // Preservar / inferir source_entity_id para que el backend pueda editar correctamente.
-  const inferredSourceEntityId =
-    (current as any)?.source_entity_id ??
-    (current as any)?.payload?.source_entity_id ??
-    (current as any)?.entity_id ??
-    (current as any)?.payload?.entity_id;
-  if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
-    (fullBody as any).source_entity_id = String(inferredSourceEntityId);
-  }
-  if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
-    (fullBody as any).source_entity = (current as any).source_entity;
-  }
-
-  return await updateLeadFull(codigo, fullBody);
+  void currentOverride;
+  return await updateLeadFull(codigo, patch ?? {});
 }
 
 // Actualizar un lead
@@ -657,67 +600,8 @@ export async function updateLead(
   currentOverride?: any
 ) {
   if (!codigo) throw new Error("codigo requerido");
-
-  // Preferimos el endpoint real: PUT /v1/leads/:codigo, enviando body completo.
-  // Como la UI a veces manda sólo un patch (ej. {status}), hacemos read+merge.
-  const current = currentOverride ?? (await getLead(codigo));
-  const now = new Date().toISOString();
-
-  // Si el recurso viene en formato metadata (booking), los campos a actualizar viven en payload.
-  if (current && typeof current === "object" && "payload" in (current as any)) {
-    const currPayload = (current as any)?.payload ?? {};
-    const payloadPatch = {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.email !== undefined ? { email: input.email } : {}),
-      ...(input.phone !== undefined ? { phone: input.phone } : {}),
-      ...(input.source !== undefined ? { source: input.source } : {}),
-      ...(input.status !== undefined ? { status: input.status } : {}),
-      ...(input.owner_codigo !== undefined ? { owner_codigo: input.owner_codigo } : {}),
-      updated_at: now,
-    };
-    const fullBody = {
-      ...(current as any),
-      payload: {
-        ...currPayload,
-        ...payloadPatch,
-      },
-    };
-
-    const inferredSourceEntityId =
-      (current as any)?.source_entity_id ??
-      (current as any)?.payload?.source_entity_id ??
-      (current as any)?.entity_id ??
-      (current as any)?.payload?.entity_id;
-    if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
-      (fullBody as any).source_entity_id = String(inferredSourceEntityId);
-    }
-    if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
-      (fullBody as any).source_entity = (current as any).source_entity;
-    }
-
-    return await updateLeadFull(codigo, fullBody);
-  }
-
-  // Si es un lead "plano" (sin payload), hacemos merge en raíz.
-  const fullBody = {
-    ...(current as any),
-    ...(input ?? {}),
-    codigo: (current as any)?.codigo ?? codigo,
-    updated_at: now,
-  };
-
-  const inferredSourceEntityId =
-    (current as any)?.source_entity_id ??
-    (current as any)?.payload?.source_entity_id ??
-    (current as any)?.entity_id ??
-    (current as any)?.payload?.entity_id;
-  if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
-    (fullBody as any).source_entity_id = String(inferredSourceEntityId);
-  }
-  if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
-    (fullBody as any).source_entity = (current as any).source_entity;
-  }
-  return await updateLeadFull(codigo, fullBody);
+  void currentOverride;
+  return await updateLeadFull(codigo, input ?? {});
 }
 
 export async function sendLeadContractForSignature(

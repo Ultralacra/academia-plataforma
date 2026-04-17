@@ -944,15 +944,27 @@ export async function loadTemplateFromFile(file: File): Promise<ArrayBuffer> {
 // Mapear datos del lead del CRM a ContractData
 export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractData> {
   const d = draft || {};
-  const payment = lead?.payment || {};
-  const contract = lead?.contract || {};
+  const sale = lead?.sale && typeof lead.sale === "object" ? lead.sale : {};
+  const payment = sale?.payment && typeof sale.payment === "object"
+    ? sale.payment
+    : lead?.payment || {};
+  const contract = sale?.contract && typeof sale.contract === "object"
+    ? sale.contract
+    : lead?.contract || {};
   const party = contract?.party || {};
   const company = contract?.company || {};
+  const primaryPlan = Array.isArray(payment?.plans) ? payment.plans[0] : null;
+  const paymentInstallments = payment?.installments || primaryPlan?.installments || {};
   const installmentsSchedule = normalizeInstallmentItems(
-    d.paymentInstallmentsSchedule || payment?.installments_schedule || payment?.installments?.schedule,
+    d.paymentInstallmentsSchedule ||
+      payment?.installments_schedule ||
+      payment?.installments?.schedule ||
+      primaryPlan?.installments?.schedule,
   );
   const customInstallments = normalizeInstallmentItems(
-    d.paymentCustomInstallments || payment?.custom_installments,
+    d.paymentCustomInstallments ||
+      payment?.custom_installments ||
+      primaryPlan?.custom_installments,
   );
   const paymentReserve = payment?.reserve || {};
   const partyName =
@@ -970,6 +982,27 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
   // Determinar duración del programa
   const programName = d.program || lead?.program || "HOTSELLING PRO";
   const durationNumber = d.programDurationNumber || lead?.program_duration_number || inferProgramDurationNumber(programName);
+  const resolvedInstallmentsCount = (() => {
+    const candidates = [
+      d.paymentInstallmentsCount,
+      paymentInstallments?.count,
+      primaryPlan?.installments?.count,
+      installmentsSchedule.length || null,
+      customInstallments.length || null,
+    ];
+    for (const candidate of candidates) {
+      const value = Number(candidate);
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+    return 3;
+  })();
+  const resolvedInstallmentAmount =
+    d.paymentInstallmentAmount ||
+    paymentInstallments?.amount ||
+    primaryPlan?.installments?.amount ||
+    customInstallments?.[1]?.amount ||
+    customInstallments?.[0]?.amount ||
+    "";
 
   return {
     fullName: partyName,
@@ -989,21 +1022,34 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
 
     thirdParty: d.contractThirdParty || contract?.thirdParty || lead?.contract_third_party || false,
 
-    program: programName,
+    program: d.program || sale?.program || lead?.program || "HOTSELLING PRO",
     programDuration: inferProgramDuration(programName),
     programDurationNumber: durationNumber,
-    bonuses: d.bonuses || lead?.bonuses || [],
+    bonuses: d.bonuses || sale?.bonuses || lead?.bonuses || [],
 
-    paymentMode: d.paymentMode || payment?.mode || lead?.payment_mode || "",
-    paymentAmount: d.paymentAmount || payment?.amount || lead?.payment_amount || "",
-    paymentPaidAmount: d.paymentPaidAmount || payment?.paid_amount || "",
+    paymentMode:
+      d.paymentMode ||
+      payment?.mode ||
+      payment?.plan_type ||
+      primaryPlan?.type ||
+      lead?.payment_mode ||
+      "",
+    paymentAmount:
+      d.paymentAmount || payment?.amount || primaryPlan?.total || lead?.payment_amount || "",
+    paymentPaidAmount:
+      d.paymentPaidAmount || payment?.paid_amount || primaryPlan?.paid_amount || "",
     paymentPlatform: d.paymentPlatform || payment?.platform || lead?.payment_platform || "",
     paymentCurrency: "USD",
-    installmentsCount: d.paymentInstallmentsCount || payment?.installments?.count || 3,
-    installmentAmount: d.paymentInstallmentAmount || payment?.installments?.amount || "",
+    installmentsCount: resolvedInstallmentsCount,
+    installmentAmount: resolvedInstallmentAmount,
     paymentInstallmentsSchedule: installmentsSchedule,
     paymentCustomInstallments: customInstallments,
-    reserveAmount: d.paymentReserveAmount || payment?.reserveAmount || lead?.payment_reserve_amount || "",
+    reserveAmount:
+      d.paymentReserveAmount ||
+      payment?.reserveAmount ||
+      paymentReserve?.amount ||
+      lead?.payment_reserve_amount ||
+      "",
     reservePaidDate: d.reservePaidDate || paymentReserve?.paid_date || "",
     reserveRemainingDueDate: d.reserveRemainingDueDate || paymentReserve?.remaining_due_date || "",
     nextChargeDate: d.nextChargeDate || payment?.nextChargeDate || lead?.next_charge_date || "",
@@ -1012,7 +1058,7 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
     startDate: d.startDate || lead?.start_date || lead?.program_start_date || "",
     closerName: lead?.closer?.name || lead?.closer_name || "",
     closerEmail: lead?.closer?.email || "",
-    notes: d.notes || lead?.sale_notes || "",
+    notes: d.notes || sale?.notes || lead?.sale_notes || "",
 
     // Firmantes extra
     extraSigners: (() => {

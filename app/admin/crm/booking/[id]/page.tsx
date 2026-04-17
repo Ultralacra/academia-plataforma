@@ -2,11 +2,22 @@
 import React from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { createLeadSnapshot, getLead } from "@/app/admin/crm/api";
+import {
+  getLead,
+  updateLeadFull,
+  updateMetadataPayload,
+} from "@/app/admin/crm/api";
 import { type CloseSaleInput } from "../../components/CloseSaleForm2";
+import {
+  createMetadata,
+  getMetadata,
+  listMetadata,
+  type MetadataRecord,
+} from "@/lib/metadata";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -151,6 +162,18 @@ const LEAD_DISPOSITION_OPTIONS = [
   },
 ];
 
+const LEAD_PUT_FIELD_KEYS = new Set([
+  "name",
+  "email",
+  "phone",
+  "source",
+  "origen",
+  "created_at",
+  "status",
+  "pipeline_status",
+  "metadata_id",
+]);
+
 function pipelineLevel(status: string): number {
   switch (status) {
     case "agendado":
@@ -225,6 +248,23 @@ function normalizeCustomerProfile(value: any) {
   };
 }
 
+function buildChangedFields(
+  current: Record<string, any> | null | undefined,
+  next: Record<string, any>,
+) {
+  const base = current && typeof current === "object" ? current : {};
+  return Object.fromEntries(
+    Object.entries(next).filter(([key, value]) => {
+      if (value === undefined) return false;
+      try {
+        return JSON.stringify(base[key]) !== JSON.stringify(value);
+      } catch {
+        return base[key] !== value;
+      }
+    }),
+  );
+}
+
 function serializeCustomerProfile(value: any) {
   const profile = normalizeCustomerProfile(value);
   return JSON.stringify(
@@ -235,6 +275,54 @@ function serializeCustomerProfile(value: any) {
       },
       {} as Record<(typeof CUSTOMER_PROFILE_KEYS)[number], string>,
     ),
+  );
+}
+
+function omitLeadPutFields(payload: Record<string, any>) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(
+      ([key, value]) => !LEAD_PUT_FIELD_KEYS.has(key) && value !== undefined,
+    ),
+  );
+}
+
+function getLeadMetadataId(value: any) {
+  const raw = value?.metadata_id ?? value?.crm_metadata_id ?? null;
+  if (raw === null || raw === undefined) return null;
+  const normalized = String(raw).trim();
+  return normalized ? normalized : null;
+}
+
+function metadataBelongsToLead(item: MetadataRecord<any>, leadCodigo: string) {
+  const normalizedLeadCodigo = String(leadCodigo ?? "").trim();
+  if (!normalizedLeadCodigo) return false;
+
+  const entityId = String(item?.entity_id ?? "").trim();
+  const payload =
+    item?.payload && typeof item.payload === "object" ? item.payload : {};
+  const payloadLeadCodigo = String((payload as any)?.lead_codigo ?? "").trim();
+  const payloadSourceEntityId = String(
+    (payload as any)?.source_entity_id ?? (payload as any)?.entity_id ?? "",
+  ).trim();
+
+  return (
+    entityId === normalizedLeadCodigo ||
+    payloadLeadCodigo === normalizedLeadCodigo ||
+    payloadSourceEntityId === normalizedLeadCodigo
+  );
+}
+
+function pickPreferredMetadataRecord(items: MetadataRecord<any>[]) {
+  return (
+    [...items].sort((left, right) => {
+      const leftTs = new Date(
+        String(left.updated_at ?? left.created_at ?? 0),
+      ).getTime();
+      const rightTs = new Date(
+        String(right.updated_at ?? right.created_at ?? 0),
+      ).getTime();
+      return rightTs - leftTs;
+    })[0] ?? null
   );
 }
 
@@ -255,6 +343,17 @@ function Content({ id }: { id: string }) {
   >("resumen");
   const [loading, setLoading] = React.useState(true);
   const [record, setRecord] = React.useState<any | null>(null);
+  const [persistedRecord, setPersistedRecord] = React.useState<any | null>(
+    null,
+  );
+  const [metadataRecord, setMetadataRecord] =
+    React.useState<MetadataRecord | null>(null);
+  const [associatedMetadataRecords, setAssociatedMetadataRecords] =
+    React.useState<MetadataRecord[]>([]);
+  const [selectedMetadataId, setSelectedMetadataId] =
+    React.useState<string>("");
+  const [persistedMetadataPayload, setPersistedMetadataPayload] =
+    React.useState<Record<string, any>>({});
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
     null,
   );
@@ -277,6 +376,11 @@ function Content({ id }: { id: string }) {
 
   React.useEffect(() => {
     setFrozenSaleInitial(null);
+    setPersistedRecord(null);
+    setMetadataRecord(null);
+    setAssociatedMetadataRecords([]);
+    setSelectedMetadataId("");
+    setPersistedMetadataPayload({});
   }, [id]);
 
   const applyRecordPatch = React.useCallback((patch: Record<string, any>) => {
@@ -656,7 +760,48 @@ function Content({ id }: { id: string }) {
       if (!silent) setLoading(true);
       try {
         const lead = await getLead(id);
-        setRecord(lead as any);
+        const leadCodigo = String((lead as any)?.codigo ?? id).trim();
+        const leadMetadataId = getLeadMetadataId(lead);
+        let mergedLead = lead as any;
+        let nextMetadataRecord: MetadataRecord | null = null;
+        let nextMetadataPayload: Record<string, any> = {};
+        let nextAssociatedMetadataRecords: MetadataRecord[] = [];
+
+        try {
+          const metadataList = await listMetadata<any>({ background: true });
+          nextAssociatedMetadataRecords = (metadataList.items || []).filter(
+            (item) =>
+              metadataBelongsToLead(item as MetadataRecord<any>, leadCodigo),
+          );
+        } catch {}
+
+        const preferredFromList = pickPreferredMetadataRecord(
+          nextAssociatedMetadataRecords,
+        );
+        const metadataId =
+          leadMetadataId ??
+          (preferredFromList?.id !== undefined && preferredFromList?.id !== null
+            ? String(preferredFromList.id)
+            : null);
+
+        if (metadataId) {
+          try {
+            const metadata = await getMetadata<any>(metadataId);
+            nextMetadataRecord = metadata;
+            nextMetadataPayload =
+              metadata?.payload && typeof metadata.payload === "object"
+                ? (metadata.payload as Record<string, any>)
+                : {};
+            mergedLead = mergeWithPreserved(lead, nextMetadataPayload);
+          } catch {}
+        }
+
+        setAssociatedMetadataRecords(nextAssociatedMetadataRecords);
+        setSelectedMetadataId(metadataId ?? "");
+        setMetadataRecord(nextMetadataRecord);
+        setPersistedMetadataPayload(nextMetadataPayload);
+        setRecord(mergedLead);
+        setPersistedRecord(lead as any);
       } catch (e) {
         if (silent) {
           toast({
@@ -669,7 +814,7 @@ function Content({ id }: { id: string }) {
         if (!silent) setLoading(false);
       }
     },
-    [id, toast],
+    [id, mergeWithPreserved, toast],
   );
 
   const toLeadIsoDateOrNull = (v?: string | null) => {
@@ -969,180 +1114,22 @@ function Content({ id }: { id: string }) {
   const handleSaveChanges = React.useCallback(async () => {
     if (!record) return;
     if (snapshotSaving) return;
-
-    const ctx = buildSnapshotContext();
-    if (!ctx) return;
-
-    const salesFlow =
-      record && typeof (record as any).sales_flow === "object"
-        ? ((record as any).sales_flow as Record<string, any>)
-        : null;
-    const resultadoLlamada = String(salesFlow?.resultadoLlamada ?? "")
-      .trim()
-      .toLowerCase();
-    const evidenciaNoShow = Array.isArray(salesFlow?.evidenciaNoShow)
-      ? salesFlow.evidenciaNoShow
-      : [];
-    const evidenciaCancelada = Array.isArray(salesFlow?.evidenciaCancelada)
-      ? salesFlow.evidenciaCancelada
-      : [];
-
-    if (resultadoLlamada === "no_show" && evidenciaNoShow.length === 0) {
-      toast({
-        title: "Debes adjuntar una evidencia",
-        description:
-          "Si marcas la llamada de venta como no show, debes seleccionar al menos una evidencia antes de guardar cambios.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (resultadoLlamada === "cancelada" && evidenciaCancelada.length === 0) {
-      toast({
-        title: "Debes adjuntar una evidencia",
-        description:
-          "Si marcas la llamada de venta como cancelada, debes seleccionar al menos una evidencia antes de guardar cambios.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const operationalPipeline = String((record as any)?.pipeline_status ?? "")
-      .trim()
-      .toLowerCase();
-    const customerType = String((record as any)?.customer_type ?? "").trim();
-    const productPresented = String(
-      (record as any)?.product_presented ?? "",
-    ).trim();
-    const objectionType = String((record as any)?.objection_type ?? "").trim();
-    const lostReason = String((record as any)?.lost_reason ?? "").trim();
-    const nextContactAt = String((record as any)?.next_contact_at ?? "").trim();
-    const recoveryStartedAt = String(
-      (record as any)?.recovery_started_at ?? "",
-    ).trim();
-
-    // Validación: si está en Perdido, es obligatorio registrar un solo motivo.
-    if (String(ctx.leadStatus || "").toLowerCase() === "lost") {
-      const motive = String(ctx.leadDisposition || "").trim();
-      if (!motive) {
-        toast({
-          title: "Falta el motivo",
-          description:
-            "Para guardar un lead en Perdido debes seleccionar un motivo (en la pestaña Perfil de cliente).",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    if (operationalPipeline === "seguimiento") {
-      if (!objectionType || !nextContactAt) {
-        toast({
-          title: "Faltan campos de seguimiento",
-          description:
-            "Para pasar a Seguimiento debes completar tipo de objeción y próxima fecha de contacto.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    if (operationalPipeline === "recuperacion" && !recoveryStartedAt) {
-      toast({
-        title: "Falta la fecha de recuperación",
-        description:
-          "Para pasar a Recuperación debes registrar cuándo comenzó ese protocolo.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (operationalPipeline === "cerrado_ganado") {
-      if (!customerType || !productPresented) {
-        toast({
-          title: "Faltan datos de cierre",
-          description:
-            "Para marcar Cerrado ganado debes completar tipo de cliente y producto presentado.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    if (operationalPipeline === "cerrado_perdido" && !lostReason) {
-      toast({
-        title: "Falta el motivo de pérdida",
-        description:
-          "Para marcar Cerrado perdido debes seleccionar un motivo de pérdida.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Nota: algunos leads no traen source_entity_id/entity_id desde el backend.
-    // En ese caso usamos el `codigo` del lead como fallback para source.entity_id.
-
-    // Guardado centralizado: un solo POST /v1/leads/snapshot.
-    // El backend usa `codigo` + `payload.payload_current` para actualizar el lead
-    // y además registra el snapshot.
-    const capturedAt = new Date().toISOString();
-    const patch = draftToLeadPatch(draft);
+    const baseRecord =
+      persistedRecord && typeof persistedRecord === "object"
+        ? (persistedRecord as Record<string, any>)
+        : {};
+    const leadFieldsToPersist = {
+      name: (record as any)?.name ?? undefined,
+      email: (record as any)?.email ?? undefined,
+      phone: (record as any)?.phone ?? undefined,
+      source: (record as any)?.source ?? undefined,
+      origen: (record as any)?.origen ?? undefined,
+      created_at: (record as any)?.created_at ?? undefined,
+      status: (record as any)?.status ?? undefined,
+      pipeline_status: (record as any)?.pipeline_status ?? undefined,
+    };
+    const draftPatch = draftToLeadPatch(draft) ?? {};
     const draftNotes = (draft as any)?.notes;
-    const capturedBy = {
-      id: (user as any)?.id ?? null,
-      name: (user as any)?.name ?? null,
-      email: (user as any)?.email ?? null,
-      role: (user as any)?.role ?? null,
-    };
-    const currentProfile = normalizeCustomerProfile(
-      (record as any)?.customer_profile,
-    );
-    const emptyProfileSerialized = serializeCustomerProfile(null);
-    const existingProfileHistory = Array.isArray(
-      (record as any)?.customer_profile_history,
-    )
-      ? ([...(record as any).customer_profile_history] as any[])
-      : [];
-    const lastProfileEntry = existingProfileHistory.length
-      ? existingProfileHistory[existingProfileHistory.length - 1]
-      : null;
-    const currentProfileSerialized = serializeCustomerProfile(currentProfile);
-    const lastProfileSerialized = lastProfileEntry
-      ? serializeCustomerProfile(lastProfileEntry?.profile)
-      : "";
-    const shouldTrackCustomerProfile =
-      existingProfileHistory.length > 0 ||
-      currentProfileSerialized !== emptyProfileSerialized;
-    const customerProfile = shouldTrackCustomerProfile
-      ? {
-          ...currentProfile,
-          updated_at: capturedAt,
-          updated_by: capturedBy,
-        }
-      : null;
-    const customerProfileHistory =
-      shouldTrackCustomerProfile &&
-      currentProfileSerialized !== lastProfileSerialized
-        ? [
-            ...existingProfileHistory,
-            {
-              at: capturedAt,
-              by: capturedBy,
-              profile: {
-                ...currentProfile,
-              },
-            },
-          ]
-        : existingProfileHistory;
-    const patchWithProfile = {
-      ...(patch ?? {}),
-      ...(customerProfile !== null
-        ? { customer_profile: customerProfile }
-        : {}),
-      ...(customerProfileHistory.length > 0
-        ? { customer_profile_history: customerProfileHistory }
-        : {}),
-    };
     const snapshotSaleBase =
       saleDraftPayload && typeof saleDraftPayload === "object"
         ? saleDraftPayload
@@ -1155,301 +1142,134 @@ function Content({ id }: { id: string }) {
       : draftNotes !== undefined
         ? { notes: draftNotes }
         : undefined;
-    const pickValue = (...vals: Array<any>) => {
-      for (const v of vals) {
-        if (v === undefined || v === null) continue;
-        if (typeof v === "string" && v.trim() === "") continue;
-        return v;
-      }
-      return null;
+    const metadataSnapshot = {
+      ...((record as any) ?? {}),
+      ...draftPatch,
+      ...(snapshotSale ? { sale: snapshotSale } : {}),
+      metadata_updated_at: new Date().toISOString(),
+      lead_codigo: String((record as any)?.codigo ?? id),
     };
+    const metadataPayload = omitLeadPutFields(metadataSnapshot);
 
-    // ── Pago: extraer todos los campos del draft / salePayload / record ──
-    const sp = snapshotSale?.payment ?? {};
-    const lui = (leadForUi as any) ?? {};
-    const rec = (record as any) ?? {};
-
-    const paymentPaidAmount = pickValue(
-      (draft as any)?.paymentPaidAmount,
-      sp?.paid_amount,
-      lui?.payment_paid_amount,
-      rec?.payment_paid_amount,
+    const leadChanges = buildChangedFields(baseRecord, leadFieldsToPersist);
+    const metadataChanges = buildChangedFields(
+      persistedMetadataPayload,
+      metadataPayload,
     );
-    const paymentPlanType = pickValue(
-      (draft as any)?.paymentPlanType,
-      sp?.plan_type,
-      lui?.payment_plan_type,
-      rec?.payment_plan_type,
-    );
-    const paymentMode = pickValue(
-      (draft as any)?.paymentMode,
-      sp?.mode,
-      lui?.payment_mode,
-      rec?.payment_mode,
-    );
-    const paymentAmount = pickValue(
-      (draft as any)?.paymentAmount,
-      sp?.amount,
-      lui?.payment_amount,
-      rec?.payment_amount,
-    );
-    const paymentPlatform = pickValue(
-      (draft as any)?.paymentPlatform,
-      sp?.platform,
-      lui?.payment_platform,
-      rec?.payment_platform,
-    );
-    const paymentHasReserve = pickValue(
-      (draft as any)?.paymentHasReserve,
-      sp?.hasReserve,
-      lui?.payment_has_reserve,
-      rec?.payment_has_reserve,
-    );
-    const paymentReserveAmount = pickValue(
-      (draft as any)?.paymentReserveAmount,
-      sp?.reserveAmount,
-      lui?.payment_reserve_amount,
-      rec?.payment_reserve_amount,
-    );
-    const paymentInstallmentsCount = pickValue(
-      (draft as any)?.paymentInstallmentsCount,
-      sp?.installments?.count,
-      lui?.payment_installments_count,
-      rec?.payment_installments_count,
-    );
-    const paymentInstallmentAmount = pickValue(
-      (draft as any)?.paymentInstallmentAmount,
-      sp?.installments?.amount,
-      lui?.payment_installment_amount,
-      rec?.payment_installment_amount,
-    );
-    const paymentInstallmentsSchedule = pickValue(
-      (draft as any)?.paymentInstallmentsSchedule,
-      sp?.installments_schedule ?? sp?.installments?.schedule,
-      lui?.payment_installments_schedule,
-      rec?.payment_installments_schedule,
-    );
-    const paymentCustomInstallments = pickValue(
-      (draft as any)?.paymentCustomInstallments,
-      sp?.custom_installments,
-      lui?.payment_custom_installments,
-      rec?.payment_custom_installments,
-    );
-    const paymentExceptionNotes = pickValue(
-      (draft as any)?.paymentExceptionNotes,
-      sp?.exception_2_installments?.notes,
-      lui?.payment_exception_notes,
-      rec?.payment_exception_notes,
-    );
-    const paymentAttachments = pickValue(
-      (draft as any)?.paymentAttachments,
-      sp?.attachments,
-      lui?.payment_attachments,
-      rec?.payment_attachments,
-    );
-    const paymentProof = pickValue(
-      (draft as any)?.paymentProof,
-      sp?.proof,
-      lui?.payment_proof,
-      rec?.payment_proof,
-    );
-    const paymentPlans = pickValue(
-      (draft as any)?.paymentPlans,
-      sp?.plans,
-      lui?.payment_plans_json,
-      rec?.payment_plans_json,
-    );
-    const nextChargeDate = pickValue(
-      (draft as any)?.nextChargeDate,
-      sp?.nextChargeDate,
-      lui?.next_charge_date,
-      rec?.next_charge_date,
-    );
-
-    // ── Contrato ──
-    const contractPartyAddress = pickValue(
-      (draft as any)?.contractPartyAddress,
-      snapshotSale?.contract?.party?.address,
-      lui?.contract_party_address,
-      rec?.contract_party_address,
-    );
-    const contractPartyDocumentId = pickValue(
-      (draft as any)?.contractPartyDocumentId,
-      snapshotSale?.contract?.party?.documentId,
-      lui?.contract_party_document_id,
-      rec?.contract_party_document_id,
-    );
-    const contractPartyCity = pickValue(
-      (draft as any)?.contractPartyCity,
-      snapshotSale?.contract?.party?.city,
-      lui?.contract_party_city,
-      rec?.contract_party_city,
-    );
-    const contractPartyCountry = pickValue(
-      (draft as any)?.contractPartyCountry,
-      snapshotSale?.contract?.party?.country,
-      lui?.contract_party_country,
-      rec?.contract_party_country,
-    );
-
-    // ── Closer info (del sale payload o del usuario actual) ──
-    const closerInfo = pickValue(
-      snapshotSale?.closer,
-      lui?.closer,
-      rec?.closer,
-      user
-        ? {
-            id: (user as any)?.id ?? user.email ?? null,
-            name: (user as any)?.name ?? null,
-            email: (user as any)?.email ?? null,
-          }
-        : null,
-    );
-
-    const snapshotPayloadCurrent = buildSnapshotPayloadCurrent({
-      leadBase: leadForUi || record,
-      patch: patchWithProfile,
-      snapshotSale,
-      draftNotes,
-      paymentPaidAmount,
-      paymentPlanType,
-      paymentAttachments,
-      paymentProof,
-      paymentPlans,
-      contractPartyAddress,
-      contractPartyCity,
-      contractPartyCountry,
-      contractPartyDocumentId,
-      capturedAt,
-      paymentMode,
-      paymentAmount,
-      paymentPlatform,
-      paymentHasReserve,
-      paymentReserveAmount,
-      paymentInstallmentsCount,
-      paymentInstallmentAmount,
-      paymentInstallmentsSchedule,
-      paymentCustomInstallments,
-      paymentExceptionNotes,
-      nextChargeDate,
-      closerInfo,
-    });
     setSnapshotSaving(true);
     try {
-      const snapshot = {
-        schema_version: 1 as const,
-        captured_at: capturedAt,
-        captured_by: capturedBy,
-        source: {
-          record_id: ctx.recordId,
-          entity: ctx.entity,
-          entity_id: ctx.entityId,
-        },
-        route: {
-          pathname:
-            typeof window !== "undefined"
-              ? window.location?.pathname
-              : undefined,
-          url:
-            typeof window !== "undefined" ? window.location?.href : undefined,
-          user_agent:
-            typeof navigator !== "undefined" ? navigator.userAgent : undefined,
-        },
-        record: {
-          id: ctx.recordId,
-          entity: ctx.entity,
-          entity_id: ctx.entityId,
-          created_at: (record as any)?.created_at ?? undefined,
-          updated_at: (record as any)?.updated_at ?? undefined,
-        },
-        payload_current: snapshotPayloadCurrent,
-        computed: {
-          lead: {
-            status: ctx.leadStatus,
-            stage_label: ctx.leadStageLabel,
-            disposition: ctx.leadDisposition,
-            disposition_label: ctx.leadDispositionLabel,
-          },
-          sale: {
-            status_raw: ctx.statusRaw,
-            status_label: ctx.statusLabel,
-            payment_mode: paymentMode ?? ctx.salePayload?.payment?.mode ?? "",
-            payment_amount:
-              paymentAmount ?? ctx.salePayload?.payment?.amount ?? "",
-            payment_paid_amount: paymentPaidAmount ?? "",
-            payment_plan_type: paymentPlanType ?? "",
-            payment_platform:
-              paymentPlatform ?? ctx.salePayload?.payment?.platform ?? "",
-            has_reserva: ctx.hasReserva,
-            reserve_amount_raw: String(ctx.reserveAmountRaw ?? ""),
-            installments_count: paymentInstallmentsCount ?? null,
-            installment_amount: paymentInstallmentAmount ?? null,
-            next_charge_date: nextChargeDate ?? null,
-          },
-          closer: closerInfo ?? null,
-          pipeline: {
-            status: String((record as any)?.pipeline_status ?? ""),
-            customer_type: String((record as any)?.customer_type ?? ""),
-            product_presented: String((record as any)?.product_presented ?? ""),
-            objection_type: String((record as any)?.objection_type ?? ""),
-            lost_reason: String((record as any)?.lost_reason ?? ""),
-            won_recovered: String((record as any)?.won_recovered ?? ""),
-          },
-          sales_flow: {
-            fase: snapshotPayloadCurrent?.sales_flow?.fase ?? null,
-            updatedAt: snapshotPayloadCurrent?.sales_flow?.updatedAt ?? null,
-            resultadoLlamada:
-              snapshotPayloadCurrent?.sales_flow?.resultadoLlamada ?? null,
-            resultadoCierre:
-              snapshotPayloadCurrent?.sales_flow?.resultadoCierre ?? null,
-            tipoObjecion:
-              snapshotPayloadCurrent?.sales_flow?.tipoObjecion ?? null,
-            ofertaPresentada:
-              snapshotPayloadCurrent?.sales_flow?.ofertaPresentada ?? null,
-            seguimientoActivo:
-              !!snapshotPayloadCurrent?.sales_flow?.seguimientoActivo,
-            recuperacionActiva:
-              !!snapshotPayloadCurrent?.sales_flow?.recuperacionActiva,
-            reactivacionActiva:
-              !!snapshotPayloadCurrent?.sales_flow?.reactivacionActiva,
-            ventaIngresadaCrm:
-              !!snapshotPayloadCurrent?.sales_flow?.ventaIngresadaCrm,
-          },
-          activity_count: Array.isArray(snapshotPayloadCurrent?.activity_log)
-            ? snapshotPayloadCurrent.activity_log.length
-            : 0,
-        },
-        options: {
-          lead_stage_options: ctx.leadStageOptions,
-          lead_disposition_options: ctx.leadDispositionOptions,
-        },
-        draft: draft ?? undefined,
+      const hasLeadChanges = Object.keys(leadChanges).length > 0;
+      const hasMetadataChanges = Object.keys(metadataChanges).length > 0;
+
+      if (!hasLeadChanges && !hasMetadataChanges) {
+        toast({
+          title: "Sin cambios",
+          description: "No hay campos modificados para guardar.",
+        });
+        return;
+      }
+
+      let nextMetadataId =
+        selectedMetadataId ||
+        getLeadMetadataId(record) ||
+        getLeadMetadataId(baseRecord);
+      let nextMetadataRecord =
+        associatedMetadataRecords.find(
+          (item) => String(item.id) === String(nextMetadataId || ""),
+        ) ?? metadataRecord;
+
+      if (!nextMetadataRecord && associatedMetadataRecords.length > 0) {
+        nextMetadataRecord = pickPreferredMetadataRecord(
+          associatedMetadataRecords,
+        );
+        if (!nextMetadataId && nextMetadataRecord?.id !== undefined) {
+          nextMetadataId = String(nextMetadataRecord.id);
+        }
+      }
+
+      let leadSaved = false;
+      let metadataSaved = false;
+      let leadSaveError: string | null = null;
+      let metadataSaveError: string | null = null;
+
+      if (hasMetadataChanges) {
+        try {
+          if (nextMetadataId) {
+            const updatedMetadata = await updateMetadataPayload(
+              nextMetadataId,
+              metadataChanges,
+            );
+            nextMetadataRecord = updatedMetadata as MetadataRecord;
+          } else {
+            const createdMetadata = await createMetadata({
+              entity: "crm_lead_detail",
+              entity_id: String((record as any)?.codigo ?? id),
+              payload: metadataPayload,
+            });
+            nextMetadataId = String(createdMetadata.id);
+            nextMetadataRecord = createdMetadata;
+            setAssociatedMetadataRecords((prev) => [...prev, createdMetadata]);
+            setSelectedMetadataId(String(createdMetadata.id));
+          }
+          metadataSaved = true;
+        } catch (error: any) {
+          metadataSaveError =
+            error?.message || "No se pudo guardar el metadata asociado.";
+        }
+      }
+
+      if (Object.keys(leadChanges).length > 0) {
+        try {
+          await updateLeadFull(id, leadChanges);
+          leadSaved = true;
+        } catch (error: any) {
+          leadSaveError = error?.message || "No se pudo guardar el lead base.";
+        }
+      }
+
+      if (!leadSaved && !metadataSaved) {
+        throw new Error(
+          metadataSaveError ||
+            leadSaveError ||
+            "No se pudo guardar en backend.",
+        );
+      }
+
+      const persistedAfterSave = {
+        ...baseRecord,
+        ...(leadSaved ? leadChanges : {}),
+        ...(nextMetadataId ? { metadata_id: nextMetadataId } : {}),
       };
+      const persistedMetadataAfterSave = metadataSaved
+        ? { ...persistedMetadataPayload, ...metadataPayload }
+        : persistedMetadataPayload;
 
-      console.log("[CRM booking] snapshot save", {
-        leadCodigo: id,
-        draft,
-        snapshotPayloadCurrent,
-        snapshotSale,
+      applyRecordPatch({
+        ...(metadataSaved ? persistedMetadataAfterSave : {}),
+        ...(leadSaved ? leadChanges : {}),
+        ...(nextMetadataId ? { metadata_id: nextMetadataId } : {}),
       });
-
-      await createLeadSnapshot({
-        codigo: id,
-        source: {
-          record_id: ctx.recordId,
-          entity: ctx.entity,
-          entity_id: ctx.entityId,
-        },
-        snapshot,
-      });
-
-      // Reflejar inmediatamente la fuente de verdad del snapshot en UI,
-      // incluso si el backend tarda en devolver el lead ya actualizado.
-      hydrateFromSnapshot(snapshotPayloadCurrent, snapshotSale);
+      if (metadataSaved && snapshotSale) {
+        setSaleDraftPayload(snapshotSale);
+      }
+      setPersistedRecord(persistedAfterSave);
+      if (nextMetadataId) setSelectedMetadataId(String(nextMetadataId));
+      setMetadataRecord(nextMetadataRecord);
+      setPersistedMetadataPayload(persistedMetadataAfterSave);
 
       toast({
-        title: "Guardado",
-        description: "Se guardó el snapshot y se actualizó el lead.",
+        title:
+          leadSaved && metadataSaved
+            ? "Guardado"
+            : leadSaved || metadataSaved
+              ? "Guardado parcial"
+              : "Error",
+        description:
+          leadSaved && metadataSaved
+            ? "Se actualizó el lead y su metadata CRM asociado."
+            : leadSaved
+              ? `Se actualizaron los campos base del lead.${metadataSaveError ? ` Metadata pendiente: ${metadataSaveError}` : ""}`
+              : `Se actualizó el metadata CRM asociado al lead.${leadSaveError ? ` Lead pendiente: ${leadSaveError}` : ""}`,
       });
 
       // Refresco en background: no bloquea el estado del botón.
@@ -1464,19 +1284,21 @@ function Content({ id }: { id: string }) {
       setSnapshotSaving(false);
     }
   }, [
-    buildSnapshotContext,
-    buildSnapshotPayloadCurrent,
     draft,
     draftToLeadPatch,
-    hydrateFromSnapshot,
     id,
     leadForUi,
     load,
+    applyRecordPatch,
+    metadataRecord,
+    associatedMetadataRecords,
     record,
+    persistedRecord,
+    persistedMetadataPayload,
+    selectedMetadataId,
     saleDraftPayload,
     snapshotSaving,
     toast,
-    user,
   ]);
 
   React.useEffect(() => {
@@ -1627,6 +1449,9 @@ function Content({ id }: { id: string }) {
       contractThirdParty: !!(
         salePayload?.contract?.thirdParty ?? (p as any)?.contract_third_party
       ),
+      contractIsCompany: !!(
+        salePayload?.contract?.isCompany ?? (p as any)?.contract_is_company
+      ),
       contractPartyName:
         salePayload?.contract?.party?.name ||
         (p as any)?.contract_party_name ||
@@ -1657,6 +1482,31 @@ function Content({ id }: { id: string }) {
       contractPartyCountry:
         salePayload?.contract?.party?.country ||
         (p as any)?.contract_party_country ||
+        "",
+      contractParties: Array.isArray(salePayload?.contract?.parties)
+        ? salePayload.contract.parties
+        : Array.isArray((p as any)?.contract_parties)
+          ? (p as any).contract_parties
+          : [],
+      contractCompanyName:
+        salePayload?.contract?.company?.name ||
+        (p as any)?.contract_company_name ||
+        "",
+      contractCompanyTaxId:
+        salePayload?.contract?.company?.taxId ||
+        (p as any)?.contract_company_tax_id ||
+        "",
+      contractCompanyAddress:
+        salePayload?.contract?.company?.address ||
+        (p as any)?.contract_company_address ||
+        "",
+      contractCompanyCity:
+        salePayload?.contract?.company?.city ||
+        (p as any)?.contract_company_city ||
+        "",
+      contractCompanyCountry:
+        salePayload?.contract?.company?.country ||
+        (p as any)?.contract_company_country ||
         "",
       notes: salePayload?.notes ?? "",
       status: salePayload?.status ?? undefined,
@@ -2027,14 +1877,67 @@ function Content({ id }: { id: string }) {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                   Ficha del lead
                 </p>
-                <h1 className="truncate text-2xl font-semibold text-slate-900 sm:text-[30px]">
-                  {displayName}
-                </h1>
+                <Input
+                  value={String((record as any)?.name ?? displayName ?? "")}
+                  onChange={(e) =>
+                    applyRecordPatch({
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="Nombre del lead"
+                  className="h-auto border-0 px-0 py-0 text-2xl font-semibold text-slate-900 shadow-none focus-visible:ring-0 sm:text-[30px]"
+                />
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                   Lead
+                </div>
+                <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  Metadata CRM: {associatedMetadataRecords.length}
+                </div>
+                <div className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
+                  IDs:{" "}
+                  {associatedMetadataRecords.length
+                    ? associatedMetadataRecords
+                        .map((item) => String(item.id))
+                        .join(", ")
+                    : "sin metadata asociado"}
+                </div>
+                <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  <span className="text-slate-500">Metadata activo</span>
+                  <Select
+                    value={selectedMetadataId || "__none__"}
+                    onValueChange={(value) => {
+                      const nextId = value === "__none__" ? "" : value;
+                      const selectedRecord = associatedMetadataRecords.find(
+                        (item) => String(item.id) === nextId,
+                      );
+                      setSelectedMetadataId(nextId);
+                      setMetadataRecord(selectedRecord ?? null);
+                      setPersistedMetadataPayload(
+                        selectedRecord?.payload &&
+                          typeof selectedRecord.payload === "object"
+                          ? (selectedRecord.payload as Record<string, any>)
+                          : {},
+                      );
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[180px] border-slate-200 bg-white text-xs text-slate-700">
+                      <SelectValue placeholder="Seleccionar metadata" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sin seleccionar</SelectItem>
+                      {associatedMetadataRecords.map((item) => (
+                        <SelectItem
+                          key={String(item.id)}
+                          value={String(item.id)}
+                        >
+                          {String(item.id)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {sourceValue ? (
                   <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">

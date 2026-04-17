@@ -43,6 +43,7 @@ import {
 import {
   getLead,
   sendLeadContractForSignature,
+  updateMetadataPayload,
   updateLeadPatch,
   type LeadContractSignatureSendResponse,
 } from "@/app/admin/crm/api";
@@ -55,7 +56,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { listMetadata } from "@/lib/metadata";
+import { createMetadata, listMetadata } from "@/lib/metadata";
 
 interface ContractGeneratorProps {
   lead: any;
@@ -94,6 +95,57 @@ const BUILTIN_CONTRACT_TEMPLATES: BuiltinContractTemplate[] = [
     metadataKey: "hotselling-starter-v1",
   },
 ];
+
+function getLeadMetadataId(value: any) {
+  const raw = value?.metadata_id ?? value?.crm_metadata_id ?? null;
+  if (raw === null || raw === undefined) return null;
+  const normalized = String(raw).trim();
+  return normalized ? normalized : null;
+}
+
+function metadataBelongsToLead(item: any, leadCodigo: string) {
+  const normalizedLeadCodigo = String(leadCodigo ?? "").trim();
+  if (!normalizedLeadCodigo) return false;
+
+  const entityId = String(item?.entity_id ?? "").trim();
+  const payload =
+    item?.payload && typeof item.payload === "object" ? item.payload : {};
+  const payloadLeadCodigo = String((payload as any)?.lead_codigo ?? "").trim();
+  const payloadSourceEntityId = String(
+    (payload as any)?.source_entity_id ?? (payload as any)?.entity_id ?? "",
+  ).trim();
+
+  return (
+    entityId === normalizedLeadCodigo ||
+    payloadLeadCodigo === normalizedLeadCodigo ||
+    payloadSourceEntityId === normalizedLeadCodigo
+  );
+}
+
+function pickPreferredMetadataRecord(items: any[]) {
+  return (
+    [...items].sort((left, right) => {
+      const leftTs = new Date(
+        String(left?.updated_at ?? left?.created_at ?? 0),
+      ).getTime();
+      const rightTs = new Date(
+        String(right?.updated_at ?? right?.created_at ?? 0),
+      ).getTime();
+      return rightTs - leftTs;
+    })[0] ?? null
+  );
+}
+
+function sanitizeContractText(rawText: string) {
+  return rawText
+    .replace(/\r\n/g, "\n")
+    .replace(/\nNumero de cuotas\nValor de cuota\s+Fecha de pago\n/g, "\n")
+    .replace(
+      /\n\s*Calendario de pagos:\n\s*\n(?=Primera cuota)/g,
+      "\nCalendario de pagos:\n",
+    )
+    .replace(/\n{3,}/g, "\n\n");
+}
 
 export function ContractGenerator({
   lead,
@@ -148,7 +200,7 @@ export function ContractGenerator({
   const [refreshingLead, setRefreshingLead] = useState(false);
 
   // Datos del contrato mapeados solo desde CRM/snapshot persistido.
-  const contractData = mapLeadToContractData(liveLead ?? lead);
+  const contractData = mapLeadToContractData(liveLead ?? lead, draft);
   const mergedData = React.useMemo(
     () => ({ ...contractData, ...overrides }),
     [contractData, overrides],
@@ -197,7 +249,49 @@ export function ContractGenerator({
     if (codigo) {
       setRefreshingLead(true);
       getLead(String(codigo))
-        .then((fresh) => setLiveLead(fresh))
+        .then(async (fresh) => {
+          try {
+            const leadCodigo = String((fresh as any)?.codigo ?? codigo).trim();
+            const metadataId = getLeadMetadataId(fresh);
+            let mergedLead = fresh;
+
+            if (metadataId) {
+              const allMetadata = await listMetadata<any>({ background: true });
+              const metadataRecord = (allMetadata.items || []).find(
+                (item) => String(item.id) === String(metadataId),
+              );
+              const payload =
+                metadataRecord?.payload &&
+                typeof metadataRecord.payload === "object"
+                  ? metadataRecord.payload
+                  : null;
+              if (payload) {
+                mergedLead = { ...fresh, ...payload };
+              }
+            } else {
+              const allMetadata = await listMetadata<any>({ background: true });
+              const associated = (allMetadata.items || []).filter((item) =>
+                metadataBelongsToLead(item, leadCodigo),
+              );
+              const preferred = pickPreferredMetadataRecord(associated);
+              const payload =
+                preferred?.payload && typeof preferred.payload === "object"
+                  ? preferred.payload
+                  : null;
+              if (payload) {
+                mergedLead = {
+                  ...fresh,
+                  ...payload,
+                  metadata_id: preferred?.id ?? (fresh as any)?.metadata_id,
+                };
+              }
+            }
+
+            setLiveLead(mergedLead);
+          } catch {
+            setLiveLead(fresh);
+          }
+        })
         .catch(() => {
           // Fallback mínimo si el refresh falla.
           setLiveLead(lead);
@@ -296,13 +390,14 @@ export function ContractGenerator({
         txt = await loadContractTextFromUrl(url);
       }
 
-      setBaseContractText(txt);
+      const sanitizedText = sanitizeContractText(txt);
+      setBaseContractText(sanitizedText);
       setBaseContractStats({
-        lines: txt.split(/\r?\n/).length,
-        chars: txt.length,
+        lines: sanitizedText.split(/\r?\n/).length,
+        chars: sanitizedText.length,
       });
-      setBaseContractWarnings(getContractTextWarnings(txt));
-      return txt;
+      setBaseContractWarnings(getContractTextWarnings(sanitizedText));
+      return sanitizedText;
     } catch (e: any) {
       const msg = e?.message || "No se pudo cargar el texto base del contrato";
       setPreviewError(msg);
@@ -935,9 +1030,10 @@ export function ContractGenerator({
     }
 
     const bytes = await pdfDoc.save();
+    const pdfBytes = Uint8Array.from(bytes);
     return {
       filename,
-      file: new File([bytes], filename, { type: "application/pdf" }),
+      file: new File([pdfBytes], filename, { type: "application/pdf" }),
     };
   }, [
     loadCompanySignatureAsset,
@@ -1117,31 +1213,68 @@ export function ContractGenerator({
     }
     setSavingLead(true);
     try {
-      const patch: Record<string, any> = {};
-      if (overrides.fullName !== undefined) patch.name = overrides.fullName;
-      if (overrides.email !== undefined) patch.email = overrides.email;
-      if (overrides.phone !== undefined) patch.phone = overrides.phone;
+      const leadPatch: Record<string, any> = {};
+      const metadataPatch: Record<string, any> = {};
+
+      if (overrides.fullName !== undefined) leadPatch.name = overrides.fullName;
+      if (overrides.email !== undefined) leadPatch.email = overrides.email;
+      if (overrides.phone !== undefined) leadPatch.phone = overrides.phone;
       if (overrides.dni !== undefined)
-        patch.contract_party_document_id = overrides.dni;
+        metadataPatch.contract_party_document_id = overrides.dni;
       if (overrides.address !== undefined)
-        patch.contract_party_address = overrides.address;
+        metadataPatch.contract_party_address = overrides.address;
       if (overrides.city !== undefined)
-        patch.contract_party_city = overrides.city;
+        metadataPatch.contract_party_city = overrides.city;
       if (overrides.country !== undefined)
-        patch.contract_party_country = overrides.country;
-      if (Object.keys(patch).length === 0) {
+        metadataPatch.contract_party_country = overrides.country;
+
+      if (
+        Object.keys(leadPatch).length === 0 &&
+        Object.keys(metadataPatch).length === 0
+      ) {
         toast({
           title: "Sin cambios",
           description: "No hay datos modificados para guardar.",
         });
         return;
       }
-      const updated = await updateLeadPatch(codigo, patch, liveLead);
-      setLiveLead(updated);
+
+      let updatedLead = liveLead;
+      if (Object.keys(leadPatch).length > 0) {
+        updatedLead = await updateLeadPatch(codigo, leadPatch, liveLead);
+      }
+
+      let nextMetadataId =
+        getLeadMetadataId(updatedLead) ?? getLeadMetadataId(lead);
+      if (Object.keys(metadataPatch).length > 0) {
+        if (nextMetadataId) {
+          await updateMetadataPayload(nextMetadataId, {
+            ...metadataPatch,
+            lead_codigo: codigo,
+          });
+        } else {
+          const created = await createMetadata({
+            entity: "crm_lead_detail",
+            entity_id: codigo,
+            payload: {
+              ...metadataPatch,
+              lead_codigo: codigo,
+            },
+          });
+          nextMetadataId = String(created.id);
+        }
+      }
+
+      setLiveLead((prev: any) => ({
+        ...(prev ?? updatedLead ?? {}),
+        ...(updatedLead ?? {}),
+        ...metadataPatch,
+        ...(nextMetadataId ? { metadata_id: nextMetadataId } : {}),
+      }));
       setOverrides({});
       toast({
         title: "Datos guardados",
-        description: "Los datos del contrato se guardaron en el lead.",
+        description: "Los datos del contrato se guardaron correctamente.",
       });
     } catch (e: any) {
       toast({
