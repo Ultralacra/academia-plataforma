@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Dialog,
@@ -125,6 +126,14 @@ function clearLocalCompleted(code: string) {
 }
 
 export function StudentWelcomeModal() {
+  return (
+    <Suspense fallback={null}>
+      <StudentWelcomeModalContent />
+    </Suspense>
+  );
+}
+
+function StudentWelcomeModalContent() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();

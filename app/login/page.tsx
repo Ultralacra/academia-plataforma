@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { useAuth } from "@/hooks/use-auth";
 import FullScreenLoader from "@/components/ui/FullScreenLoader";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const { isLoading, isAuthenticated, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,4 +65,12 @@ export default function LoginPage() {
     );
 
   return <LoginForm />;
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<FullScreenLoader />}>
+      <LoginPageContent />
+    </Suspense>
+  );
 }

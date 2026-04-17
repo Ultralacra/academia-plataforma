@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { listMetadata } from "@/lib/metadata";
@@ -244,7 +244,19 @@ function mimeFromName(name?: string | null): string | null {
 
 // Cronómetro (SLA) oculto por requerimiento.
 
-export default function TicketsBoard({
+export default function TicketsBoard(props: {
+  studentCode?: string;
+  hideHeader?: boolean;
+  mode?: "tickets" | "feedback";
+}) {
+  return (
+    <Suspense fallback={null}>
+      <TicketsBoardContent {...props} />
+    </Suspense>
+  );
+}
+
+function TicketsBoardContent({
   studentCode,
   hideHeader,
   mode,

@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import FullScreenLoader from "@/components/ui/FullScreenLoader";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ interface ProtectedRouteProps {
   allowedRoles?: UserRole[];
 }
 
-export function ProtectedRoute({
+function ProtectedRouteContent({
   children,
   allowedRoles,
 }: ProtectedRouteProps) {
@@ -197,4 +197,12 @@ export function ProtectedRoute({
   }
 
   return <>{children}</>;
+}
+
+export function ProtectedRoute(props: ProtectedRouteProps) {
+  return (
+    <Suspense fallback={<FullScreenLoader />}>
+      <ProtectedRouteContent {...props} />
+    </Suspense>
+  );
 }

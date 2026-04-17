@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { dataService, type TeamWithCounts } from "@/lib/data-service";
@@ -158,6 +158,14 @@ function toCsv(rows: TeamWithCounts[]) {
 import { ProtectedRoute } from "@/components/auth/protected-route";
 
 export default function TeamsPage() {
+  return (
+    <Suspense fallback={null}>
+      <TeamsPageContent />
+    </Suspense>
+  );
+}
+
+function TeamsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 

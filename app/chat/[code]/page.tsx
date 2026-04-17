@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -44,11 +44,7 @@ function formatChatDate(raw: unknown): string | null {
   }).format(new Date(timestamp));
 }
 
-export default function ChatByCodePage({
-  params,
-}: {
-  params: { code: string };
-}) {
+function ChatByCodePageContent({ params }: { params: { code: string } }) {
   const { code } = params;
   const [student, setStudent] = useState<StudentItem | null>(null);
   const [loading, setLoading] = useState(false);
@@ -242,5 +238,13 @@ export default function ChatByCodePage({
         </div>
       </DashboardLayout>
     </ProtectedRoute>
+  );
+}
+
+export default function ChatByCodePage(props: { params: { code: string } }) {
+  return (
+    <Suspense fallback={null}>
+      <ChatByCodePageContent {...props} />
+    </Suspense>
   );
 }
