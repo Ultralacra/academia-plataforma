@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { useAuth } from "@/hooks/use-auth";
 import FullScreenLoader from "@/components/ui/FullScreenLoader";
@@ -9,9 +9,22 @@ import FullScreenLoader from "@/components/ui/FullScreenLoader";
 export default function LoginPage() {
   const { isLoading, isAuthenticated, user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const redirectTo = (() => {
+    const value = searchParams.get("next");
+    if (!value) return undefined;
+    if (!value.startsWith("/")) return undefined;
+    if (value.startsWith("//")) return undefined;
+    return value;
+  })();
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
+      if (redirectTo) {
+        router.push(redirectTo);
+        return;
+      }
       // Si ya está autenticado, redirigir según rol
       switch (user.role) {
         case "admin":
@@ -34,7 +47,7 @@ export default function LoginPage() {
           router.push("/");
       }
     }
-  }, [isLoading, isAuthenticated, user, router]);
+  }, [isLoading, isAuthenticated, user, router, redirectTo]);
 
   if (isLoading) return <FullScreenLoader />;
 

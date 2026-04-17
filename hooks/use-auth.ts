@@ -82,11 +82,20 @@ export function useAuth() {
     }
   }, [])
 
-  const login = async (email: string, password: string): Promise<void> => {
+  const login = async (
+    email: string,
+    password: string,
+    redirectTo?: string,
+  ): Promise<void> => {
     setIsLoading(true)
     try {
       const user = await authService.login(email, password)
       setAuthState({ user, isAuthenticated: true })
+
+      if (redirectTo && redirectTo.trim()) {
+        router.push(redirectTo)
+        return
+      }
 
       switch (user.role) {
         case "admin":

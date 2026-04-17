@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -62,12 +63,21 @@ export function LoginForm() {
   const [passFocused, setPassFocused] = useState(false);
   const { login, isLoading } = useAuth();
   const formRef = useRef<HTMLFormElement>(null);
+  const searchParams = useSearchParams();
+
+  const redirectTo = (() => {
+    const value = searchParams.get("next");
+    if (!value) return undefined;
+    if (!value.startsWith("/")) return undefined;
+    if (value.startsWith("//")) return undefined;
+    return value;
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     try {
-      await login(email, password);
+      await login(email, password, redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al iniciar sesión");
     }

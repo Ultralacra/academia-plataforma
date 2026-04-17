@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -90,6 +91,7 @@ const TOTAL_STEPS = 3;
 
 const LS_KEY = "student_welcome_completed";
 const RESET_EVENT = "reset-welcome-survey";
+const SAVED_EVENT = "student-welcome-saved";
 
 function getLocalCompleted(code: string): boolean {
   try {
@@ -124,20 +126,58 @@ function clearLocalCompleted(code: string) {
 
 export function StudentWelcomeModal() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen] = React.useState(false);
   const [checked, setChecked] = React.useState(false);
   const [step, setStep] = React.useState(1);
   const [draft, setDraft] = React.useState<ProfileDraft>({ ...EMPTY_DRAFT });
   const [saving, setSaving] = React.useState(false);
   const [serverChecked, setServerChecked] = React.useState(false);
+  const forcedOpenRef = React.useRef(false);
 
   const userCode = String((user as any)?.codigo ?? "").trim();
   const userRole = String(user?.role ?? "").toLowerCase();
+  const forceOpenFromQuery =
+    searchParams.get("welcome") === "1" ||
+    searchParams.get("welcomeSurvey") === "1";
+  const pathSegments = React.useMemo(
+    () =>
+      String(pathname || "")
+        .split("/")
+        .filter(Boolean),
+    [pathname],
+  );
+  const routeStudentCode = React.useMemo(() => {
+    if (pathSegments[0] !== "admin" || pathSegments[1] !== "alumnos") {
+      return "";
+    }
+    return decodeURIComponent(String(pathSegments[2] ?? "")).trim();
+  }, [pathSegments]);
+  const targetCode =
+    forceOpenFromQuery && routeStudentCode ? routeStudentCode : userCode;
+
+  const clearWelcomeQuery = React.useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    let changed = false;
+    if (params.has("welcome")) {
+      params.delete("welcome");
+      changed = true;
+    }
+    if (params.has("welcomeSurvey")) {
+      params.delete("welcomeSurvey");
+      changed = true;
+    }
+    if (!changed) return;
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname);
+  }, [pathname, router, searchParams]);
 
   /* ── verificar si ya completó la encuesta ── */
   React.useEffect(() => {
     // Permitir evaluar incluso durante isLoading si ya tenemos user data (de localStorage)
-    const hasUser = !!user && !!userCode;
+    const hasUser = !!user && !!targetCode;
     if (!hasUser) {
       // Si terminó de cargar y no hay user, no hacer nada
       if (!isLoading) {
@@ -156,27 +196,48 @@ export function StudentWelcomeModal() {
     // Decisión instantánea:
     // - si NO hay cache local, mostrar de inmediato
     // - si SÍ hay cache local, dejamos cerrado inicialmente pero SIEMPRE revalidamos
-    const hasLocalCompleted = getLocalCompleted(userCode);
-    setOpen(!hasLocalCompleted);
+    const hasLocalCompleted = getLocalCompleted(targetCode);
+    const shouldForceOpen = forceOpenFromQuery && !forcedOpenRef.current;
+    setOpen(shouldForceOpen ? true : !hasLocalCompleted);
     setChecked(true);
     setServerChecked(false);
+    if (shouldForceOpen) {
+      forcedOpenRef.current = true;
+    }
 
     let cancelled = false;
 
     // Verificación en background: el backend corrige cualquier cache local obsoleta
     const token = getAuthToken();
-    fetch(`/api/alumnos/${encodeURIComponent(userCode)}/metadata/profile`, {
+    fetch(`/api/alumnos/${encodeURIComponent(targetCode)}/metadata/profile`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
         if (cancelled) return;
         const completedAt = json?.item?.payload?.completedAt;
-        if (completedAt) {
-          setLocalCompleted(userCode);
+        const payload = json?.item?.payload;
+        if (payload && typeof payload === "object") {
+          setDraft({
+            niche: String(payload?.niche ?? ""),
+            socialNetworks:
+              Array.isArray(payload?.socialNetworks) &&
+              payload.socialNetworks.length > 0
+                ? payload.socialNetworks.map((item: any) => ({
+                    platform: String(item?.platform ?? "instagram"),
+                    handle: String(item?.handle ?? ""),
+                  }))
+                : [{ platform: "instagram", handle: "" }],
+            occupation: String(payload?.occupation ?? ""),
+            digitalExperience: String(payload?.digitalExperience ?? ""),
+            learningPreference: String(payload?.learningPreference ?? ""),
+          });
+        }
+        if (completedAt && !forceOpenFromQuery) {
+          setLocalCompleted(targetCode);
           setOpen(false);
         } else {
-          clearLocalCompleted(userCode);
+          if (!completedAt) clearLocalCompleted(targetCode);
           setOpen(true);
         }
         setServerChecked(true);
@@ -189,19 +250,19 @@ export function StudentWelcomeModal() {
     return () => {
       cancelled = true;
     };
-  }, [isLoading, user, userCode, userRole]);
+  }, [forceOpenFromQuery, isLoading, targetCode, user, userRole]);
 
   /* ── escuchar evento de reinicio de encuesta ── */
   React.useEffect(() => {
     const handler = () => {
-      if (userCode) clearLocalCompleted(userCode);
+      if (targetCode) clearLocalCompleted(targetCode);
       setDraft({ ...EMPTY_DRAFT });
       setStep(1);
       setOpen(true);
     };
     window.addEventListener(RESET_EVENT, handler);
     return () => window.removeEventListener(RESET_EVENT, handler);
-  }, [userCode]);
+  }, [targetCode]);
 
   /* ── helpers de draft ── */
   const patch = (partial: Partial<ProfileDraft>) =>
@@ -248,12 +309,12 @@ export function StudentWelcomeModal() {
 
   /* ── guardar ── */
   const onSave = React.useCallback(async () => {
-    if (!userCode) return;
+    if (!targetCode) return;
     setSaving(true);
     try {
       const token = getAuthToken();
       const res = await fetch(
-        `/api/alumnos/${encodeURIComponent(userCode)}/metadata/profile`,
+        `/api/alumnos/${encodeURIComponent(targetCode)}/metadata/profile`,
         {
           method: "POST",
           headers: {
@@ -279,8 +340,28 @@ export function StudentWelcomeModal() {
         title: "¡Bienvenido/a!",
         description: "Tus datos fueron guardados correctamente.",
       });
-      setLocalCompleted(userCode);
+      setLocalCompleted(targetCode);
+      try {
+        window.dispatchEvent(
+          new CustomEvent(SAVED_EVENT, {
+            detail: {
+              code: targetCode,
+              payload: {
+                niche: draft.niche.trim(),
+                socialNetworks: draft.socialNetworks.filter((s) =>
+                  s.handle.trim(),
+                ),
+                occupation: draft.occupation.trim(),
+                digitalExperience: draft.digitalExperience,
+                learningPreference: draft.learningPreference,
+                completedAt: new Date().toISOString(),
+              },
+            },
+          }),
+        );
+      } catch {}
       setOpen(false);
+      clearWelcomeQuery();
     } catch (e: any) {
       toast({
         title: "No se pudieron guardar los datos",
@@ -290,10 +371,11 @@ export function StudentWelcomeModal() {
     } finally {
       setSaving(false);
     }
-  }, [userCode, draft]);
+  }, [clearWelcomeQuery, targetCode, draft]);
 
   /* ── render guard ── */
-  if (!user || userRole !== "student") return null;
+  if (!user) return null;
+  if (userRole !== "student") return null;
   if (!checked && !open) return null;
 
   return (

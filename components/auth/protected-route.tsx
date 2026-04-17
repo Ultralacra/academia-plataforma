@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import FullScreenLoader from "@/components/ui/FullScreenLoader";
 import { Button } from "@/components/ui/button";
 
@@ -22,14 +22,17 @@ export function ProtectedRoute({
   const { isAuthenticated, isLoading, user, hasAnyRole, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (isLoading) return;
     // If not authenticated and we're not already on /login, redirect to it
     if (!isAuthenticated && pathname !== "/login") {
-      router.push("/login");
+      const qs = searchParams?.toString();
+      const next = `${pathname}${qs ? `?${qs}` : ""}`;
+      router.push(`/login?next=${encodeURIComponent(next)}`);
     }
-  }, [isLoading, isAuthenticated, router, pathname]);
+  }, [isLoading, isAuthenticated, router, pathname, searchParams]);
 
   if (isLoading) return <FullScreenLoader />;
 

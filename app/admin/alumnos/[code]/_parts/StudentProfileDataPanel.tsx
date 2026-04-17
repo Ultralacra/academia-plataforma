@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { getAuthToken } from "@/lib/auth";
+import { getPublicAppOrigin } from "@/lib/public-app-origin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, RotateCcw, Sparkles } from "lucide-react";
+import { Copy, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+
+const SAVED_EVENT = "student-welcome-saved";
 
 interface SocialNetwork {
   platform: string;
@@ -72,6 +75,41 @@ export default function StudentProfileDataPanel({
     return () => controller.abort();
   }, [studentCode]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail as
+        | { code?: string; payload?: ProfilePayload }
+        | undefined;
+      if (!detail?.code || detail.code !== studentCode) return;
+      setData(detail.payload ?? null);
+      setLoading(false);
+    };
+
+    window.addEventListener(SAVED_EVENT, handler);
+    return () => window.removeEventListener(SAVED_EVENT, handler);
+  }, [studentCode]);
+
+  const surveyLink = studentCode
+    ? `${getPublicAppOrigin()}/admin/alumnos/${encodeURIComponent(studentCode)}/perfil?welcome=1`
+    : "";
+
+  const handleCopySurveyLink = async () => {
+    if (!surveyLink) return;
+    try {
+      await navigator.clipboard.writeText(surveyLink);
+      toast({
+        title: "Link copiado",
+        description: "El enlace de la encuesta quedó copiado al portapapeles.",
+      });
+    } catch {
+      toast({
+        title: "No se pudo copiar el link",
+        description: "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleReset = async () => {
     if (
       !confirm(
@@ -135,6 +173,16 @@ export default function StudentProfileDataPanel({
           <p className="text-sm text-muted-foreground">
             El alumno aún no ha completado la encuesta de bienvenida.
           </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mt-3 gap-1.5"
+            onClick={handleCopySurveyLink}
+            disabled={!surveyLink}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Copiar link de encuesta
+          </Button>
         </CardContent>
       </Card>
     );
@@ -197,7 +245,18 @@ export default function StudentProfileDataPanel({
         <Button
           variant="outline"
           size="sm"
-          className="w-full mt-2 gap-1.5"
+          className="w-full gap-1.5"
+          onClick={handleCopySurveyLink}
+          disabled={!surveyLink}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Copiar link de encuesta
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full gap-1.5"
           onClick={handleReset}
           disabled={resetting}
         >
