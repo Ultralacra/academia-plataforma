@@ -18,7 +18,15 @@ SEGUNDA. ALCANCE DEL SERVICIO.
 ● Sesiones adicionales semanales (martes y miercoles: copywriting; jueves: ads, viernes: implementacion tecnica).
 ● Area de miembros Premium.
 ● Box de herramientas de implementacion rapida.
+[[IF:BONO:BONO_TRAFFICKER]]
+● Trafficker interno asignado para montaje de campanas publicitarias (excluyendo gestion de ads), disponible unicamente dentro de los {{DURACION_PROGRAMA}} de vigencia del contrato, segun clausula correspondiente.
+[[ENDIF]]
+[[IF:BONO:BONO_MESES_EXTRA_1]]
 ● Incluido bono de accion rapida de 1 mes de extension de los accesos (este bono extiende los accesos de 4 a 5 meses).
+[[ENDIF]]
+[[IF:BONO:BONO_MESES_EXTRA_2]]
+● Incluido bono de accion rapida de 2 meses de extension de los accesos (este bono extiende los accesos de 4 a 6 meses).
+[[ENDIF]]
 
 2.2 Soporte: LA EMPRESA atendera dudas e inquietudes del CLIENTE exclusivamente por los canales referidos, sin asumir responsabilidad por fallas de terceros (p. ej., conectividad).
 
@@ -45,7 +53,7 @@ El uso y gestion de los bonos ofrecidos en el programa es responsabilidad exclus
 
 TERCERA. VIGENCIA Y EJECUCION DEL SERVICIO.
 
-3.1 El servicio tendra una duracion de cinco (5) meses, contados a partir de la fecha solicitada por el CLIENTE, la cual corresponde al dia {{DIA_INICIO}} del mes {{MES_INICIO}} del ano {{ANIO_INICIO}}, fecha en la cual el CLIENTE iniciara el programa y se habilitaran los accesos y/o acompanamiento correspondiente, siempre y cuando para dicha fecha se haya verificado y cumplido:
+3.1 El servicio tendra una duracion de {{DURACION_PROGRAMA}}, contados a partir de la fecha solicitada por el CLIENTE, la cual corresponde al dia {{DIA_INICIO}} del mes {{MES_INICIO}} del ano {{ANIO_INICIO}}, fecha en la cual el CLIENTE iniciara el programa y se habilitaran los accesos y/o acompanamiento correspondiente, siempre y cuando para dicha fecha se haya verificado y cumplido:
 
 (i) la firma del presente contrato, y
 (ii) el pago correspondiente, asi:
@@ -136,7 +144,7 @@ Conforme a la modalidad de pago anteriormente discriminada que regira el present
 
 4.2 Moneda y variacion cambiaria: Todas las sumas se expresan en USD; el CLIENTE asume cualquier variacion cambiaria.
 
-4.3 Mora e intereses: En caso de mora, se aplicaran los intereses moratorios y el orden de abonos previsto en la clausula decima sexta.
+4.3 Mora e intereses: En caso de mora, se aplicaran los intereses moratorios y el orden de abonos previsto en la clausula [[REF_LOW:MORA]].
 
 4.4 No seran validas solicitudes de reembolso fundadas en la inasistencia o no utilizacion de recursos proporcionados por LA EMPRESA.
 
@@ -168,7 +176,7 @@ Proporcionar cinco (5) sesiones pregrabadas, correspondientes a las cinco (5) fa
 
 ● Soporte tecnico y estrategico:
 
-Brindar soporte y resolver oportunamente las preguntas y dudas que formule EL CLIENTE, durante el plazo de cinco (5) meses de acceso, a traves de:
+Brindar soporte y resolver oportunamente las preguntas y dudas que formule EL CLIENTE, durante el plazo de {{DURACION_PROGRAMA}} de acceso, a traves de:
 
 1. Sesiones semanales de coaching en vivo.
 2. El grupo de comunidad del programa.
@@ -188,7 +196,7 @@ Ejecutar el programa de manera disciplinada, conforme a las indicaciones, instru
 Actuar con rapidez y eficiencia en la toma de decisiones y en la implementacion de las acciones acordadas; solicitar oportunamente ayuda en caso de bloqueos o dificultades; y compartir aprendizajes y logros con la comunidad, manteniendo una actitud colaborativa. Sin perjuicio de lo anterior, EL CLIENTE reconoce que el cumplimiento del plan y la obtencion de resultados dependen exclusivamente de su gestion personal.
 
 3. Validacion de oferta y comportamiento del mercado:
-EL CLIENTE acepta que la validacion de su oferta, la aceptacion del mercado, la disposicion de pago del publico objetivo y la viabilidad comercial de su idea de negocio son factores ajenos al control de LA EMPRESA. En consecuencia, tales variables no constituyen incumplimiento imputable a LA EMPRESA y no habilitan reclamaciones distintas a las previstas expresamente en la Clausula DECIMA SEPTIMA.
+EL CLIENTE acepta que la validacion de su oferta, la aceptacion del mercado, la disposicion de pago del publico objetivo y la viabilidad comercial de su idea de negocio son factores ajenos al control de LA EMPRESA. En consecuencia, tales variables no constituyen incumplimiento imputable a LA EMPRESA y no habilitan reclamaciones distintas a las previstas expresamente en la Clausula [[REF:GARANTIA]].
 
 4. Uso de herramientas tecnologicas, automatizaciones e inteligencia artificial:
 EL CLIENTE reconoce que el uso de herramientas tecnologicas, automatizaciones e inteligencia artificial (IA) dentro del programa es bajo su exclusiva responsabilidad. LA EMPRESA no garantiza resultados derivados del uso, mal uso o configuracion de dichas herramientas, ni asume responsabilidad por fallas de terceros, restricciones de plataforma o decisiones tecnicas implementadas por el CLIENTE.
@@ -306,7 +314,8 @@ El incumplimiento de esta clausula facultara a LA EMPRESA para suspender tempora
 
 En los casos en que EL CLIENTE aplique las estrategias del programa bajo la figura de coproduccion o colaboracion con terceros, se aclara que unicamente podra solicitar retroalimentacion ("feedback") respecto de un (1) negocio o proyecto a la vez. Esta clausula tambien sera aplicable en caso de productores de infoproductos.
 
-DECIMA TERCERA. SERVICIO DE MONTAJE DE CAMPANAS.
+[[IF:BONO:BONO_TRAFFICKER]]
+[[CLAUSULA:TRAFFICKER]]. SERVICIO DE MONTAJE DE CAMPANAS.
 
 13.1 Alcance de los Servicios:
 LA EMPRESA asignara un trafficker interno para realizar exclusivamente el montaje de campanas publicitarias en la plataforma Meta Ads para el CLIENTE, considerando entre tres (3) y cinco (5) anuncios por cada conjunto, dependiendo del tipo de testeo definido (convencional o agresivo).
@@ -332,7 +341,7 @@ LA EMPRESA queda exonerada expresamente de cualquier responsabilidad relacionada
 
 13.6 Vigencia del Servicio:
 
-El presente servicio podra ser solicitado por el CLIENTE unicamente durante la vigencia del contrato (cinco meses). Una vez expirado dicho plazo, cesara automaticamente el derecho a este beneficio.
+El presente servicio podra ser solicitado por el CLIENTE unicamente durante la vigencia del contrato ({{DURACION_PROGRAMA}}). Una vez expirado dicho plazo, cesara automaticamente el derecho a este beneficio.
 
 13.7 Solicitud del Servicio:
 
@@ -348,27 +357,108 @@ Durante el plazo de un (1) ano contado a partir de la suscripcion del presente c
 13.10 Tiempo maximo de ejecucion:
 
 El servicio de montaje de campanas publicitarias debera ejecutarse por parte del trafficker en un plazo maximo de diez (10) dias calendario, contados a partir de la solicitud expresa y efectiva entrega por parte del CLIENTE de todos los insumos necesarios para su ejecucion.
+[[ENDIF]]
+[[IF:BONO:BONO_IMPLEMENTACION_TECNICA]]
+[[CLAUSULA:IMPL_TECNICA]]. SERVICIO DE IMPLEMENTACION TECNICA.
 
-DECIMA CUARTA. RESOLUCION DE CONFLICTOS
+14.1 Naturaleza del Bono:
+El Bono de Implementacion Tecnica constituye un servicio operativo, tecnico y personalizado, ofrecido por LA EMPRESA de forma opcional y complementaria, que no forma parte del programa educativo principal, no garantiza resultados comerciales y no condiciona la ejecucion ni la garantia del programa "{{PROGRAMA}}".
 
-14.1 Las partes acordaran un arreglo directo de buena fe dentro de los diez (10) dias calendario siguientes a la notificacion por escrito de la controversia.
+El presente servicio no comprende, bajo ningun supuesto, asesoria o soporte personalizado en temas relacionados con implementacion tecnica. Cualquier inquietud o requerimiento adicional sobre el embudo, paginas, etc., debera canalizarse unicamente a traves de los medios y canales oficiales dispuestos por LA EMPRESA dentro del programa "{{PROGRAMA}}" (sesiones, Skool y WhatsApp).
 
-14.2 Si no se alcanza acuerdo, podran acudir a los tribunales competentes del Estado de Florida, EE. UU., renunciando a cualquier otra jurisdiccion.
+14.2 Caracter voluntario y condicionado:
 
-DECIMA QUINTA. CLAUSULA PENAL
+El acceso y ejecucion del Bono queda sujeto al cumplimiento estricto por parte del CLIENTE de las condiciones establecidas en la presente clausula. La sola existencia del bono no genera obligacion automatica de ejecucion por parte de LA EMPRESA.
+
+14.3 Acceso a Plataformas y Cuentas:
+
+El CLIENTE se compromete a otorgar al equipo asignado a implementar dicho bono los accesos limitados a sus cuentas system.io, Hotmart, hosting, dominio, Vturb y cualquier otra plataforma digital estrictamente requerida para el montaje de su embudo y paginas. Estos accesos estaran vigentes unicamente durante el periodo de duracion del presente contrato.
+
+14.4 Confidencialidad:
+
+Ambas partes asumen la obligacion expresa de mantener absoluta confidencialidad sobre toda informacion suministrada o adquirida durante la prestacion del servicio, incluyendo, pero sin limitarse a, datos del CLIENTE, estrategias comerciales, tecnicas, y demas informacion sensible o de caracter privado.
+
+14.5 Limitacion de Responsabilidad:
+LA EMPRESA queda expresamente exonerada de cualquier responsabilidad derivada de fallas tecnicas, errores de configuracion preexistentes, accesos incorrectos, informacion incompleta o erronea proporcionada por el CLIENTE, asi como de hackeos, bloqueos, suspensiones, restricciones de cuentas, caidas de plataformas, cambios en politicas, incompatibilidades tecnicas o cualquier otra incidencia propia o ajena a las plataformas digitales utilizadas.
+La responsabilidad de LA EMPRESA se limita unica y exclusivamente a la ejecucion del montaje e implementacion tecnica inicial, conforme al alcance definido del bono, y culmina de manera definitiva una vez entregado el activo correspondiente y notificada la finalizacion del servicio, sin que exista obligacion posterior de soporte, correccion, mantenimiento, optimizacion, reconfiguracion o re-ejecucion del trabajo realizado.
+
+14.6 Propiedad del Entregable:
+
+Las configuraciones tecnicas, estructuras, paginas, embudos, integraciones o activos digitales implementados por el equipo de LA EMPRESA en el marco del Bono de Implementacion Tecnica seran de propiedad exclusiva del CLIENTE, unicamente una vez se haya cumplido integramente el pago total del programa contratado y se haya dado por finalizada la prestacion del servicio conforme a los terminos del bono.
+
+14.7 Responsabilidades adicionales del CLIENTE:
+
+Sera responsabilidad exclusiva del CLIENTE modificar contrasenas y revocar todos los accesos concedidos al equipo interno de LA EMPRESA inmediatamente despues de finalizada la prestacion del servicio. En consecuencia, LA EMPRESA no sera responsable por ningun tipo de acceso o violacion de seguridad posterior a la culminacion del servicio contratado.
+
+14.8 Vigencia del Servicio:
+
+El presente servicio podra ser solicitado por el CLIENTE unicamente durante la vigencia del contrato ({{DURACION_PROGRAMA}}). Una vez expirado dicho plazo, cesara automaticamente el derecho a este beneficio.
+
+14.9 Plazo maximo de solicitud:
+
+El CLIENTE debera solicitar formalmente el Bono dentro del plazo maximo de vigencia del contrato, y con al menos quince (15) dias calendario de antelacion al vencimiento del mismo.
+La no solicitud dentro de dicho plazo implica la perdida automatica del bono, sin derecho a reclamo, compensacion o reactivacion.
+
+14.10 Obligaciones del CLIENTE - Entrega de insumos:
+
+Una vez solicitado el bono, el CLIENTE contara con un plazo maximo de tres (3) dias calendario para:
+● Completar el formulario oficial indicado por LA EMPRESA.
+● Entregar la totalidad de los insumos, accesos y materiales requeridos, en forma correcta y completa.
+La falta de entrega, entrega incompleta o entrega tardia suspende automaticamente el inicio del servicio, sin que ello implique obligacion de reprogramacion inmediata.
+
+14.11 Tiempos de ejecucion:
+
+El plazo estimado de ejecucion del Bono es de siete (7) a diez (10) dias habiles, contados unicamente a partir de la entrega completa y validada de los insumos por parte del CLIENTE.
+Cualquier retraso derivado de errores, omisiones o incumplimientos del CLIENTE no sera imputable a LA EMPRESA.
+
+14.12 Alcance y limitaciones:
+
+El Bono NO INCLUYE, bajo ningun supuesto:
+● Redaccion o modificacion de copy.
+● Edicion profesional de videos (VSL, OTO, testimonios).
+● Cambios estrategicos, redisenos completos o creacion de nuevos embudos.
+● Compra de dominios, hosting o herramientas externas.
+● Servicios recurrentes o soporte posterior a la entrega final.
+
+14.13 Cambios permitidos:
+
+El CLIENTE contara con una (1) unica ronda de ajustes esteticos menores, siempre que se encuentren dentro del alcance original del bono.
+Cualquier solicitud adicional se considerara servicio independiente con costo adicional.
+
+14.14 Cierre del servicio:
+
+Una vez entregado el activo correspondiente (embudo, pagina o verificacion tecnica), el servicio se considerara completado y cerrado, sin obligacion posterior por parte de LA EMPRESA.
+La perdida del bono no genera derecho a compensacion, extension de contrato ni reembolso parcial o total.
+
+14.15 Independencia contractual:
+
+La activacion, uso o perdida del Bono no modifica, no extiende ni altera la vigencia del contrato principal, ni los derechos y obligaciones derivados del mismo.
+
+14.16 Prohibicion de Relaciones Extracontractuales:
+
+Durante el plazo de un (1) ano contado a partir de la suscripcion del presente contrato, se prohibe expresamente tanto al CLIENTE como al equipo interno de LA EMPRESA establecer relaciones laborales, comerciales o profesionales, directas o indirectas, al margen de este contrato, con el objetivo de salvaguardar los intereses comerciales y estrategicos de LA EMPRESA.
+[[ENDIF]]
+
+[[CLAUSULA:CONFLICTOS]]. RESOLUCION DE CONFLICTOS
+
+Las partes acordaran un arreglo directo de buena fe dentro de los diez (10) dias calendario siguientes a la notificacion por escrito de la controversia.
+
+Si no se alcanza acuerdo, podran acudir a los tribunales competentes del Estado de Florida, EE. UU., renunciando a cualquier otra jurisdiccion.
+
+[[CLAUSULA:PENAL]]. CLAUSULA PENAL
 
 En caso de incumplimiento total o parcial de las obligaciones contractuales, la parte incumplida pagara a la parte cumplida una penalidad equivalente al treinta por ciento (30 %) del valor total del contrato, sin perjuicio de la exigencia de danos y perjuicios adicionales.
 
-DECIMA SEXTA. INTERESES MORATORIOS Y ORDEN DE APLICACION DE PAGOS
+[[CLAUSULA:MORA]]. INTERESES MORATORIOS Y ORDEN DE APLICACION DE PAGOS
 
-16.1 Se causaran intereses moratorios a la tasa del uno punto cinco por ciento (1,5 %) mensual o la maxima permitida por la ley aplicable, segun resulte menor, sobre el saldo vencido.
+Se causaran intereses moratorios a la tasa del uno punto cinco por ciento (1,5 %) mensual o la maxima permitida por la ley aplicable, segun resulte menor, sobre el saldo vencido.
 
-16.2 Cuando EL CLIENTE haga un pago, ese dinero se aplicara en el siguiente orden:
+Cuando EL CLIENTE haga un pago, ese dinero se aplicara en el siguiente orden:
 ● Primero, se pagaran los intereses por demora, es decir, los que se generan por no haber pagado a tiempo.
 ● Segundo, se pagara la multa del 30% del valor del contrato, si aplica, por haber incumplido con las condiciones pactadas.
 ● Tercero, se pagara el valor principal que debe, es decir, la deuda original sin intereses ni multas.
 
-DECIMA SEPTIMA. HOTSELLING PRO es un programa disenado para generar resultados concretos, con una estructura ejecutable en un corto plazo, sin que ello implique obligatoriedad temporal para el CLIENTE. Sin embargo, el acceso al programa se encuentra sujeto a un proceso de seleccion previa, dirigido exclusivamente a personas comprometidas, con capacidad de ejecucion y conciencia de que todo negocio implica inversion y esfuerzo propio.
+[[CLAUSULA:GARANTIA]]. {{PROGRAMA}} es un programa disenado para generar resultados concretos, con una estructura ejecutable en un corto plazo, sin que ello implique obligatoriedad temporal para el CLIENTE. Sin embargo, el acceso al programa se encuentra sujeto a un proceso de seleccion previa, dirigido exclusivamente a personas comprometidas, con capacidad de ejecucion y conciencia de que todo negocio implica inversion y esfuerzo propio.
 
 En ese sentido, LA EMPRESA establece una politica de garantia basada en un principio de compromiso mutuo, conforme a las siguientes condiciones:
 

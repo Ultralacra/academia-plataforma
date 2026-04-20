@@ -38,6 +38,7 @@ import {
   mapLeadToContractData,
   prepareContractData,
   applyConditionalBlocks,
+  describeBonoContractEffects,
   type ContractData,
 } from "@/lib/contract-generator";
 import {
@@ -1542,12 +1543,31 @@ export function ContractGenerator({
                     <span className="text-muted-foreground text-sm">
                       Bonos incluidos:
                     </span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {mergedData.bonuses.map((b, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">
-                          {b}
-                        </Badge>
-                      ))}
+                    <div className="mt-2 space-y-2">
+                      {mergedData.bonuses.map((b, i) => {
+                        const { effects } = describeBonoContractEffects(b);
+                        return (
+                          <div
+                            key={i}
+                            className="rounded-md border bg-muted/30 px-3 py-2"
+                          >
+                            <Badge variant="secondary" className="text-xs">
+                              {b}
+                            </Badge>
+                            {effects.length > 0 ? (
+                              <ul className="mt-1 ml-1 list-disc list-inside text-[11px] text-muted-foreground space-y-0.5">
+                                {effects.map((eff, j) => (
+                                  <li key={j}>{eff}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="mt-1 text-[11px] text-muted-foreground italic">
+                                Sin efecto contractual reconocido
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

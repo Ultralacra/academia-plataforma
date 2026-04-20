@@ -212,7 +212,13 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
   const paidNum = parseFloat(String(data.paymentPaidAmount || "0").replace(/[^0-9.]/g, ""));
   const installmentNum = parseFloat(String(data.installmentAmount || "0").replace(/[^0-9.]/g, ""));
   const reserveNum = parseFloat(String(data.reserveAmount || "0").replace(/[^0-9.]/g, ""));
-  const durationNum = data.programDurationNumber || 4;
+  // Duración base (4 meses) + extensiones según bonos seleccionados
+  const bonusNormalized = collectBonusCanonicalKeys(data.bonuses);
+  const extensionMonths =
+    (bonusNormalized.has("BONO_MESES_EXTRA_2") ? 2 : 0) +
+    (bonusNormalized.has("BONO_MESES_EXTRA_1") ? 1 : 0);
+  const baseDuration = data.programDurationNumber || 4;
+  const durationNum = baseDuration + extensionMonths;
   const standardSchedule = normalizeInstallmentItems(data.paymentInstallmentsSchedule);
   const customSchedule = normalizeInstallmentItems(data.paymentCustomInstallments);
 
@@ -299,7 +305,8 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
 
   const durationUnit = durationNum === 1 ? "mes" : "meses";
   const hasExplicitDurationNumber =
-    typeof data.programDurationNumber === "number" && Number.isFinite(data.programDurationNumber);
+    (typeof data.programDurationNumber === "number" && Number.isFinite(data.programDurationNumber)) ||
+    extensionMonths > 0;
   const durationProgram = hasExplicitDurationNumber
     ? `${durationText} ${durationUnit}`
     : data.programDuration || "cuatro (4) meses";
@@ -826,11 +833,150 @@ export async function loadContractTextFromUrl(url: string): Promise<string> {
  *   [[IF:MODO==3_cuotas]]     → solo si paymentMode es 3_cuotas
  *   [[IF:MODO==excepcion_2_cuotas]] → solo si paymentMode es excepcion_2_cuotas o 2_cuotas
  *   [[IF:TIENE_RESERVA]]      → solo si reserveAmount tiene valor
+ *   [[IF:BONO:BONO_KEY]]      → solo si el array bonuses incluye la clave indicada
  *   [[ENDIF]]                 → cierre del bloque
+ *
+ * Además, tras procesar condicionales, reemplaza cada ocurrencia del token
+ * [[CLAUSULA]] por el ordinal en letras correspondiente (DECIMA TERCERA,
+ * DECIMA CUARTA, ...), comenzando en 13, para permitir que al incluir o
+ * excluir cláusulas opcionales la numeración se ajuste automáticamente.
  */
+const CLAUSULA_ORDINALS: string[] = [
+  "DECIMA TERCERA",
+  "DECIMA CUARTA",
+  "DECIMA QUINTA",
+  "DECIMA SEXTA",
+  "DECIMA SEPTIMA",
+  "DECIMA OCTAVA",
+  "DECIMA NOVENA",
+  "VIGESIMA",
+  "VIGESIMA PRIMERA",
+  "VIGESIMA SEGUNDA",
+  "VIGESIMA TERCERA",
+  "VIGESIMA CUARTA",
+];
+
+function normalizeBonoKey(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Z0-9_]/g, "");
+}
+
+/**
+ * Resuelve una entrada arbitraria (código remoto, nombre o clave canónica) a
+ * una o más claves canónicas reconocidas por el template.
+ *
+ * El catálogo remoto puede usar códigos como "BONO2026-09" o nombres como
+ * "Bono de Trafficker"; aquí mapeamos esas variantes a los identificadores
+ * canónicos que usan los bloques condicionales del contrato.
+ */
+function resolveBonoCanonicalKeys(input: string): string[] {
+  if (!input) return [];
+  const raw = String(input).trim();
+  const upper = raw.toUpperCase();
+  const normalized = normalizeBonoKey(raw);
+  const hit = new Set<string>();
+
+  // Mapeo directo por código del catálogo remoto (codigo)
+  const CODE_TO_KEY: Record<string, string> = {
+    "BONO2026-09": "BONO_TRAFFICKER",
+    "BONO2026-07": "BONO_IMPLEMENTACION_TECNICA",
+    "BONO2026-01": "BONO_IMPLEMENTACION_TECNICA",
+    "BONO2025-04": "BONO_MESES_EXTRA_1",
+    "BONO2026-10": "BONO_MESES_EXTRA_1",
+    "BONO2025-05": "BONO_MESES_EXTRA_2",
+    "BONO2026-02": "BONO_KIT_CORPORATIVO",
+    "BONO2025-03": "BONO_AUDITORIA_OFERTAS",
+    "BONO2025-06": "BONO_DOS_SESIONES_JAVIER",
+    "BONO2026-11": "BONO_DOS_SESIONES_JAVIER",
+    "BONO2026-08": "BONO_EDICION_VSL",
+    BONO_001: "BONO_1A1_COACH_COPY",
+  };
+  if (CODE_TO_KEY[upper]) hit.add(CODE_TO_KEY[upper]);
+
+  // La clave pasada ya puede ser canónica
+  hit.add(normalized);
+
+  // Heurísticas por nombre (tolerante a acentos/espacios)
+  const flat = raw
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+  if (flat.includes("trafficker")) hit.add("BONO_TRAFFICKER");
+  if (flat.includes("implementacion tecnica") || flat.includes("implementation tecnica"))
+    hit.add("BONO_IMPLEMENTACION_TECNICA");
+  if (flat.includes("kit corporativo")) hit.add("BONO_KIT_CORPORATIVO");
+  if (flat.includes("auditoria") && flat.includes("oferta")) hit.add("BONO_AUDITORIA_OFERTAS");
+  if (flat.includes("edicion") && flat.includes("vsl")) hit.add("BONO_EDICION_VSL");
+  if (flat.includes("sesiones") && flat.includes("javier")) hit.add("BONO_DOS_SESIONES_JAVIER");
+  if (flat.includes("2 meses extra") || flat.includes("dos meses extra"))
+    hit.add("BONO_MESES_EXTRA_2");
+  if (flat.includes("1 mes extra") || flat.includes("un mes extra"))
+    hit.add("BONO_MESES_EXTRA_1");
+
+  return Array.from(hit).filter(Boolean);
+}
+
+function collectBonusCanonicalKeys(bonuses: unknown): Set<string> {
+  const out = new Set<string>();
+  if (!Array.isArray(bonuses)) return out;
+  for (const b of bonuses) {
+    if (typeof b !== "string") continue;
+    for (const k of resolveBonoCanonicalKeys(b)) out.add(k);
+  }
+  return out;
+}
+
+/**
+ * Descripción legible de las cláusulas o efectos que cada bono introduce en
+ * el contrato. Se usa en la UI para mostrar, junto a cada bono seleccionado,
+ * qué secciones del contrato se activarán.
+ */
+const BONO_CLAUSE_EFFECTS: Record<string, string[]> = {
+  BONO_TRAFFICKER: [
+    "Agrega bullet en 2.1 (trafficker interno)",
+    "Agrega cláusula completa de SERVICIO DE MONTAJE DE CAMPAÑAS",
+  ],
+  BONO_IMPLEMENTACION_TECNICA: [
+    "Agrega cláusula completa de SERVICIO DE IMPLEMENTACIÓN TÉCNICA",
+  ],
+  BONO_MESES_EXTRA_1: [
+    "Extiende la duración del programa a 5 meses",
+    "Agrega bullet en 2.1 (1 mes extra de accesos)",
+  ],
+  BONO_MESES_EXTRA_2: [
+    "Extiende la duración del programa a 6 meses",
+    "Agrega bullet en 2.1 (2 meses extra de accesos)",
+  ],
+  BONO_KIT_CORPORATIVO: ["No agrega cláusula al contrato (solo beneficio interno)"],
+  BONO_AUDITORIA_OFERTAS: ["No agrega cláusula al contrato (solo beneficio interno)"],
+  BONO_DOS_SESIONES_JAVIER: ["No agrega cláusula al contrato (solo beneficio interno)"],
+  BONO_EDICION_VSL: ["No agrega cláusula al contrato (servicio bajo acuerdo aparte)"],
+  BONO_1A1_COACH_COPY: ["No agrega cláusula al contrato (solo beneficio interno)"],
+};
+
+export function describeBonoContractEffects(bono: string): {
+  canonicalKeys: string[];
+  effects: string[];
+} {
+  const canonicalKeys = resolveBonoCanonicalKeys(bono);
+  const effects: string[] = [];
+  for (const key of canonicalKeys) {
+    const items = BONO_CLAUSE_EFFECTS[key];
+    if (items) effects.push(...items);
+  }
+  return { canonicalKeys, effects };
+}
+
 export function applyConditionalBlocks(text: string, data: Partial<ContractData>): string {
   const mode = String(data.paymentMode ?? "").toLowerCase().trim();
   const hasReserve = !!data.reserveAmount && String(data.reserveAmount).trim() !== "";
+  const bonusesNormalized = collectBonusCanonicalKeys(data.bonuses);
 
   // Bloques [[IF:MODO==valor]] ... [[ENDIF]]
   text = text.replace(
@@ -850,6 +996,41 @@ export function applyConditionalBlocks(text: string, data: Partial<ContractData>
     /\[\[IF:TIENE_RESERVA\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
     (_, content: string) => (hasReserve ? content : ""),
   );
+
+  // Bloques [[IF:BONO:KEY]] ... [[ENDIF]]
+  text = text.replace(
+    /\[\[IF:BONO:([^\]]+)\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, condition: string, content: string) => {
+      const key = normalizeBonoKey(condition);
+      return bonusesNormalized.has(key) ? content : "";
+    },
+  );
+
+  // Auto-numeración de cláusulas opcionales:
+  //   [[CLAUSULA]]          → DECIMA TERCERA, DECIMA CUARTA, ... (anónima)
+  //   [[CLAUSULA:NOMBRE]]   → también asigna un ordinal y registra la
+  //                           referencia para poder citarla más adelante con
+  //                           [[REF:NOMBRE]] (mayúsculas) o [[REF_LOW:NOMBRE]]
+  //                           (minúsculas).
+  let clausulaIndex = 0;
+  const clausulaRefs: Record<string, string> = {};
+  text = text.replace(/\[\[CLAUSULA(?::([A-Z0-9_]+))?\]\]/g, (_, name?: string) => {
+    const ordinal =
+      CLAUSULA_ORDINALS[clausulaIndex] ||
+      `CLAUSULA ${clausulaIndex + 13}`;
+    clausulaIndex += 1;
+    if (name) clausulaRefs[name] = ordinal;
+    return ordinal;
+  });
+
+  // Resolver referencias a cláusulas numeradas
+  text = text.replace(/\[\[REF:([A-Z0-9_]+)\]\]/g, (match, name: string) => {
+    return clausulaRefs[name] ?? match;
+  });
+  text = text.replace(/\[\[REF_LOW:([A-Z0-9_]+)\]\]/g, (match, name: string) => {
+    const ordinal = clausulaRefs[name];
+    return ordinal ? ordinal.toLowerCase() : match;
+  });
 
   return text;
 }
