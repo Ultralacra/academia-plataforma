@@ -61,7 +61,8 @@ import {
   type CreateDetallePayload,
   type UpdatePaymentPayload,
 } from "./api";
-import { getAllStudentsPaged } from "../alumnos/api";
+import { getAllStudentsPaged, type StudentRow } from "../alumnos/api";
+import { getOptionBadgeClass } from "../alumnos/[code]/_parts/detail-utils";
 import { fetchUsers, type SysUser } from "../users/api";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -74,6 +75,10 @@ import {
   Check,
   X,
   Loader2,
+  Users,
+  RefreshCw,
+  ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -581,7 +586,27 @@ function PaymentsContent() {
   }, [user]);
   const canManagePayments = !isStudent;
 
-  const [activeTab, setActiveTab] = useState<"pagos" | "cuotas">("pagos");
+  const [activeTab, setActiveTab] = useState<"pagos" | "cuotas" | "sin-plan">(
+    "pagos",
+  );
+
+  // -------- Alumnos sin plan de pago --------
+  const [sinPlanLoading, setSinPlanLoading] = useState(false);
+  const [sinPlanError, setSinPlanError] = useState<string | null>(null);
+  const [sinPlanStudents, setSinPlanStudents] = useState<StudentRow[]>([]);
+  const [sinPlanLoadedAt, setSinPlanLoadedAt] = useState<number | null>(null);
+  const [sinPlanProgress, setSinPlanProgress] = useState<{
+    stage: "payments" | "students" | "done" | null;
+    fetched: number;
+    total: number | null;
+  }>({ stage: null, fetched: 0, total: null });
+  const [sinPlanSearch, setSinPlanSearch] = useState<string>("");
+  const [sinPlanStats, setSinPlanStats] = useState<{
+    totalStudents: number;
+    withPlan: number;
+    withoutPlan: number;
+  }>({ totalStudents: 0, withPlan: 0, withoutPlan: 0 });
+  const sinPlanReqIdRef = useRef(0);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -864,6 +889,86 @@ function PaymentsContent() {
       if (studentStatesReqIdRef.current === reqId) {
         setStudentStatesLoading(false);
       }
+    }
+  }
+
+  async function loadSinPlan() {
+    const reqId = ++sinPlanReqIdRef.current;
+    setSinPlanLoading(true);
+    setSinPlanError(null);
+    setSinPlanProgress({ stage: "payments", fetched: 0, total: null });
+
+    try {
+      // 1) Recorrer todos los pagos para obtener el set de cliente_codigo con plan.
+      const codesWithPlan = new Set<string>();
+      const PAYMENTS_PAGE_SIZE = 200;
+      let currentPage = 1;
+      let totalPages = 1;
+
+      do {
+        const envelope = await getPayments({
+          page: currentPage,
+          pageSize: PAYMENTS_PAGE_SIZE,
+        });
+        if (sinPlanReqIdRef.current !== reqId) return;
+
+        const data = Array.isArray(envelope?.data) ? envelope.data : [];
+        for (const row of data) {
+          const code = String(row?.cliente_codigo ?? "").trim();
+          if (code) codesWithPlan.add(code.toLowerCase());
+        }
+
+        totalPages = Math.max(1, Number(envelope?.totalPages ?? 1) || 1);
+        setSinPlanProgress({
+          stage: "payments",
+          fetched: currentPage,
+          total: totalPages,
+        });
+        currentPage += 1;
+      } while (currentPage <= totalPages);
+
+      if (sinPlanReqIdRef.current !== reqId) return;
+
+      // 2) Traer todos los alumnos.
+      setSinPlanProgress({ stage: "students", fetched: 0, total: null });
+      const studentsRes = await getAllStudentsPaged({
+        page: 1,
+        pageSize: 1000,
+      });
+      if (sinPlanReqIdRef.current !== reqId) return;
+
+      const allStudents = Array.isArray(studentsRes?.items)
+        ? studentsRes.items
+        : [];
+
+      // 3) Filtrar los que no tengan plan.
+      const without = allStudents.filter((s) => {
+        const code = String(s?.code ?? "")
+          .trim()
+          .toLowerCase();
+        if (!code) return true; // sin código, considerar sin plan
+        return !codesWithPlan.has(code);
+      });
+
+      setSinPlanStudents(without);
+      setSinPlanStats({
+        totalStudents: allStudents.length,
+        withPlan: allStudents.length - without.length,
+        withoutPlan: without.length,
+      });
+      setSinPlanLoadedAt(Date.now());
+      setSinPlanProgress({
+        stage: "done",
+        fetched: allStudents.length,
+        total: allStudents.length,
+      });
+    } catch (e: any) {
+      if (sinPlanReqIdRef.current !== reqId) return;
+      setSinPlanError(
+        e?.message || "No se pudieron cargar los alumnos sin plan",
+      );
+    } finally {
+      if (sinPlanReqIdRef.current === reqId) setSinPlanLoading(false);
     }
   }
 
@@ -2021,6 +2126,14 @@ function PaymentsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab !== "sin-plan") return;
+    if (isStudent) return;
+    if (sinPlanLoadedAt) return;
+    void loadSinPlan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isStudent]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -2040,7 +2153,9 @@ function PaymentsContent() {
         onValueChange={(v) => setActiveTab((v as any) || "pagos")}
         className="space-y-4"
       >
-        <TabsList className="grid h-10 w-full max-w-md grid-cols-2 items-center rounded-xl border bg-muted/40 p-1">
+        <TabsList
+          className={`grid h-10 w-full ${isStudent ? "max-w-md grid-cols-1" : "max-w-2xl grid-cols-3"} items-center rounded-xl border bg-muted/40 p-1`}
+        >
           <TabsTrigger
             value="pagos"
             className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
@@ -2048,12 +2163,20 @@ function PaymentsContent() {
             Pagos
           </TabsTrigger>
           {!isStudent ? (
-            <TabsTrigger
-              value="cuotas"
-              className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
-            >
-              Cuotas por vencer
-            </TabsTrigger>
+            <>
+              <TabsTrigger
+                value="cuotas"
+                className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                Cuotas por vencer
+              </TabsTrigger>
+              <TabsTrigger
+                value="sin-plan"
+                className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                Sin plan de pago
+              </TabsTrigger>
+            </>
           ) : null}
         </TabsList>
 
@@ -2852,6 +2975,258 @@ function PaymentsContent() {
                           </TableRow>
                         );
                       })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </TabsContent>
+        ) : null}
+
+        {!isStudent ? (
+          <TabsContent value="sin-plan" className="space-y-4">
+            <div className="rounded-lg border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold">
+                      Alumnos sin plan de pago
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Se cruzan todos los pagos existentes contra la lista de
+                      alumnos para detectar quienes aún no tienen ningún plan
+                      creado (sin coincidencia de <code>cliente_codigo</code>).
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={sinPlanLoading}
+                  onClick={() => {
+                    setSinPlanLoadedAt(null);
+                    void loadSinPlan();
+                  }}
+                >
+                  {sinPlanLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  Recargar
+                </Button>
+              </div>
+
+              {sinPlanLoading ? (
+                <div className="mt-3 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  {sinPlanProgress.stage === "payments" ? (
+                    <>
+                      Recorriendo pagos… página {sinPlanProgress.fetched}
+                      {sinPlanProgress.total
+                        ? ` de ${sinPlanProgress.total}`
+                        : ""}
+                    </>
+                  ) : sinPlanProgress.stage === "students" ? (
+                    <>Consultando alumnos…</>
+                  ) : (
+                    <>Preparando datos…</>
+                  )}
+                </div>
+              ) : null}
+
+              {sinPlanError ? (
+                <div className="mt-3">
+                  <Alert variant="destructive">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{sinPlanError}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : null}
+
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Total alumnos
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {sinPlanLoading && !sinPlanLoadedAt
+                      ? "…"
+                      : sinPlanStats.totalStudents}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Con plan de pago
+                  </div>
+                  <div className="text-sm font-semibold text-emerald-700">
+                    {sinPlanLoading && !sinPlanLoadedAt
+                      ? "…"
+                      : sinPlanStats.withPlan}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Sin plan de pago
+                  </div>
+                  <div className="text-sm font-semibold text-amber-700">
+                    {sinPlanLoading && !sinPlanLoadedAt
+                      ? "…"
+                      : sinPlanStats.withoutPlan}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-card">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  Listado
+                </div>
+                <div className="w-full max-w-xs">
+                  <Input
+                    placeholder="Filtrar por nombre o código…"
+                    value={sinPlanSearch}
+                    onChange={(e) => setSinPlanSearch(e.target.value)}
+                    disabled={sinPlanLoading && !sinPlanLoadedAt}
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Alumno</TableHead>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Etapa</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sinPlanLoading && !sinPlanLoadedAt ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="py-8 text-center text-sm text-muted-foreground"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Cargando alumnos sin plan…
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (() => {
+                        const q = sinPlanSearch.trim().toLowerCase();
+                        const filtered = q
+                          ? sinPlanStudents.filter((s) => {
+                              const name = String(s?.name ?? "").toLowerCase();
+                              const code = String(s?.code ?? "").toLowerCase();
+                              return name.includes(q) || code.includes(q);
+                            })
+                          : sinPlanStudents;
+
+                        if (!filtered.length) {
+                          return (
+                            <TableRow>
+                              <TableCell
+                                colSpan={5}
+                                className="py-8 text-center text-sm text-muted-foreground"
+                              >
+                                {sinPlanLoadedAt
+                                  ? q
+                                    ? "No hay coincidencias para el filtro."
+                                    : "Todos los alumnos tienen plan de pago."
+                                  : "Aún no se han cargado datos."}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
+
+                        return filtered.map((s) => {
+                          const code = String(s?.code ?? "").trim();
+                          return (
+                            <TableRow key={s.id}>
+                              <TableCell className="font-medium">
+                                {s.name || "—"}
+                              </TableCell>
+                              <TableCell>
+                                {code ? (
+                                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                                    {code}
+                                  </code>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {s.state ? (
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${getOptionBadgeClass(
+                                      "estado",
+                                      s.state,
+                                    )}`}
+                                  >
+                                    {s.state}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {s.stage ? (
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${getOptionBadgeClass(
+                                      "etapa",
+                                      s.stage,
+                                    )}`}
+                                  >
+                                    {s.stage}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {code ? (
+                                  <div className="inline-flex items-center gap-2">
+                                    <Button asChild size="sm" variant="outline">
+                                      <Link
+                                        href={`/admin/alumnos/${encodeURIComponent(code)}/pagos`}
+                                      >
+                                        <CreditCard className="mr-1.5 h-3.5 w-3.5" />
+                                        Crear plan
+                                      </Link>
+                                    </Button>
+                                    <Button asChild size="sm" variant="ghost">
+                                      <Link
+                                        href={`/admin/alumnos/${encodeURIComponent(code)}`}
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                      </Link>
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    Sin código
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        });
+                      })()
                     )}
                   </TableBody>
                 </Table>
