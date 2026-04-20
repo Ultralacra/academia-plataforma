@@ -269,17 +269,112 @@ function FancySelect({
   );
 }
 
-function CoachSelect({
-  value,
+function FancyMultiSelect({
+  values,
+  onChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  emptyLabel,
+  allValue = "all",
+}: {
+  values: string[];
+  onChange: (v: string[]) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyLabel: string;
+  allValue?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const isAll =
+    values.length === 0 || (values.length === 1 && values[0] === allValue);
+  const selectedLabels = options
+    .filter((o) => o.value !== allValue && values.includes(o.value))
+    .map((o) => o.label);
+
+  const displayText = isAll
+    ? placeholder
+    : selectedLabels.length <= 2
+      ? selectedLabels.join(", ")
+      : `${selectedLabels.slice(0, 2).join(", ")} +${selectedLabels.length - 2}`;
+
+  function toggle(val: string) {
+    if (val === allValue) {
+      onChange([allValue]);
+      return;
+    }
+    const current = values.filter((v) => v !== allValue);
+    const next = current.includes(val)
+      ? current.filter((v) => v !== val)
+      : [...current, val];
+    onChange(next.length === 0 ? [allValue] : next);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50/70 px-3 text-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100">
+          <span className="truncate text-left">{displayText}</span>
+          <div className="flex items-center gap-1.5">
+            {!isAll && (
+              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-violet-100 px-1.5 text-[11px] font-semibold text-violet-700">
+                {selectedLabels.length}
+              </span>
+            )}
+            <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+          </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandList>
+            <CommandEmpty>{emptyLabel}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => {
+                const checked =
+                  option.value === allValue
+                    ? isAll
+                    : values.includes(option.value);
+                return (
+                  <CommandItem
+                    key={option.value}
+                    value={`${option.label} ${option.value}`}
+                    onSelect={() => toggle(option.value)}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate">{option.label}</span>
+                    <Check
+                      className={`h-4 w-4 ${checked ? "opacity-100" : "opacity-0"}`}
+                    />
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CoachMultiSelect({
+  values,
   onChange,
   coaches,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  values: string[];
+  onChange: (v: string[]) => void;
   coaches: CoachItem[];
 }) {
   const [open, setOpen] = useState(false);
-  const selected = coaches.find((coach) => coach.codigo === value) ?? null;
+  const isAll =
+    values.length === 0 || (values.length === 1 && values[0] === "all");
+  const selectedCoaches = coaches.filter((c) => values.includes(c.codigo));
   const grouped = coaches.reduce<Record<string, CoachItem[]>>((acc, coach) => {
     const area = String(coach.area || coach.puesto || "Sin area").trim();
     if (!acc[area]) acc[area] = [];
@@ -291,27 +386,53 @@ function CoachSelect({
     a.localeCompare(b, "es", { sensitivity: "base" }),
   );
 
+  const displayText = isAll
+    ? "Todos los coaches"
+    : selectedCoaches.length <= 2
+      ? selectedCoaches.map((c) => c.nombre).join(", ")
+      : `${selectedCoaches
+          .slice(0, 2)
+          .map((c) => c.nombre)
+          .join(", ")} +${selectedCoaches.length - 2}`;
+
+  function toggle(codigo: string) {
+    if (codigo === "all") {
+      onChange(["all"]);
+      return;
+    }
+    const current = values.filter((v) => v !== "all");
+    const next = current.includes(codigo)
+      ? current.filter((v) => v !== codigo)
+      : [...current, codigo];
+    onChange(next.length === 0 ? ["all"] : next);
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button className="flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gradient-to-r from-white to-slate-50 px-3 text-sm transition hover:border-sky-200 hover:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100">
           <div className="flex min-w-0 items-center gap-2">
-            {selected?.area ? (
+            {!isAll &&
+            selectedCoaches.length === 1 &&
+            selectedCoaches[0]?.area ? (
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${areaChipClass(
-                  selected.area,
+                  selectedCoaches[0].area,
                 )}`}
               >
-                {selected.area}
+                {selectedCoaches[0].area}
               </span>
             ) : null}
-            <span className="truncate text-left">
-              {selected
-                ? `${selected.nombre}${selected.puesto ? ` · ${selected.puesto}` : ""}`
-                : "Todos los coaches"}
-            </span>
+            <span className="truncate text-left">{displayText}</span>
           </div>
-          <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+          <div className="flex items-center gap-1.5">
+            {!isAll && (
+              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sky-100 px-1.5 text-[11px] font-semibold text-sky-700">
+                {selectedCoaches.length}
+              </span>
+            )}
+            <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+          </div>
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -325,15 +446,12 @@ function CoachSelect({
             <CommandGroup>
               <CommandItem
                 value="Todos los coaches"
-                onSelect={() => {
-                  onChange("all");
-                  setOpen(false);
-                }}
+                onSelect={() => toggle("all")}
                 className="flex items-center justify-between gap-2"
               >
                 <span>Todos los coaches</span>
                 <Check
-                  className={`h-4 w-4 ${value === "all" ? "opacity-100" : "opacity-0"}`}
+                  className={`h-4 w-4 ${isAll ? "opacity-100" : "opacity-0"}`}
                 />
               </CommandItem>
             </CommandGroup>
@@ -354,10 +472,7 @@ function CoachSelect({
                     <CommandItem
                       key={coach.codigo}
                       value={`${coach.nombre} ${coach.puesto || ""} ${coach.area || ""} ${coach.codigo}`}
-                      onSelect={() => {
-                        onChange(coach.codigo);
-                        setOpen(false);
-                      }}
+                      onSelect={() => toggle(coach.codigo)}
                       className="flex items-center justify-between gap-3 py-2"
                     >
                       <div className="flex min-w-0 items-center gap-2">
@@ -379,7 +494,9 @@ function CoachSelect({
                       </div>
                       <Check
                         className={`h-4 w-4 ${
-                          coach.codigo === value ? "opacity-100" : "opacity-0"
+                          values.includes(coach.codigo)
+                            ? "opacity-100"
+                            : "opacity-0"
                         }`}
                       />
                     </CommandItem>
@@ -486,9 +603,9 @@ export default function TicketsContent() {
   // Filtros
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<string>("all");
-  const [tipo, setTipo] = useState<string>("all");
-  const [coachFiltro, setCoachFiltro] = useState<string>("all");
-  const [informanteFiltro, setInformanteFiltro] = useState<string>("all");
+  const [tipo, setTipo] = useState<string[]>(["all"]);
+  const [coachFiltro, setCoachFiltro] = useState<string[]>(["all"]);
+  const [informanteFiltro, setInformanteFiltro] = useState<string[]>(["all"]);
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
   // Por defecto: desde el primer día del mes actual hasta hoy
   const [fechaDesde, setFechaDesde] = useState<string>(
@@ -555,6 +672,15 @@ export default function TicketsContent() {
   }, []);
 
   // Filtros cliente
+  const isCoachAll =
+    coachFiltro.length === 0 ||
+    (coachFiltro.length === 1 && coachFiltro[0] === "all");
+  const isTipoAll =
+    tipo.length === 0 || (tipo.length === 1 && tipo[0] === "all");
+  const isInfAll =
+    informanteFiltro.length === 0 ||
+    (informanteFiltro.length === 1 && informanteFiltro[0] === "all");
+
   const filtered: Ticket[] = useMemo(() => {
     const base = allTickets ?? [];
     let items = base;
@@ -563,9 +689,11 @@ export default function TicketsContent() {
       const e = estado.toLowerCase();
       items = items.filter((i) => (i.estado ?? "").toLowerCase() === e);
     }
-    if (tipo !== "all") {
-      const tp = tipo.toLowerCase();
-      items = items.filter((i) => (i.tipo ?? "").toLowerCase() === tp);
+    if (!isTipoAll) {
+      const tipoSet = new Set(
+        tipo.filter((t) => t !== "all").map((t) => t.toLowerCase()),
+      );
+      items = items.filter((i) => tipoSet.has((i.tipo ?? "").toLowerCase()));
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -582,34 +710,49 @@ export default function TicketsContent() {
           .includes(q),
       );
     }
-    if (coachFiltro !== "all") {
-      const coachSel = coaches.find((c) => c.codigo === coachFiltro);
-      const coachSelName = normText(coachSel?.nombre ?? "");
+    if (!isCoachAll) {
+      const coachCodigos = new Set(coachFiltro.filter((v) => v !== "all"));
+      const coachNames = new Set(
+        coaches
+          .filter((c) => coachCodigos.has(c.codigo))
+          .map((c) => normText(c.nombre))
+          .filter(Boolean),
+      );
       items = items.filter((i) => {
         const coachesArr = Array.isArray(i.coaches) ? i.coaches : [];
-        const hasCoachAssigned = coachesArr.some(
-          (c) => String(c.codigo_equipo ?? "").trim() === coachFiltro,
+        const hasCoachAssigned = coachesArr.some((c) =>
+          coachCodigos.has(String(c.codigo_equipo ?? "").trim()),
         );
 
         if (hasCoachAssigned) return true;
 
         const infCode = String(i.informante ?? "").trim();
         const infName = normText(i.informante_nombre);
-        const byInformanteCode = infCode === coachFiltro;
-        const byInformanteName = !!coachSelName && infName === coachSelName;
+        const byInformanteCode = coachCodigos.has(infCode);
+        const byInformanteName = coachNames.has(infName);
 
         return byInformanteCode || byInformanteName;
       });
     }
 
-    if (informanteFiltro !== "all") {
-      if (informanteFiltro.startsWith("code:")) {
-        const code = informanteFiltro.slice(5);
-        items = items.filter((i) => String(i.informante ?? "").trim() === code);
-      } else if (informanteFiltro.startsWith("name:")) {
-        const nameKey = informanteFiltro.slice(5);
-        items = items.filter((i) => normText(i.informante_nombre) === nameKey);
-      }
+    if (!isInfAll) {
+      const infValues = informanteFiltro.filter((v) => v !== "all");
+      const infCodes = new Set(
+        infValues.filter((v) => v.startsWith("code:")).map((v) => v.slice(5)),
+      );
+      const infNames = new Set(
+        infValues.filter((v) => v.startsWith("name:")).map((v) => v.slice(5)),
+      );
+      items = items.filter((i) => {
+        if (
+          infCodes.size > 0 &&
+          infCodes.has(String(i.informante ?? "").trim())
+        )
+          return true;
+        if (infNames.size > 0 && infNames.has(normText(i.informante_nombre)))
+          return true;
+        return false;
+      });
     }
 
     return items;
@@ -617,10 +760,13 @@ export default function TicketsContent() {
     allTickets,
     estado,
     tipo,
+    isTipoAll,
     search,
     coachFiltro,
+    isCoachAll,
     coaches,
     informanteFiltro,
+    isInfAll,
   ]);
 
   // Opciones dinámicas
@@ -674,8 +820,11 @@ export default function TicketsContent() {
   }, [allTickets]);
 
   const selectedCoach = useMemo(
-    () => coaches.find((c) => c.codigo === coachFiltro) ?? null,
-    [coaches, coachFiltro],
+    () =>
+      !isCoachAll && coachFiltro.length === 1
+        ? (coaches.find((c) => c.codigo === coachFiltro[0]) ?? null)
+        : null,
+    [coaches, coachFiltro, isCoachAll],
   );
 
   // 📊 NUEVO: métricas completas
@@ -790,11 +939,26 @@ export default function TicketsContent() {
         filtro: "Estado",
         valor: estado === "all" ? "Todos" : estado.toUpperCase(),
       },
-      { filtro: "Tipo", valor: tipo === "all" ? "Todos" : tipo.toUpperCase() },
-      { filtro: "Coach", valor: coachFiltro === "all" ? "Todos" : coachFiltro },
+      {
+        filtro: "Tipo",
+        valor: isTipoAll
+          ? "Todos"
+          : tipo
+              .filter((t) => t !== "all")
+              .map((t) => t.toUpperCase())
+              .join(", "),
+      },
+      {
+        filtro: "Coach",
+        valor: isCoachAll
+          ? "Todos"
+          : coachFiltro.filter((v) => v !== "all").join(", "),
+      },
       {
         filtro: "Informante",
-        valor: informanteFiltro === "all" ? "Todos" : informanteFiltro,
+        valor: isInfAll
+          ? "Todos"
+          : informanteFiltro.filter((v) => v !== "all").join(", "),
       },
       { filtro: "Fecha desde", valor: fechaDesde || "-" },
       { filtro: "Fecha hasta", valor: fechaHasta || "-" },
@@ -1004,8 +1168,8 @@ export default function TicketsContent() {
                 />
               </div>
               <div className="md:col-span-2">
-                <FancySelect
-                  value={tipo}
+                <FancyMultiSelect
+                  values={tipo}
                   onChange={(v) => {
                     setPage(1);
                     setTipo(v);
@@ -1020,8 +1184,8 @@ export default function TicketsContent() {
                 />
               </div>
               <div className="md:col-span-2">
-                <CoachSelect
-                  value={coachFiltro}
+                <CoachMultiSelect
+                  values={coachFiltro}
                   onChange={(v) => {
                     setPage(1);
                     setCoachFiltro(v);
@@ -1030,8 +1194,8 @@ export default function TicketsContent() {
                 />
               </div>
               <div className="md:col-span-2">
-                <FancySelect
-                  value={informanteFiltro}
+                <FancyMultiSelect
+                  values={informanteFiltro}
                   onChange={(v) => {
                     setPage(1);
                     setInformanteFiltro(v);
@@ -1080,7 +1244,7 @@ export default function TicketsContent() {
         <KPIs metrics={metrics} loading={loading} />
 
         {/* Métricas completas por coach (solo cuando se filtra un coach específico) */}
-        {coachFiltro !== "all" && selectedCoach && (
+        {!isCoachAll && selectedCoach && (
           <Card>
             <CardHeader
               title={`Métricas completas · ${selectedCoach.nombre}`}
