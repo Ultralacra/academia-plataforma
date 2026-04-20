@@ -63,6 +63,7 @@ export type Ticket = {
   id_externo?: string | null;
   nombre?: string | null;
   alumno_nombre?: string | null;
+  id_alumno?: string | null;
   informante?: string | null;
   informante_nombre?: string | null;
   estado?: string | null;
@@ -519,6 +520,7 @@ export async function getTickets(opts: {
     id_externo: r.id_externo ?? r.external_id ?? r.codigo ?? null,
     nombre: r.nombre ?? r.subject ?? null,
     alumno_nombre: r.alumno_nombre ?? r.client_name ?? null,
+    id_alumno: r.id_alumno ?? r.alumno_id ?? r.client_id ?? r.codigo_alumno ?? null,
     informante: r.informante ?? r.informado_por ?? r.created_by ?? null,
     informante_nombre: r.informante_nombre ?? r.informado_por_nombre ?? r.created_by_name ?? null,
     estado: r.estado ?? r.status ?? null,

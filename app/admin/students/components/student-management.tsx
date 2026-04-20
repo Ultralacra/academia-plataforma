@@ -35,6 +35,7 @@ import {
   type LifecycleItem,
 } from "./phase-faker";
 import { fetchCoaches, getDefaultRange, type CoachOpt } from "./api";
+import { getCoachStudentsByCoachId } from "@/app/admin/alumnos/api";
 
 export default function StudentManagement() {
   // ============================ Server filters + fetch
@@ -47,6 +48,13 @@ export default function StudentManagement() {
   const [metricsCoach, setMetricsCoach] = useState("");
   const [coaches, setCoaches] = useState<CoachOpt[]>([]);
   const [loadingMetricsCoaches, setLoadingMetricsCoaches] = useState(false);
+  // Alumnos pertenecientes al coach seleccionado (null = sin filtro).
+  // Se usa para filtrar localmente allItems y que tortas/tabla/byJoinDate
+  // reflejen el mismo universo que el resto de widgets de métricas.
+  const [coachAlumnoCodes, setCoachAlumnoCodes] = useState<Set<string> | null>(
+    null,
+  );
+  const [loadingCoachAlumnos, setLoadingCoachAlumnos] = useState(false);
   // notas: filtros por mes/fechas eliminados de la UI; solo busqueda por texto
 
   useEffect(() => {
@@ -86,6 +94,39 @@ export default function StudentManagement() {
     }, 400);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Cuando se selecciona un coach, traemos la lista de codigos de alumnos
+  // relacionados para filtrar allItems localmente. Si se limpia, quitamos el filtro.
+  useEffect(() => {
+    let ignore = false;
+    if (!metricsCoach) {
+      setCoachAlumnoCodes(null);
+      setLoadingCoachAlumnos(false);
+      return;
+    }
+    (async () => {
+      setLoadingCoachAlumnos(true);
+      try {
+        const rows = await getCoachStudentsByCoachId(metricsCoach);
+        if (ignore) return;
+        const set = new Set<string>();
+        rows.forEach((r) => {
+          const code = String(r.alumno ?? "").trim();
+          if (code) set.add(code);
+        });
+        setCoachAlumnoCodes(set);
+        setPage(1);
+      } catch (e) {
+        console.error("[students] getCoachStudentsByCoachId error", e);
+        if (!ignore) setCoachAlumnoCodes(new Set());
+      } finally {
+        if (!ignore) setLoadingCoachAlumnos(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [metricsCoach]);
 
   // ============================ Client filters
   const [statesFilter, setStatesFilter] = useState<string[]>([]);
@@ -141,7 +182,11 @@ export default function StudentManagement() {
           : (fromN === null || inact >= fromN) &&
             (toN === null || inact <= toN);
 
-      return okState && okStage && okLastFrom && okLastTo && okInact;
+      const okCoach =
+        !coachAlumnoCodes ||
+        (i.code ? coachAlumnoCodes.has(String(i.code).trim()) : false);
+
+      return okState && okStage && okLastFrom && okLastTo && okInact && okCoach;
     });
   }, [
     allItems,
@@ -151,6 +196,7 @@ export default function StudentManagement() {
     lastTo,
     inactFrom,
     inactTo,
+    coachAlumnoCodes,
   ]);
 
   const abandonosPorInactividad = useMemo(() => {
@@ -895,7 +941,7 @@ export default function StudentManagement() {
           />
 
           <ChartsSection
-            loading={loading}
+            loading={loading || loadingCoachAlumnos}
             distByState={distByState}
             distByStage={distByStage}
             byJoinDate={byJoinDate}
@@ -907,7 +953,7 @@ export default function StudentManagement() {
           />
 
           <ResultsTable
-            loading={loading}
+            loading={loading || loadingCoachAlumnos}
             pageItems={pageItems}
             totalFiltered={totalFiltered}
             page={page}

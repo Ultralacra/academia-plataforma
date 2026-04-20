@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type Ticket, type Team } from "@/lib/data-service";
+import type { ClientItem } from "@/lib/data-service";
 import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 import {
   Dialog,
@@ -43,6 +44,7 @@ import { computeTicketMetrics, type TicketsMetrics } from "./metrics";
 import TicketsSummaryCard from "./tickets-summary-card";
 import PersonalMetrics from "@/app/admin/teamsv2/PersonalMetrics";
 import { exportTicketsDashboardExcel } from "./export-tickets-dashboard";
+import TicketsByPhase from "./tickets-by-phase";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -599,6 +601,8 @@ export default function TicketsContent() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  // Alumnos para mapear ticket -> etapa (se usa en TicketsByPhase)
+  const [students, setStudents] = useState<ClientItem[]>([]);
 
   // Filtros
   const [search, setSearch] = useState("");
@@ -664,6 +668,23 @@ export default function TicketsContent() {
         if (mounted) setCoaches(list);
       } catch {
         if (mounted) setCoaches([]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Cargar alumnos (una sola vez) para mapear ticket -> etapa
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await dataService.getClients({ pageSize: 1000 });
+        if (mounted) setStudents(res.items ?? []);
+      } catch (e) {
+        console.error("[tickets] getClients error", e);
+        if (mounted) setStudents([]);
       }
     })();
     return () => {
@@ -1264,6 +1285,13 @@ export default function TicketsContent() {
 
         {/* Resumen adicional (por alumno/tipo) */}
         <TicketsSummaryCard tickets={filtered} metrics={metrics} />
+
+        {/* Tickets por fase (usa alumnos para mapear etapa) */}
+        <TicketsByPhase
+          tickets={filtered}
+          students={students}
+          loading={loading}
+        />
 
         {/* Gráficas */}
         <Charts ticketsPorDia={ticketsPorDia} tickets={filtered} />
