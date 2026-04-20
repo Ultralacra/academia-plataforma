@@ -1854,27 +1854,27 @@ function ContractActionsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="actions" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="flex h-auto w-full items-center justify-start gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
             <TabsTrigger
               value="actions"
-              className="flex items-center gap-1.5 text-xs sm:text-sm"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs sm:text-sm"
             >
               <Settings2 className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Acciones</span>
+              <span>Acciones</span>
             </TabsTrigger>
             <TabsTrigger
               value="payment"
-              className="flex items-center gap-1.5 text-xs sm:text-sm"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs sm:text-sm"
             >
               <CreditCard className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Pago</span>
+              <span>Pago</span>
             </TabsTrigger>
             <TabsTrigger
               value="tracking"
-              className="flex items-center gap-1.5 text-xs sm:text-sm"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs sm:text-sm"
             >
               <ListChecks className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Seguimiento</span>
+              <span>Seguimiento</span>
             </TabsTrigger>
           </TabsList>
 
@@ -2281,7 +2281,7 @@ function TrackingPanel({
       />
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-slate-900">Resumen</h3>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2">
           <SummaryPill
             label={
               tracking.accountStatus === "exists"

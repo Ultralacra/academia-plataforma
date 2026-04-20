@@ -184,6 +184,10 @@ function getMonthRange(month: string) {
   return { fechaDesde, fechaHasta, start, end };
 }
 
+function makeDateRangeKey(fechaDesde: string, fechaHasta: string) {
+  return `${String(fechaDesde || "").trim()}|${String(fechaHasta || "").trim()}`;
+}
+
 function startOfDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -686,12 +690,17 @@ function PaymentsContent() {
 
   // Cuotas por vencer (endpoint paginado por rango)
   const CUOTAS_PAGE_SIZE = 50;
-  const [cuotasMonth, setCuotasMonth] = useState<string>(() =>
-    getMonthValue(new Date()),
-  );
-  const [cuotasLoadedMonth, setCuotasLoadedMonth] = useState<string | null>(
-    null,
-  );
+  const [cuotasFechaDesde, setCuotasFechaDesde] = useState<string>(() => {
+    const currentMonth = getMonthRange(getMonthValue(new Date()));
+    return currentMonth?.fechaDesde ?? "";
+  });
+  const [cuotasFechaHasta, setCuotasFechaHasta] = useState<string>(() => {
+    const currentMonth = getMonthRange(getMonthValue(new Date()));
+    return currentMonth?.fechaHasta ?? "";
+  });
+  const [cuotasLoadedRangeKey, setCuotasLoadedRangeKey] = useState<
+    string | null
+  >(null);
   const [cuotasRows, setCuotasRows] = useState<PaymentCuotaRow[]>([]);
   const [cuotasStatusFilter, setCuotasStatusFilter] = useState<string>("todos");
   const [paymentsStudentFilter, setPaymentsStudentFilter] =
@@ -817,6 +826,54 @@ function PaymentsContent() {
     toast({
       title: "Exportación lista",
       description: `Se exportaron ${data.length} cuotas filtradas.`,
+    });
+  }
+
+  const filteredSinPlanStudents = useMemo(() => {
+    const q = sinPlanSearch.trim().toLowerCase();
+    if (!q) return sinPlanStudents;
+    return sinPlanStudents.filter((s) => {
+      const name = String(s?.name ?? "").toLowerCase();
+      const code = String(s?.code ?? "").toLowerCase();
+      return name.includes(q) || code.includes(q);
+    });
+  }, [sinPlanSearch, sinPlanStudents]);
+
+  function exportSinPlan(format: "csv" | "xlsx") {
+    if (!filteredSinPlanStudents.length) {
+      toast({
+        title: "Sin datos",
+        description:
+          "No hay alumnos sin plan para exportar con el filtro actual.",
+      });
+      return;
+    }
+
+    const data = filteredSinPlanStudents.map((student) => ({
+      alumno: fixMojibake(student?.name || ""),
+      codigo: String(student?.code ?? "").trim(),
+      estado: student?.state || "",
+      etapa: student?.stage || "",
+    }));
+
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    if (format === "csv") {
+      const csv = buildCsv(data);
+      triggerDownload(
+        `alumnos-sin-plan-${stamp}.csv`,
+        csv,
+        "text/csv;charset=utf-8;",
+      );
+    } else {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Sin plan");
+      XLSX.writeFile(wb, `alumnos-sin-plan-${stamp}.xlsx`);
+    }
+
+    toast({
+      title: "Exportación lista",
+      description: `Se exportaron ${data.length} alumnos sin plan.`,
     });
   }
 
@@ -973,9 +1030,16 @@ function PaymentsContent() {
   }
 
   async function loadCuotas(opts: { page: number; append?: boolean }) {
-    const range = getMonthRange(cuotasMonth);
-    if (!range) {
-      setCuotasError("Selecciona un mes válido");
+    const fechaDesde = String(cuotasFechaDesde || "").trim();
+    const fechaHasta = String(cuotasFechaHasta || "").trim();
+
+    if (!fechaDesde || !fechaHasta) {
+      setCuotasError("Selecciona un rango de fechas válido");
+      return;
+    }
+
+    if (fechaDesde > fechaHasta) {
+      setCuotasError("La fecha desde no puede ser mayor que la fecha hasta");
       return;
     }
 
@@ -984,8 +1048,8 @@ function PaymentsContent() {
     setCuotasError(null);
     try {
       const json = await getPaymentCuotas({
-        fechaDesde: range.fechaDesde,
-        fechaHasta: range.fechaHasta,
+        fechaDesde,
+        fechaHasta,
         page: opts.page,
         pageSize: CUOTAS_PAGE_SIZE,
       });
@@ -1009,7 +1073,7 @@ function PaymentsContent() {
       setCuotasPage(Number(json?.page ?? opts.page) || opts.page);
       setCuotasTotalPages(Number(json?.totalPages ?? 1) || 1);
       setCuotasTotal(filtered.length);
-      setCuotasLoadedMonth(cuotasMonth);
+      setCuotasLoadedRangeKey(makeDateRangeKey(fechaDesde, fechaHasta));
     } catch (e: any) {
       if (cuotasReqIdRef.current !== reqId) return;
       setCuotasError(e?.message || "No se pudieron cargar las cuotas");
@@ -2121,10 +2185,11 @@ function PaymentsContent() {
 
   useEffect(() => {
     if (activeTab !== "cuotas") return;
-    if (cuotasLoadedMonth === cuotasMonth) return;
+    const nextRangeKey = makeDateRangeKey(cuotasFechaDesde, cuotasFechaHasta);
+    if (cuotasLoadedRangeKey === nextRangeKey) return;
     void loadCuotas({ page: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, cuotasFechaDesde, cuotasFechaHasta, cuotasLoadedRangeKey]);
 
   useEffect(() => {
     if (activeTab !== "sin-plan") return;
@@ -2699,17 +2764,33 @@ function PaymentsContent() {
         {!isStudent ? (
           <TabsContent value="cuotas" className="space-y-4">
             <div className="rounded-lg border bg-card p-4">
-              <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto] lg:items-end">
+              <div className="grid gap-3 lg:grid-cols-[minmax(160px,1fr)_minmax(160px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto] lg:items-end">
                 <div className="grid gap-1">
-                  <Label>Mes</Label>
+                  <Label>Fecha desde</Label>
                   <Input
-                    type="month"
-                    value={cuotasMonth}
+                    type="date"
+                    value={cuotasFechaDesde}
                     onChange={(e) => {
-                      const next = e.target.value;
-                      setCuotasMonth(next);
+                      setCuotasFechaDesde(e.target.value);
                       setCuotasStatusFilter("todos");
-                      setCuotasLoadedMonth(null);
+                      setCuotasLoadedRangeKey(null);
+                      setCuotasRows([]);
+                      setCuotasPage(1);
+                      setCuotasTotalPages(1);
+                      setCuotasTotal(0);
+                      setCuotasError(null);
+                    }}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label>Fecha hasta</Label>
+                  <Input
+                    type="date"
+                    value={cuotasFechaHasta}
+                    onChange={(e) => {
+                      setCuotasFechaHasta(e.target.value);
+                      setCuotasStatusFilter("todos");
+                      setCuotasLoadedRangeKey(null);
                       setCuotasRows([]);
                       setCuotasPage(1);
                       setCuotasTotalPages(1);
@@ -2775,11 +2856,9 @@ function PaymentsContent() {
               </div>
 
               <div className="mt-2 text-xs text-muted-foreground">
-                {getMonthRange(cuotasMonth)
-                  ? `Rango: ${getMonthRange(cuotasMonth)!.fechaDesde} → ${
-                      getMonthRange(cuotasMonth)!.fechaHasta
-                    }`
-                  : "Selecciona un mes válido"}
+                {cuotasFechaDesde && cuotasFechaHasta
+                  ? `Rango: ${cuotasFechaDesde} → ${cuotasFechaHasta}`
+                  : "Selecciona un rango válido"}
               </div>
 
               {cuotasError ? (
@@ -3086,13 +3165,24 @@ function PaymentsContent() {
                   <Users className="h-4 w-4 text-muted-foreground" />
                   Listado
                 </div>
-                <div className="w-full max-w-xs">
-                  <Input
-                    placeholder="Filtrar por nombre o código…"
-                    value={sinPlanSearch}
-                    onChange={(e) => setSinPlanSearch(e.target.value)}
-                    disabled={sinPlanLoading && !sinPlanLoadedAt}
-                  />
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  <div className="w-full max-w-xs">
+                    <Input
+                      placeholder="Filtrar por nombre o código…"
+                      value={sinPlanSearch}
+                      onChange={(e) => setSinPlanSearch(e.target.value)}
+                      disabled={sinPlanLoading && !sinPlanLoadedAt}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportSinPlan("xlsx")}
+                    disabled={filteredSinPlanStudents.length === 0}
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    Excel
+                  </Button>
                 </div>
               </div>
 
@@ -3122,14 +3212,7 @@ function PaymentsContent() {
                       </TableRow>
                     ) : (
                       (() => {
-                        const q = sinPlanSearch.trim().toLowerCase();
-                        const filtered = q
-                          ? sinPlanStudents.filter((s) => {
-                              const name = String(s?.name ?? "").toLowerCase();
-                              const code = String(s?.code ?? "").toLowerCase();
-                              return name.includes(q) || code.includes(q);
-                            })
-                          : sinPlanStudents;
+                        const filtered = filteredSinPlanStudents;
 
                         if (!filtered.length) {
                           return (
