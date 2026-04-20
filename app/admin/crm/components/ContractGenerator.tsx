@@ -157,6 +157,11 @@ export function ContractGenerator({
   onOpenChange: parentOnOpenChange,
 }: ContractGeneratorProps) {
   const COMPANY_SIGNATURE_PATH = "/firma_hotselling.png";
+  // Firmante por defecto (siempre el último en la solicitud de Dropbox Sign)
+  const DEFAULT_FINAL_SIGNER = {
+    name: "JAVIER MIRANDA",
+    email: "hola@javierquest.com",
+  } as const;
   const { toast } = useToast();
   const [open, setOpenInternal] = useState(false);
   const signatureAssetRef = React.useRef<{
@@ -640,9 +645,7 @@ export function ContractGenerator({
     <div class="sigLeft">
       <div class="sigName">JAVIER MIRANDA</div>
       <div class="sigName">MHF GROUP LLC</div>
-      <div class="sigImageWrap">
-        <img class="sigImage" src="${signatureSrc}" alt="Firma de Javier Miranda" />
-      </div>
+      <div class="sigImageWrap"></div>
     </div>
     <div class="sigRight">
       <div class="sigLine">${esc(preparedData.NOMBRE_COMPLETO || "")}</div>
@@ -751,16 +754,8 @@ export function ContractGenerator({
     const pdfDoc = await PDFDocument.create();
     const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    let companySignatureImage: Awaited<
-      ReturnType<typeof pdfDoc.embedPng>
-    > | null = null;
-
-    try {
-      const asset = await loadCompanySignatureAsset();
-      if (asset.bytes) {
-        companySignatureImage = await pdfDoc.embedPng(asset.bytes);
-      }
-    } catch {}
+    // Imagen de firma de la empresa deshabilitada a pedido del negocio:
+    // la vista previa y el PDF quedan sin imagen de firma.
 
     const pageWidth = 595.28;
     const pageHeight = 841.89;
@@ -950,19 +945,8 @@ export function ContractGenerator({
           color: rgb(0, 0, 0),
         });
 
-        if (companySignatureImage) {
-          const targetWidth = Math.min(150, colWidth - 24);
-          const targetHeight =
-            (companySignatureImage.height / companySignatureImage.width) *
-            targetWidth;
-
-          page.drawImage(companySignatureImage, {
-            x: leftX + (colWidth - targetWidth) / 2,
-            y: cursorY - 28 - targetHeight,
-            width: targetWidth,
-            height: targetHeight,
-          });
-        }
+        // Firma visual de JAVIER MIRANDA intencionalmente omitida
+        // (bloque izquierdo queda en blanco debajo del nombre).
 
         const signLineY = cursorY - 12;
         page.drawLine({
@@ -1104,19 +1088,60 @@ export function ContractGenerator({
       ];
       const parties: Array<{ name?: string; email?: string }> =
         partiesCandidates.find((c) => Array.isArray(c) && c.length > 0) || [];
-      const extraSigners = (Array.isArray(parties) ? parties : [])
-        .filter((p: any) => p?.email && p?.name)
-        .map((p: any, i: number) => ({
-          email_address: String(p.email),
-          name: String(p.name),
-          order: i + 1,
-        }));
+
+      // Firmante principal (lead): siempre order 1
+      const primaryName = String(
+        mergedData.fullName ||
+          (liveLead as any)?.name ||
+          (lead as any)?.name ||
+          "",
+      ).trim();
+      const primaryEmail = String(
+        mergedData.email ||
+          (liveLead as any)?.email ||
+          (lead as any)?.email ||
+          "",
+      ).trim();
+
+      const finalSigner = {
+        name: DEFAULT_FINAL_SIGNER.name,
+        email: DEFAULT_FINAL_SIGNER.email,
+      };
+
+      const allSigners: Array<{ name: string; email: string }> = [];
+      if (primaryName && primaryEmail) {
+        allSigners.push({ name: primaryName, email: primaryEmail });
+      }
+      for (const p of parties) {
+        const n = String(p?.name || "").trim();
+        const e = String(p?.email || "").trim();
+        if (!n || !e) continue;
+        if (e.toLowerCase() === finalSigner.email.toLowerCase()) continue;
+        allSigners.push({ name: n, email: e });
+      }
+      // Javier Miranda siempre al final (firmante por defecto)
+      allSigners.push(finalSigner);
+
+      // Deduplicar preservando orden
+      const seenSigners = new Set<string>();
+      const dedupedSigners = allSigners.filter((s) => {
+        const key = s.email.toLowerCase();
+        if (seenSigners.has(key)) return false;
+        seenSigners.add(key);
+        return true;
+      });
+
+      const signersPayload = dedupedSigners.map((s, i) => ({
+        email_address: s.email,
+        name: s.name,
+        order: i + 1,
+      }));
 
       const response = await sendLeadContractForSignature(
         codigo,
         pdfFile,
         message,
-        extraSigners.length > 0 ? extraSigners : undefined,
+        signersPayload,
       );
       showSignatureSuccessModal(response);
     } catch (error: any) {
@@ -1189,7 +1214,16 @@ export function ContractGenerator({
       email: String(mergedData.email || (liveLead as any)?.email || "").trim(),
     };
 
-    const all = [primary, ...extras].filter((s) => s.name || s.email);
+    const finalDefault = {
+      name: DEFAULT_FINAL_SIGNER.name,
+      email: DEFAULT_FINAL_SIGNER.email,
+    };
+
+    const withoutFinal = [primary, ...extras].filter((s) => {
+      if (!s.name && !s.email) return false;
+      return s.email.toLowerCase() !== finalDefault.email.toLowerCase();
+    });
+    const all = [...withoutFinal, finalDefault];
     const seen = new Set<string>();
     return all.filter((s) => {
       const key = `${s.name.toLowerCase()}|${s.email.toLowerCase()}`;
@@ -1197,7 +1231,15 @@ export function ContractGenerator({
       seen.add(key);
       return true;
     });
-  }, [draft, lead, liveLead, mergedData.email, mergedData.fullName]);
+  }, [
+    DEFAULT_FINAL_SIGNER.email,
+    DEFAULT_FINAL_SIGNER.name,
+    draft,
+    lead,
+    liveLead,
+    mergedData.email,
+    mergedData.fullName,
+  ]);
 
   const saveOverridesToLead = React.useCallback(async () => {
     const codigo = String(
@@ -2338,13 +2380,8 @@ export function ContractGenerator({
                             <div className="text-center">
                               <div className="font-bold">JAVIER MIRANDA</div>
                               <div className="font-bold">MHF GROUP LLC</div>
-                              <div className="mt-3 flex justify-center">
-                                <img
-                                  src={COMPANY_SIGNATURE_PATH}
-                                  alt="Firma de Javier Miranda"
-                                  className="h-auto max-w-[170px] object-contain"
-                                />
-                              </div>
+                              {/* Firma visual intencionalmente omitida */}
+                              <div className="mt-3 flex justify-center" />
                             </div>
                             <div>
                               <div className="text-center">

@@ -644,6 +644,105 @@ export function SalePreview({
           </div>
         </div>
       </div>
+
+      {/* Comprobantes de pago (adjuntos guardados en metadata como base64) */}
+      {(() => {
+        const rawAttachments: any[] = (() => {
+          const candidates = [
+            (draft as any)?.paymentAttachments,
+            (payload as any)?.payment?.attachments,
+            (payload as any)?.payment_attachments,
+            (payload as any)?.attachments,
+          ];
+          for (const c of candidates) {
+            if (Array.isArray(c) && c.length > 0) return c;
+          }
+          return [];
+        })();
+
+        if (!rawAttachments.length) return null;
+
+        return (
+          <div className="mt-4 rounded-md border border-slate-200 bg-white p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">
+              Comprobantes de pago
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {rawAttachments.map((a: any, idx: number) => {
+                const dataUrl: string = String(a?.dataUrl ?? a?.data_url ?? "");
+                const type: string = String(a?.type ?? a?.mime ?? "");
+                const name: string = String(a?.name ?? `Adjunto ${idx + 1}`);
+                const isImage =
+                  type.startsWith("image/") || /^data:image\//i.test(dataUrl);
+                const isPdf =
+                  type === "application/pdf" ||
+                  /^data:application\/pdf/i.test(dataUrl);
+                const key = String(a?.id ?? `${name}-${idx}`);
+
+                if (isImage && dataUrl) {
+                  return (
+                    <a
+                      key={key}
+                      href={dataUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-md border border-slate-200 overflow-hidden hover:shadow-sm transition"
+                      title={name}
+                    >
+                      <img
+                        src={dataUrl}
+                        alt={name}
+                        className="w-full h-40 object-contain bg-slate-50"
+                      />
+                      <div className="px-2 py-1 text-[11px] text-slate-600 truncate">
+                        {name}
+                      </div>
+                    </a>
+                  );
+                }
+
+                if (isPdf && dataUrl) {
+                  return (
+                    <a
+                      key={key}
+                      href={dataUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex h-40 flex-col items-center justify-center rounded-md border border-slate-200 bg-slate-50 p-2 text-center hover:shadow-sm transition"
+                      title={name}
+                    >
+                      <div className="text-xs font-semibold text-slate-700">
+                        PDF
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-600 truncate w-full px-2">
+                        {name}
+                      </div>
+                      <div className="mt-1 text-[10px] text-slate-500 underline">
+                        Ver comprobante
+                      </div>
+                    </a>
+                  );
+                }
+
+                return (
+                  <div
+                    key={key}
+                    className="flex h-40 flex-col items-center justify-center rounded-md border border-slate-200 bg-slate-50 p-2 text-center"
+                    title={name}
+                  >
+                    <div className="text-[11px] text-slate-600 truncate w-full px-2">
+                      {name}
+                    </div>
+                    <div className="mt-1 text-[10px] text-slate-500">
+                      {type || "Archivo"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </Card>
   );
 }
