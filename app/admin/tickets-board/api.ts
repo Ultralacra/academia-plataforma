@@ -302,6 +302,88 @@ export async function getTickets(opts: {
   } as const;
 }
 
+export type DeletedTicketItem = TicketBoardItem & {
+  deleted_at?: string | null;
+  descripcion?: string | null;
+};
+
+// Listar tickets eliminados (papelera)
+// GET /v1/ticket/get/deleted/ticket
+export async function getDeletedTickets(opts: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
+  estado?: string;
+  tipo?: string;
+} = {}) {
+  const q = toQuery({
+    page: opts.page ?? 1,
+    pageSize: opts.pageSize ?? 25,
+    search: opts.search ?? "",
+    fechaDesde: opts.fechaDesde ?? "",
+    fechaHasta: opts.fechaHasta ?? "",
+    estado: opts.estado ?? "",
+    tipo: opts.tipo ?? "",
+  });
+  const url = `/ticket/get/deleted/ticket${q}`;
+  const json = (await apiFetch<TicketBoardResponse>(url)) as TicketBoardResponse;
+  const rows = Array.isArray(json?.data) ? json.data : [];
+
+  const items: DeletedTicketItem[] = rows.map((r: any) => ({
+    id: Number(r.id),
+    codigo: r.codigo ?? null,
+    nombre: r.nombre ?? null,
+    descripcion: r.descripcion ?? null,
+    id_alumno: r.id_alumno ?? null,
+    alumno_nombre: r.alumno_nombre ?? null,
+    created_at: r.created_at ?? null,
+    deadline: r.deadline ?? null,
+    estado: r.estado ?? null,
+    tipo: r.tipo ?? null,
+    plazo: r.plazo ?? null,
+    coaches: Array.isArray(r.coaches)
+      ? r.coaches.map((c: any) => ({
+          codigo_equipo: c?.codigo_equipo ?? null,
+          nombre: c?.nombre ?? null,
+          puesto: c?.puesto ?? null,
+          area: c?.area ?? null,
+        }))
+      : [],
+    alumno_coaches: Array.isArray(r.alumno_coaches)
+      ? r.alumno_coaches.map((c: any) => ({
+          codigo_equipo: c?.codigo_equipo ?? null,
+          nombre: c?.nombre ?? null,
+          puesto: c?.puesto ?? null,
+          area: c?.area ?? null,
+        }))
+      : [],
+    ultimo_estado: r.ultimo_estado
+      ? {
+          estatus: r.ultimo_estado.estatus ?? null,
+          fecha: r.ultimo_estado.fecha ?? null,
+        }
+      : null,
+    resuelto_por: r.resuelto_por ?? null,
+    resuelto_por_nombre: r.resuelto_por_nombre ?? null,
+    informante: r.informante ?? null,
+    informante_nombre: r.informante_nombre ?? null,
+    plazo_info: r.plazo_info ?? null,
+    coaches_override: Array.isArray(r.coaches_override) ? r.coaches_override : [],
+    etiquetas: Array.isArray(r.etiquetas) ? r.etiquetas : [],
+    deleted_at: r.deleted_at ?? null,
+  }));
+
+  return {
+    items,
+    total: json.total ?? items.length,
+    page: json.page ?? 1,
+    pageSize: json.pageSize ?? items.length,
+    totalPages: json.totalPages ?? 1,
+  } as const;
+}
+
   // Reasignar ticket a un coach/equipo
   // PUT /v1/ticket/reassign/ticket/:idticket
   // Body: { "codigo_equipo": "equipo" }

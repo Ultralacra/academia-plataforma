@@ -949,7 +949,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
           });
           return;
         }
-        const fechaHasta = isoDay(addDays(parsedDesde, 30));
+        const fechaHastaInput = asDateOnly(tempVenceFechaHasta);
+        const parsedHastaInput = parseMaybe(fechaHastaInput);
+        const fechaHasta =
+          fechaHastaInput && parsedHastaInput
+            ? fechaHastaInput
+            : isoDay(addDays(parsedDesde, 30));
 
         const token = getAuthToken();
         const res = await fetch("/api/metadata", {
@@ -3598,21 +3603,27 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">
+                      <Label
+                        htmlFor="vence-fecha-hasta-membresia"
+                        className="text-xs text-muted-foreground"
+                      >
                         Hasta
                       </Label>
                       <Input
+                        id="vence-fecha-hasta-membresia"
+                        type="date"
                         value={
-                          tempVenceFechaDesde
+                          tempVenceFechaHasta ||
+                          (tempVenceFechaDesde
                             ? isoDay(
                                 addDays(
                                   parseMaybe(tempVenceFechaDesde) ?? new Date(),
                                   30,
                                 ),
                               )
-                            : ""
+                            : "")
                         }
-                        disabled
+                        onChange={(e) => setTempVenceFechaHasta(e.target.value)}
                         className="mt-1"
                       />
                     </div>
@@ -3645,7 +3656,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         id="vence-fecha-hasta"
                         type="date"
                         value={tempVenceFechaHasta}
-                        min={isoDay(new Date())}
                         onChange={(e) => setTempVenceFechaHasta(e.target.value)}
                         className="mt-1"
                       />

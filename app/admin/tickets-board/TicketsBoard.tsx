@@ -65,6 +65,7 @@ import {
   Pencil,
   LayoutGrid,
   List,
+  Trash2,
 } from "lucide-react";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import {
@@ -146,6 +147,7 @@ import {
   type EtiquetaTicket,
 } from "@/app/admin/opciones/api";
 import { CreateTicketModal } from "./CreateTicketModal";
+import DeletedTicketsModal from "./DeletedTicketsModal";
 
 type StatusKey =
   | "EN_PROGRESO"
@@ -775,6 +777,8 @@ function TicketsBoardContent({
   const [viewMode, setViewMode] = useState<"kanban" | "table">(
     studentCode ? "table" : "kanban",
   );
+
+  const [deletedModalOpen, setDeletedModalOpen] = useState(false);
 
   // Alumno: solo vista tabla (sin kanban)
   useEffect(() => {
@@ -2814,8 +2818,25 @@ function TicketsBoardContent({
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
+
+          {!isStudent && !isFeedbackMode && (
+            <Button
+              onClick={() => setDeletedModalOpen(true)}
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              title={`Papelera de ${uiTicketsLower}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
+
+      <DeletedTicketsModal
+        open={deletedModalOpen}
+        onOpenChange={setDeletedModalOpen}
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
