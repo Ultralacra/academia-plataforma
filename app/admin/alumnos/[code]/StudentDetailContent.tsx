@@ -1856,27 +1856,33 @@ export default function StudentDetailContent({ code }: { code: string }) {
     );
 
     // Pausas (sin doble conteo)
-    // - ELAPSED: desde ingreso hasta hoy (para descontar consumo real)
-    // - TOTAL: desde ingreso hasta fin de cada pausa (incluye pausas futuras; para extender vencimiento)
+    // - ELAPSED: desde max(ingreso, inicio de pausa) hasta hoy (para descontar
+    //   consumo real de días hábiles ya transcurridos).
+    // - TOTAL: duración COMPLETA de cada pausa (se suma íntegra a la vigencia
+    //   del contrato). No se recorta al ingreso: aunque una pausa se registre
+    //   con fechas previas al ingreso (o parcialmente previas), debe extender
+    //   los accesos por todos sus días calendario/hábiles.
     let pausedBusinessDaysElapsed = 0;
     let pausedCalendarDaysElapsed = 0;
     let pausedBusinessDaysTotal = 0;
     let pausedCalendarDaysTotal = 0;
     for (const r of mergedPauseIntervals) {
-      const aTotal = r.start < startDay ? startDay : r.start;
-      const bTotal = r.end;
-      if (bTotal.getTime() >= aTotal.getTime()) {
-        pausedBusinessDaysTotal += businessDaysBetweenInclusive(aTotal, bTotal);
-        pausedCalendarDaysTotal += daysBetweenInclusive(aTotal, bTotal);
+      // TOTAL (para extender el vencimiento): usar el rango completo de la pausa.
+      if (r.end.getTime() >= r.start.getTime()) {
+        pausedBusinessDaysTotal += businessDaysBetweenInclusive(r.start, r.end);
+        pausedCalendarDaysTotal += daysBetweenInclusive(r.start, r.end);
       }
 
+      // ELAPSED (para descontar del consumo real): recortar al período
+      // [ingreso, hoy] porque solo cuentan los días ya transcurridos tras el ingreso.
+      const aElapsed = r.start < startDay ? startDay : r.start;
       const bElapsed = r.end > today ? today : r.end;
-      if (bElapsed.getTime() >= aTotal.getTime()) {
+      if (bElapsed.getTime() >= aElapsed.getTime()) {
         pausedBusinessDaysElapsed += businessDaysBetweenInclusive(
-          aTotal,
+          aElapsed,
           bElapsed,
         );
-        pausedCalendarDaysElapsed += daysBetweenInclusive(aTotal, bElapsed);
+        pausedCalendarDaysElapsed += daysBetweenInclusive(aElapsed, bElapsed);
       }
     }
 
@@ -2053,20 +2059,35 @@ export default function StudentDetailContent({ code }: { code: string }) {
       null,
     );
 
-    // Si es legacy (vence_estimado sin meses_extra), respetar la fecha exacta.
-    // Si hay membresía además, sí se suma sobre la fecha legacy (30 días por mes de membresía).
+    // Si es legacy (vence_estimado sin meses_extra), tomamos como base la
+    // fecha exacta y le sumamos los días de pausa registrados (para que cada
+    // pausa extienda el acceso aunque se use el formato antiguo).
+    // Si hay membresía, también se suma (30 días por mes).
     const baseForEnd =
-      metaVenceDay && metaExtraParsed === null ? metaVenceDay : baseEnd;
+      metaVenceDay && metaExtraParsed === null
+        ? addDays(metaVenceDay, pausedCalendarDaysTotal)
+        : baseEnd;
     const extraDaysFromMonths = normalizedExtraMonths * 30;
     const legacyComputedEnd =
       metaVenceDay && metaExtraParsed === null
         ? baseForEnd
         : addDays(baseForEnd, extraDaysFromMonths);
 
+    // Las extensiones por rango y los períodos de membresía vienen con fechas
+    // FIJAS desde metadata: no traen incorporada la extensión por pausas.
+    // Debemos sumarles los días de pausa para que una pausa posterior a la
+    // creación de la extensión también corra la fecha final.
+    const explicitRangeEndAdjusted = explicitRangeEnd
+      ? addDays(explicitRangeEnd, pausedCalendarDaysTotal)
+      : null;
+    const activeMembershipEndAdjusted = activeMembershipEnd
+      ? addDays(activeMembershipEnd, pausedCalendarDaysTotal)
+      : null;
+
     const estEndCandidates = [
       legacyComputedEnd,
-      explicitRangeEnd,
-      activeMembershipEnd,
+      explicitRangeEndAdjusted,
+      activeMembershipEndAdjusted,
     ].filter(Boolean) as Date[];
     const estEnd = estEndCandidates.reduce((acc, current) => {
       return current.getTime() > acc.getTime() ? current : acc;
