@@ -77,6 +77,7 @@ import {
   updateClientLastTask,
   updateClientNombre,
   updateClientTag,
+  getOpciones,
 } from "../api";
 import {
   Select,
@@ -439,6 +440,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
   // Estado para editar vencimiento estimado (solo preview: no ejecuta endpoint)
   const [editVenceOpen, setEditVenceOpen] = useState(false);
+  const [savingVence, setSavingVence] = useState(false);
   const [tempMesesExtra, setTempMesesExtra] = useState<string>("0");
   const [tempVenceFechaDesde, setTempVenceFechaDesde] = useState<string>("");
   const [tempVenceFechaHasta, setTempVenceFechaHasta] = useState<string>("");
@@ -455,6 +457,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [loadingVenceMeta, setLoadingVenceMeta] = useState(false);
   const [openVenceHistory, setOpenVenceHistory] = useState(false);
   const [showAllPauses, setShowAllPauses] = useState(false);
+  const [showAllMembresias, setShowAllMembresias] = useState(false);
 
   const [editPauseOpen, setEditPauseOpen] = useState(false);
   const [editingPause, setEditingPause] = useState<{
@@ -916,6 +919,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
       return;
     }
 
+    setSavingVence(true);
+
     const alumnoId = String(student.id);
     const now = new Date().toISOString();
     const todayIso = isoDay(new Date());
@@ -983,6 +988,73 @@ export default function StudentDetailContent({ code }: { code: string }) {
         if (!res.ok) {
           const txt = await res.text().catch(() => "");
           throw new Error(txt || `HTTP ${res.status}`);
+        }
+
+        // Al agregar una membresía exitosamente, cambiar el estatus del
+        // alumno automáticamente a "Membresía" si aún no lo está.
+        try {
+          const currentEstadoRaw = String(
+            student?.state ?? student?.raw?.estado ?? "",
+          ).toUpperCase();
+          const alreadyMembresia = currentEstadoRaw.includes("MEMBRE");
+          if (!alreadyMembresia && (student?.code || code)) {
+            const estados = await getOpciones("estado_cliente");
+            const match =
+              estados.find((o: any) =>
+                String(o?.value || "")
+                  .toUpperCase()
+                  .includes("MEMBRE"),
+              ) ||
+              estados.find((o: any) =>
+                String(o?.key || "")
+                  .toUpperCase()
+                  .includes("MEMBRE"),
+              );
+            const membresiaKey = match?.key;
+            if (membresiaKey) {
+              const fd = new FormData();
+              fd.set("estado", String(membresiaKey));
+              await apiFetch<any>(
+                `/client/update/client/${encodeURIComponent(
+                  student?.code || code,
+                )}`,
+                { method: "PUT", body: fd },
+              );
+              // Refrescar datos del alumno para reflejar el nuevo estatus
+              try {
+                const url = `/client/get/clients?page=1&search=${encodeURIComponent(
+                  student?.code || code,
+                )}`;
+                const json = await apiFetch<any>(url);
+                const rows: any[] = Array.isArray(json?.data)
+                  ? json.data
+                  : Array.isArray(json?.clients?.data)
+                    ? json.clients.data
+                    : Array.isArray(json?.getClients?.data)
+                      ? json.getClients.data
+                      : [];
+                const r = rows[0];
+                if (r) {
+                  setStudent((prev: any) =>
+                    prev
+                      ? {
+                          ...prev,
+                          state: r.estado ?? r.state ?? prev.state,
+                          raw: { ...(prev.raw || {}), ...r },
+                        }
+                      : prev,
+                  );
+                }
+                // Refrescar historial de estatus también
+                try {
+                  const eh = await getClienteEstatus(student?.code || code);
+                  setStatusHistory(eh);
+                } catch {}
+              } catch {}
+            }
+          }
+        } catch (estadoErr) {
+          console.warn("No se pudo actualizar estatus a MEMBRESIA", estadoErr);
         }
 
         await loadVenceMetadata(student.id);
@@ -1175,6 +1247,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
         description: String(e?.message ?? e ?? ""),
         variant: "destructive",
       });
+    } finally {
+      setSavingVence(false);
     }
   }
 
@@ -3353,6 +3427,173 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           }
                         }}
                       />
+
+                      {/* ── Historial de membresías ── */}
+                      <div className="mt-4 pt-3 border-t border-border">
+                        {(() => {
+                          const total = membresiaExts.length;
+                          const activas = (membresiaExts || []).filter(
+                            (m: any) => {
+                              const n = Number(
+                                m?.payload?.meses ??
+                                  m?.payload?.meses_extra ??
+                                  0,
+                              );
+                              const isAnulado =
+                                Boolean(m?.payload?.anulado) ||
+                                !Number.isFinite(n) ||
+                                n <= 0;
+                              return !isAnulado;
+                            },
+                          ).length;
+                          const anuladas = Math.max(0, total - activas);
+                          return (
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Historial de membresías ({activas} activas ·{" "}
+                              {anuladas} anuladas · {total} total)
+                            </div>
+                          );
+                        })()}
+                        {membresiaExts.length === 0 ? (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Sin membresías registradas.
+                          </p>
+                        ) : (
+                          <div className="mt-2 space-y-2">
+                            {(() => {
+                              const sorted = membresiaExts
+                                .slice()
+                                .sort((a: any, b: any) => {
+                                  const ta = new Date(
+                                    a?.updated_at || a?.created_at || 0,
+                                  ).getTime();
+                                  const tb = new Date(
+                                    b?.updated_at || b?.created_at || 0,
+                                  ).getTime();
+                                  if (tb !== ta) return tb - ta;
+                                  return (
+                                    Number(b?.id || 0) - Number(a?.id || 0)
+                                  );
+                                });
+                              const visible = showAllMembresias
+                                ? sorted
+                                : sorted.slice(0, 3);
+                              const hasMore = sorted.length > 3;
+                              return (
+                                <>
+                                  {visible.map((m: any, idx: number) => {
+                                    const months = Number(
+                                      m?.payload?.meses ??
+                                        m?.payload?.meses_extra ??
+                                        0,
+                                    );
+                                    const membershipNumber =
+                                      Number(m?.payload?.numero_membresia) > 0
+                                        ? Number(m.payload.numero_membresia)
+                                        : sorted.length - idx;
+                                    const isAnulado =
+                                      Boolean(m?.payload?.anulado) ||
+                                      !Number.isFinite(months) ||
+                                      months <= 0;
+                                    const s0 = parseMaybe(
+                                      m?.payload?.fecha_desde,
+                                    );
+                                    const e0 = parseMaybe(
+                                      m?.payload?.fecha_hasta,
+                                    );
+                                    const startDate = s0 ? toDayDate(s0) : null;
+                                    const endDate = e0 ? toDayDate(e0) : null;
+                                    const today = toDayDate(new Date());
+                                    const isActive =
+                                      !isAnulado &&
+                                      !!startDate &&
+                                      !!endDate &&
+                                      today >= startDate &&
+                                      today <= endDate;
+                                    const days =
+                                      startDate && endDate
+                                        ? daysBetweenInclusive(
+                                            startDate,
+                                            endDate,
+                                          )
+                                        : null;
+                                    const motivo = m?.payload?.motivo
+                                      ? String(m.payload.motivo)
+                                      : m?.payload?.anulado_motivo
+                                        ? String(m.payload.anulado_motivo)
+                                        : "";
+                                    return (
+                                      <div
+                                        key={`membresia-hist-${String(m?.id ?? idx)}`}
+                                        className="rounded-md border border-border bg-muted/30 p-2"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="text-xs font-medium">
+                                            Membresía #{membershipNumber} ·{" "}
+                                            {fmtES(m?.payload?.fecha_desde)} →{" "}
+                                            {fmtES(m?.payload?.fecha_hasta)}
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              className="p-1 rounded hover:bg-muted transition-colors"
+                                              title="Editar membresía"
+                                              onClick={() =>
+                                                startEditMembresia(m)
+                                              }
+                                            >
+                                              <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                            </button>
+                                            {isAnulado ? (
+                                              <Badge
+                                                variant="secondary"
+                                                className="h-5 text-[10px]"
+                                              >
+                                                Anulada
+                                              </Badge>
+                                            ) : isActive ? (
+                                              <Badge
+                                                variant="secondary"
+                                                className="h-5 text-[10px]"
+                                              >
+                                                Activa
+                                              </Badge>
+                                            ) : null}
+                                            {days !== null ? (
+                                              <span className="text-[10px] text-muted-foreground">
+                                                {days} días
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                        {motivo ? (
+                                          <div className="text-[10px] text-muted-foreground mt-1">
+                                            Motivo: {motivo}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  })}
+                                  {hasMore && (
+                                    <button
+                                      onClick={() =>
+                                        setShowAllMembresias(!showAllMembresias)
+                                      }
+                                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                                    >
+                                      {showAllMembresias ? (
+                                        <>Ver menos</>
+                                      ) : (
+                                        <>Ver {sorted.length - 3} más</>
+                                      )}
+                                    </button>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3448,6 +3689,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
           }}
           mode={editMode}
           diasContractualesDisponibles={pausaContractualStats.diasDisponibles}
+          onRequestMembresiaExtension={() => {
+            // Al seleccionar estatus "Membresía" abrimos el mismo modal de
+            // Extender accesos (tipo membresía). La membresía se registra
+            // como una extensión de +1 mes (30 días) y suma los días de
+            // acceso igual que el flujo existente.
+            setTempVenceTipo("membresia");
+            setTempVenceFechaDesde(isoDay(new Date()));
+            setTempVenceFechaHasta("");
+            setTempMesesExtra("1");
+            setTempVenceMotivo("");
+            setEditVenceOpen(true);
+          }}
           onSaved={async () => {
             // refresh student tras guardar (estado/etapa/nicho)
             const url = `/client/get/clients?page=1&search=${encodeURIComponent(
@@ -3535,7 +3788,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
       </Dialog>
 
       {/* Modal para editar vencimiento estimado */}
-      <Dialog open={editVenceOpen} onOpenChange={setEditVenceOpen}>
+      <Dialog
+        open={editVenceOpen}
+        onOpenChange={(v) => {
+          if (!v && savingVence) return;
+          setEditVenceOpen(v);
+        }}
+      >
+        {" "}
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Extender accesos</DialogTitle>
@@ -3721,19 +3981,31 @@ export default function StudentDetailContent({ code }: { code: string }) {
               </div>
             ) : null}
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setEditVenceOpen(false)}>
+              <Button
+                variant="ghost"
+                onClick={() => setEditVenceOpen(false)}
+                disabled={savingVence}
+              >
                 Cancelar
               </Button>
               <Button
                 onClick={handleSaveVence}
                 disabled={
+                  savingVence ||
                   (tempVenceTipo === "extraordinaria" &&
                     !tempVenceMotivo.trim()) ||
                   !tempVenceFechaDesde ||
                   (tempVenceTipo !== "membresia" && !tempVenceFechaHasta)
                 }
               >
-                Guardar
+                {savingVence ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  "Guardar"
+                )}
               </Button>
             </div>
           </div>

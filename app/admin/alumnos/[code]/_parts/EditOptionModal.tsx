@@ -21,8 +21,8 @@ import { toast } from "@/components/ui/use-toast";
 import { buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
 import PauseDatesModal from "./PauseDatesModal";
-import MembershipContractModal from "./MembershipContractModal";
 import { fmtES } from "./detail-utils";
+import { Loader2 } from "lucide-react";
 
 export default function EditOptionModal({
   open,
@@ -32,6 +32,7 @@ export default function EditOptionModal({
   mode = "all",
   onSaved,
   diasContractualesDisponibles,
+  onRequestMembresiaExtension,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -40,6 +41,7 @@ export default function EditOptionModal({
   mode?: "estado" | "etapa" | "nicho" | "all";
   onSaved?: () => void;
   diasContractualesDisponibles?: number;
+  onRequestMembresiaExtension?: () => void;
 }) {
   const [estados, setEstados] = useState<any[]>([]);
   const [etapas, setEtapas] = useState<any[]>([]);
@@ -50,7 +52,6 @@ export default function EditOptionModal({
   const [nicho, setNicho] = useState<string | undefined>(current?.nicho);
   const [saving, setSaving] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
-  const [membershipOpen, setMembershipOpen] = useState(false);
   const pauseToggleRef = useRef(false);
   const [pendingSaveAfterPauseDetails, setPendingSaveAfterPauseDetails] =
     useState(false);
@@ -237,7 +238,14 @@ export default function EditOptionModal({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (!v && saving) return;
+          onOpenChange(v);
+        }}
+      >
+        {" "}
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Editar alumno</DialogTitle>
@@ -254,9 +262,16 @@ export default function EditOptionModal({
                     setEstado(v);
                     const match = estados.find((x) => x.key === v);
                     const label = String(match?.value || v || "").toUpperCase();
-                    // Abrir modal de membresía si el estado seleccionado es Membresía
+                    // El estatus de membresía ya no está asociado a ningún
+                    // otrosí/contrato. Al seleccionarlo abrimos directamente el
+                    // modal de "Extender accesos" (tipo membresía), que suma
+                    // los días de acceso como ya funciona.
                     if (label.includes("MEMBRE")) {
-                      setMembershipOpen(true);
+                      if (onRequestMembresiaExtension) {
+                        onOpenChange(false);
+                        onRequestMembresiaExtension();
+                        return;
+                      }
                     }
                     if (label.includes("PAUSADO")) {
                       // Marcar que el guardado quedó pendiente y abrir el modal.
@@ -414,17 +429,19 @@ export default function EditOptionModal({
                 Cancelar
               </Button>
               <Button onClick={() => save()} disabled={saving}>
-                Guardar
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  "Guardar"
+                )}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-      <MembershipContractModal
-        open={membershipOpen}
-        onOpenChange={setMembershipOpen}
-        clientCode={clientCode}
-      />
       <PauseDatesModal
         open={pauseOpen}
         onOpenChange={(v) => {
