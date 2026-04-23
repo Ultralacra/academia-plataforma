@@ -63,6 +63,7 @@ import {
 import { cn, getSpanishApiError } from "@/lib/utils";
 import Link from "next/link";
 import { getAuthToken } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-config";
 
 function getUniqueCoaches(students: StudentRow[]) {
   const allCoaches = students.flatMap(
@@ -520,6 +521,7 @@ export default function StudentsContent() {
   const [specialFilter, setSpecialFilter] = useState<SpecialFilterKey[]>([]);
   const [filterTag, setFilterTag] = useState<string[]>([]);
   const [filterBono, setFilterBono] = useState<string[]>([]);
+  const [filterContract, setFilterContract] = useState<string[]>([]);
   const [openCoach, setOpenCoach] = useState(false);
 
   // Cache local: dataset "todos" para volver sin refetch.
@@ -580,6 +582,35 @@ export default function StudentsContent() {
     };
     setCreatePassword((prev) => (prev ? prev : gen()));
   }, [openCreate]);
+
+  // Códigos de clientes con contrato (para columna "Contrato" en la tabla).
+  // Se obtiene del mismo endpoint que usa /admin/crm/all-contracts.
+  const [contractCodes, setContractCodes] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch<{
+          code: number;
+          data: Array<{ codigo?: string | null }>;
+        }>("/client/get/clients-with-contract", { method: "GET" });
+        if (cancelled) return;
+        if (data?.code === 200 && Array.isArray(data.data)) {
+          const set = new Set<string>();
+          for (const c of data.data) {
+            const k = String(c?.codigo ?? "").trim();
+            if (k) set.add(k);
+          }
+          setContractCodes(set);
+        }
+      } catch {
+        // Silencioso: si falla, la columna mostrará "No" por defecto.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -1223,6 +1254,16 @@ export default function StudentsContent() {
         if (!hasBono) return false;
       }
 
+      // contrato
+      if (filterContract.length > 0 && filterContract.length < 2) {
+        const code = s.code ? String(s.code).trim() : "";
+        const hasContract = code ? contractCodes.has(code) : false;
+        const wantSi = filterContract.includes("Sí");
+        const wantNo = filterContract.includes("No");
+        if (wantSi && !hasContract) return false;
+        if (wantNo && hasContract) return false;
+      }
+
       return true;
     });
 
@@ -1264,6 +1305,8 @@ export default function StudentsContent() {
     filterBono,
     specialFilter,
     adsSummaryByAlumnoId,
+    filterContract,
+    contractCodes,
   ]);
 
   useEffect(() => {
@@ -1607,6 +1650,7 @@ export default function StudentsContent() {
     setFilterMetaSubfase([]);
     setFilterMetaTrasc([]);
     setSpecialFilter([]);
+    setFilterContract([]);
     setPage(1);
   };
 
@@ -1620,7 +1664,8 @@ export default function StudentsContent() {
     filterMetaFase.length > 0 ||
     filterMetaSubfase.length > 0 ||
     filterMetaTrasc.length > 0 ||
-    specialFilter.length > 0,
+    specialFilter.length > 0 ||
+    filterContract.length > 0,
   );
 
   useEffect(() => {
@@ -1762,6 +1807,15 @@ export default function StudentsContent() {
           filterBono.includes(String(b.nombre ?? "").trim()),
         );
         if (!hasBono) return false;
+      }
+
+      if (filterContract.length > 0 && filterContract.length < 2) {
+        const code = s.code ? String(s.code).trim() : "";
+        const hasContract = code ? contractCodes.has(code) : false;
+        const wantSi = filterContract.includes("Sí");
+        const wantNo = filterContract.includes("No");
+        if (wantSi && !hasContract) return false;
+        if (wantNo && hasContract) return false;
       }
 
       if (specialFilter.length > 0) {
@@ -2589,6 +2643,21 @@ export default function StudentsContent() {
           }}
           placeholder="Seleccionar filtros especiales"
         />
+
+        <MultiSelectFilter
+          label="Contrato"
+          options={["Sí", "No"]}
+          selected={filterContract}
+          onToggle={(value) => {
+            setFilterContract((prev) => toggleSelection(prev, value));
+            setPage(1);
+          }}
+          onClear={() => {
+            setFilterContract([]);
+            setPage(1);
+          }}
+          placeholder="Filtrar por contrato"
+        />
       </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -2599,6 +2668,7 @@ export default function StudentsContent() {
                 <th className="px-3 py-2 text-left font-medium">Nombre</th>
                 <th className="px-3 py-2 text-left font-medium">Fase</th>
                 <th className="px-3 py-2 text-left font-medium">Estado</th>
+                <th className="px-3 py-2 text-left font-medium">Contrato</th>
                 <th className="px-3 py-2 text-left font-medium">Ingreso</th>
                 <th className="px-3 py-2 text-left font-medium">
                   <Popover>
@@ -2854,7 +2924,7 @@ export default function StudentsContent() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     className="px-3 py-4 text-center text-muted-foreground"
                   >
                     <div className="flex flex-col items-center justify-center gap-2 py-2">
@@ -2873,7 +2943,7 @@ export default function StudentsContent() {
               ) : pageItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     className="px-3 py-4 text-center text-muted-foreground"
                   >
                     No se encontraron estudiantes
@@ -3084,6 +3154,27 @@ export default function StudentsContent() {
                             className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
                           >
                             {student.state || "—"}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-3 py-2">
+                      {(() => {
+                        const code = student.code
+                          ? String(student.code).trim()
+                          : "";
+                        const hasContract = code
+                          ? contractCodes.has(code)
+                          : false;
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
+                              hasContract
+                                ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {hasContract ? "Sí" : "No"}
                           </span>
                         );
                       })()}
