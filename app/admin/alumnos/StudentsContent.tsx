@@ -586,6 +586,7 @@ export default function StudentsContent() {
   // Códigos de clientes con contrato (para columna "Contrato" en la tabla).
   // Se obtiene del mismo endpoint que usa /admin/crm/all-contracts.
   const [contractCodes, setContractCodes] = useState<Set<string>>(new Set());
+  const [loadingContracts, setLoadingContracts] = useState(true);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -605,6 +606,55 @@ export default function StudentsContent() {
         }
       } catch {
         // Silencioso: si falla, la columna mostrará "No" por defecto.
+      } finally {
+        if (!cancelled) setLoadingContracts(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Email de usuarios vinculados a alumnos.
+  // Match por identificador compartido: SysUser.codigo === StudentRow.code.
+  // Solo usuarios con tipo === "cliente" (son los alumnos en la tabla users).
+  const [alumnoEmailByCode, setAlumnoEmailByCode] = useState<
+    Record<string, string>
+  >({});
+  const [loadingEmails, setLoadingEmails] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch<{
+          code?: number;
+          data?: Array<{
+            id: number;
+            codigo?: string | null;
+            email: string | null;
+            role?: string | null;
+            tipo?: string | null;
+          }>;
+        }>("/users?page=1&pageSize=5000", { method: "GET" });
+        if (cancelled) return;
+        const arr = Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : [];
+        const map: Record<string, string> = {};
+        for (const u of arr) {
+          const tipo = String((u as any)?.tipo ?? "").toLowerCase();
+          if (tipo !== "cliente") continue;
+          const email = String(u?.email ?? "").trim();
+          if (!email) continue;
+          const codigo = String(u?.codigo ?? "").trim();
+          if (!codigo) continue;
+          map[codigo] = email;
+        }
+        setAlumnoEmailByCode(map);
+      } catch {
+        // Silencioso: si falla, simplemente no se mostrará el email.
+      } finally {
+        if (!cancelled) setLoadingEmails(false);
       }
     })();
     return () => {
@@ -2968,6 +3018,23 @@ export default function StudentsContent() {
                       ) : (
                         <span>{student.name}</span>
                       )}
+                      {(() => {
+                        const code = student.code
+                          ? String(student.code).trim()
+                          : "";
+                        const email = code ? alumnoEmailByCode[code] : "";
+                        if (loadingEmails && !email) {
+                          return (
+                            <div className="mt-1 h-3 w-40 max-w-full rounded bg-muted animate-pulse" />
+                          );
+                        }
+                        if (!email) return null;
+                        return (
+                          <div className="text-xs font-normal text-muted-foreground mt-0.5">
+                            {email}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2">
                       {(() => {
@@ -3163,6 +3230,11 @@ export default function StudentsContent() {
                         const code = student.code
                           ? String(student.code).trim()
                           : "";
+                        if (loadingContracts) {
+                          return (
+                            <span className="inline-block h-5 w-9 rounded bg-muted animate-pulse" />
+                          );
+                        }
                         const hasContract = code
                           ? contractCodes.has(code)
                           : false;

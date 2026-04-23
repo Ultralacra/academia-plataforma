@@ -2366,6 +2366,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     <div className="space-y-6">
       <Header
         name={student.name}
+        email={userByCode?.email ?? null}
         code={student.code || ""}
         apiStage={student.stage || undefined}
         apiState={student.state || student.raw?.estado || undefined}

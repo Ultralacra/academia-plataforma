@@ -27,6 +27,7 @@ import {
 
 export default function Header({
   name,
+  email,
   code,
   apiStage,
   apiState,
@@ -42,6 +43,7 @@ export default function Header({
   onChangePassword,
 }: {
   name: string;
+  email?: string | null;
   code: string;
   apiStage?: string;
   apiState?: string;
@@ -113,6 +115,11 @@ export default function Header({
               </TooltipProvider>
             ) : null}
           </div>
+          {email ? (
+            <p className="mt-0.5 text-sm text-muted-foreground break-all">
+              {email}
+            </p>
+          ) : null}
           {code && !hideCodeAndTickets && (
             <div className="mt-1.5 flex items-center gap-2">
               <TooltipProvider>
