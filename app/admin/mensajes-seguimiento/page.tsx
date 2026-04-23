@@ -697,7 +697,7 @@ export default function MensajesSeguimientoPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="dias">Días de inactividad</Label>
+                  <Label htmlFor="dias">Días de inactividad.</Label>
                   <Input
                     id="dias"
                     value={form.diasInactividad}
