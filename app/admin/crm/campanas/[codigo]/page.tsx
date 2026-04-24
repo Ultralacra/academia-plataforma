@@ -513,7 +513,9 @@ export default function CampanaDetailPage() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={["admin" as const, "equipo" as const]}>
+    <ProtectedRoute
+      allowedRoles={["admin" as const, "equipo" as const, "sales" as const]}
+    >
       <DashboardLayout>
         <div className="h-full flex flex-col bg-slate-50">
           {/* Header mejorado */}

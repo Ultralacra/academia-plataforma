@@ -7,7 +7,7 @@ import { SalesPersonalMetrics } from "../components/SalesPersonalMetrics";
 
 export default function SalesPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "sales"]}>
       <DashboardLayout>
         <div className="p-6 space-y-6">
           <div>

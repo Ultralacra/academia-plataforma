@@ -56,6 +56,13 @@ function ProtectedRouteContent({
       }
       return null;
     }
+    if (user?.role === "sales") {
+      const target = "/admin/crm";
+      if (pathname !== target) {
+        router.replace(target);
+      }
+      return null;
+    }
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
         <div className="text-center space-y-4">

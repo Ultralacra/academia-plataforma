@@ -15,7 +15,7 @@ import { Loader2 } from "lucide-react";
 
 export default function MetadataPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "sales"]}>
       <DashboardLayout>
         <MetadataContent />
       </DashboardLayout>
@@ -49,7 +49,7 @@ function MetadataContent() {
   const filtered = items.filter((m) => {
     if (!q.trim()) return true;
     return [m.id, m.entity, m.entity_id, JSON.stringify(m.payload)].some((v) =>
-      String(v).toLowerCase().includes(q.toLowerCase())
+      String(v).toLowerCase().includes(q.toLowerCase()),
     );
   });
 
