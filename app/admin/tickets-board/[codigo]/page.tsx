@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ProtectedRoute } from "@/components/auth/protected-route";
@@ -553,7 +554,16 @@ function TicketDetailContent() {
                 <div>
                   <div className="font-medium text-slate-700">Alumno</div>
                   <div className="text-slate-600">
-                    {ticket?.alumno_nombre || ticket?.alumnoNombre}
+                    {alumnoInfo?.codigo ? (
+                      <Link
+                        href={`/admin/alumnos/${encodeURIComponent(alumnoInfo.codigo)}/perfil`}
+                        className="font-medium text-sky-700 underline-offset-4 transition hover:text-sky-800 hover:underline"
+                      >
+                        {ticket?.alumno_nombre || ticket?.alumnoNombre}
+                      </Link>
+                    ) : (
+                      ticket?.alumno_nombre || ticket?.alumnoNombre
+                    )}
                   </div>
                   {/* Etapa del alumno (editable) */}
                   {alumnoLoading ? (

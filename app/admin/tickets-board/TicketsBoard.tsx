@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type React from "react";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -4373,7 +4374,20 @@ function TicketsBoardContent({
                         <User className="h-4 w-4" /> <span>Alumno</span>
                       </div>
                       <div className="min-h-[24px] flex items-center font-medium">
-                        {ticketDetail?.alumno_nombre || "—"}
+                        {ticketDetail?.alumno_nombre ? (
+                          alumnoInfo?.codigo ? (
+                            <Link
+                              href={`/admin/alumnos/${encodeURIComponent(alumnoInfo.codigo)}/perfil`}
+                              className="text-sky-700 underline-offset-4 transition hover:text-sky-800 hover:underline"
+                            >
+                              {ticketDetail.alumno_nombre}
+                            </Link>
+                          ) : (
+                            ticketDetail.alumno_nombre
+                          )
+                        ) : (
+                          "—"
+                        )}
                       </div>
 
                       {/* Etapa del alumno (editable) */}

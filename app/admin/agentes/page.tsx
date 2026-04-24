@@ -64,12 +64,12 @@ const agents = [
   {
     name: "ATC Administrativo",
     description:
-      "Resuelve consultas administrativas: pagos, facturas, cambios de plan y gestiones internas.",
+      "Sugiere el equipo ideal (ATC, Ads, Copy y Mentalidad) para un alumno nuevo según la carga actual de cada coach.",
     icon: ClipboardCheck,
-    href: "#",
+    href: "/admin/agentes/atc",
     gradient: "from-sky-300 to-blue-400",
     bgGlow: "bg-sky-300/10",
-    active: false,
+    active: true,
   },
   {
     name: "Operativa",
