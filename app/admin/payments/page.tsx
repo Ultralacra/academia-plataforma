@@ -79,6 +79,7 @@ import {
   RefreshCw,
   ExternalLink,
   AlertTriangle,
+  Eye,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -590,9 +591,9 @@ function PaymentsContent() {
   }, [user]);
   const canManagePayments = !isStudent;
 
-  const [activeTab, setActiveTab] = useState<"pagos" | "cuotas" | "sin-plan">(
-    "pagos",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "pagos" | "cuotas" | "sin-plan" | "alumnos"
+  >("pagos");
 
   // -------- Alumnos sin plan de pago --------
   const [sinPlanLoading, setSinPlanLoading] = useState(false);
@@ -611,6 +612,28 @@ function PaymentsContent() {
     withoutPlan: number;
   }>({ totalStudents: 0, withPlan: 0, withoutPlan: 0 });
   const sinPlanReqIdRef = useRef(0);
+
+  // -------- Estado de alumnos (morosos / status) --------
+  const [alumnosLoading, setAlumnosLoading] = useState(false);
+  const [alumnosError, setAlumnosError] = useState<string | null>(null);
+  const [alumnosLoadedAt, setAlumnosLoadedAt] = useState<number | null>(null);
+  const [alumnosProgress, setAlumnosProgress] = useState<{
+    stage: "students" | "payments" | "cuotas" | "done" | null;
+    fetched: number;
+    total: number | null;
+  }>({ stage: null, fetched: 0, total: null });
+  const [alumnosStudents, setAlumnosStudents] = useState<StudentRow[]>([]);
+  const [alumnosPaymentsByCode, setAlumnosPaymentsByCode] = useState<
+    Record<string, PaymentRow[]>
+  >({});
+  const [alumnosCuotasByCode, setAlumnosCuotasByCode] = useState<
+    Record<string, PaymentCuotaRow[]>
+  >({});
+  const [alumnosSearch, setAlumnosSearch] = useState<string>("");
+  const [alumnosOverdueOnly, setAlumnosOverdueOnly] = useState<boolean>(false);
+  const [alumnosLifecycleFilter, setAlumnosLifecycleFilter] =
+    useState<StudentLifecycleFilter>("todos");
+  const alumnosReqIdRef = useRef(0);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -839,6 +862,155 @@ function PaymentsContent() {
     });
   }, [sinPlanSearch, sinPlanStudents]);
 
+  type AlumnoRow = {
+    student: StudentRow;
+    code: string;
+    hasPlan: boolean;
+    paymentsCount: number;
+    cuotasCount: number;
+    cuotasPendientes: number;
+    cuotasMorosas: number;
+    maxDiasAtraso: number;
+    totalDeudaByCurrency: Record<string, number>;
+    lifecycleKind: Exclude<StudentLifecycleFilter, "todos">;
+  };
+
+  const alumnosRows = useMemo<AlumnoRow[]>(() => {
+    if (!alumnosStudents.length) return [];
+    const now = new Date();
+    return alumnosStudents.map((student) => {
+      const rawCode = String(student?.code ?? "").trim();
+      const key = rawCode.toLowerCase();
+      const payments = key ? (alumnosPaymentsByCode[key] ?? []) : [];
+      const cuotas = key ? (alumnosCuotasByCode[key] ?? []) : [];
+
+      let cuotasPendientes = 0;
+      let cuotasMorosas = 0;
+      let maxDiasAtraso = 0;
+      const totalDeudaByCurrency: Record<string, number> = {};
+
+      for (const c of cuotas) {
+        const effective = getEffectiveCuotaStatus(c.estatus, c.fecha_pago, now);
+        const isClosed = isClosedOrPaidStatus(effective);
+        if (isClosed) continue;
+        cuotasPendientes += 1;
+
+        const due = c.fecha_pago ? new Date(c.fecha_pago) : null;
+        const overdueDays =
+          due && !Number.isNaN(due.getTime()) ? diffDays(now, due) : 0;
+
+        const isMoroso =
+          effective.includes("moro") ||
+          effective.includes("venc") ||
+          overdueDays > MORA_GRACE_DAYS;
+
+        if (isMoroso) {
+          cuotasMorosas += 1;
+          if (overdueDays > maxDiasAtraso) maxDiasAtraso = overdueDays;
+          const monto = Number(c.monto ?? 0);
+          if (Number.isFinite(monto) && monto > 0) {
+            const curr = String(c.moneda || "USD").toUpperCase();
+            totalDeudaByCurrency[curr] =
+              (totalDeudaByCurrency[curr] ?? 0) + monto;
+          }
+        }
+      }
+
+      return {
+        student,
+        code: rawCode,
+        hasPlan: payments.length > 0,
+        paymentsCount: payments.length,
+        cuotasCount: cuotas.length,
+        cuotasPendientes,
+        cuotasMorosas,
+        maxDiasAtraso,
+        totalDeudaByCurrency,
+        lifecycleKind: classifyStudentLifecycleStatus(student?.state),
+      };
+    });
+  }, [alumnosStudents, alumnosPaymentsByCode, alumnosCuotasByCode]);
+
+  const filteredAlumnosRows = useMemo<AlumnoRow[]>(() => {
+    const q = alumnosSearch.trim().toLowerCase();
+    return alumnosRows.filter((row) => {
+      if (alumnosOverdueOnly && row.cuotasMorosas === 0) return false;
+      if (
+        alumnosLifecycleFilter !== "todos" &&
+        row.lifecycleKind !== alumnosLifecycleFilter
+      ) {
+        return false;
+      }
+      if (q) {
+        const name = String(row.student?.name ?? "").toLowerCase();
+        const code = row.code.toLowerCase();
+        if (!name.includes(q) && !code.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [alumnosRows, alumnosSearch, alumnosOverdueOnly, alumnosLifecycleFilter]);
+
+  const alumnosStats = useMemo(() => {
+    let totalAlumnos = 0;
+    let morososAlumnos = 0;
+    let cuotasMorosasTotales = 0;
+    let sinPlanTotal = 0;
+    const deudaByCurrency: Record<string, number> = {};
+    for (const row of alumnosRows) {
+      totalAlumnos += 1;
+      if (!row.hasPlan) sinPlanTotal += 1;
+      if (row.cuotasMorosas > 0) {
+        morososAlumnos += 1;
+        cuotasMorosasTotales += row.cuotasMorosas;
+        for (const [curr, val] of Object.entries(row.totalDeudaByCurrency)) {
+          deudaByCurrency[curr] = (deudaByCurrency[curr] ?? 0) + val;
+        }
+      }
+    }
+    return {
+      totalAlumnos,
+      morososAlumnos,
+      cuotasMorosasTotales,
+      sinPlanTotal,
+      deudaByCurrency,
+    };
+  }, [alumnosRows]);
+
+  function exportAlumnos() {
+    if (!filteredAlumnosRows.length) {
+      toast({
+        title: "Sin datos",
+        description: "No hay filas para exportar con los filtros actuales.",
+      });
+      return;
+    }
+    const data = filteredAlumnosRows.map((row) => ({
+      alumno: fixMojibake(row.student?.name || ""),
+      codigo: row.code,
+      estado_alumno: row.student?.state || "",
+      etapa: row.student?.stage || "",
+      estado_lifecycle: getStudentLifecycleLabel(row.lifecycleKind),
+      tiene_plan: row.hasPlan ? "sí" : "no",
+      pagos: row.paymentsCount,
+      cuotas_totales: row.cuotasCount,
+      cuotas_pendientes: row.cuotasPendientes,
+      cuotas_morosas: row.cuotasMorosas,
+      max_dias_atraso: row.maxDiasAtraso,
+      deuda: Object.entries(row.totalDeudaByCurrency)
+        .map(([c, v]) => `${v.toFixed(2)} ${c}`)
+        .join(" / "),
+    }));
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Estado alumnos");
+    XLSX.writeFile(wb, `estado-alumnos-${stamp}.xlsx`);
+    toast({
+      title: "Exportación lista",
+      description: `Se exportaron ${data.length} alumnos.`,
+    });
+  }
+
   function exportSinPlan(format: "csv" | "xlsx") {
     if (!filteredSinPlanStudents.length) {
       toast({
@@ -1026,6 +1198,118 @@ function PaymentsContent() {
       );
     } finally {
       if (sinPlanReqIdRef.current === reqId) setSinPlanLoading(false);
+    }
+  }
+
+  async function loadAlumnos() {
+    const reqId = ++alumnosReqIdRef.current;
+    setAlumnosLoading(true);
+    setAlumnosError(null);
+    setAlumnosProgress({ stage: "students", fetched: 0, total: null });
+
+    try {
+      // 1) Traer todos los alumnos.
+      const studentsRes = await getAllStudentsPaged({
+        page: 1,
+        pageSize: 2000,
+      });
+      if (alumnosReqIdRef.current !== reqId) return;
+      const allStudents = Array.isArray(studentsRes?.items)
+        ? studentsRes.items
+        : [];
+
+      setAlumnosProgress({
+        stage: "students",
+        fetched: allStudents.length,
+        total: allStudents.length,
+      });
+
+      // 2) Traer TODOS los pagos.
+      const paymentsByCode: Record<string, PaymentRow[]> = {};
+      const PAYMENTS_PAGE_SIZE = 200;
+      let pPage = 1;
+      let pTotalPages = 1;
+      setAlumnosProgress({ stage: "payments", fetched: 0, total: null });
+      do {
+        const env = await getPayments({
+          page: pPage,
+          pageSize: PAYMENTS_PAGE_SIZE,
+        });
+        if (alumnosReqIdRef.current !== reqId) return;
+        const data = Array.isArray(env?.data) ? env.data : [];
+        for (const row of data) {
+          const code = String(row?.cliente_codigo ?? "")
+            .trim()
+            .toLowerCase();
+          if (!code) continue;
+          if (!paymentsByCode[code]) paymentsByCode[code] = [];
+          paymentsByCode[code].push(row);
+        }
+        pTotalPages = Math.max(1, Number(env?.totalPages ?? 1) || 1);
+        setAlumnosProgress({
+          stage: "payments",
+          fetched: pPage,
+          total: pTotalPages,
+        });
+        pPage += 1;
+      } while (pPage <= pTotalPages);
+
+      // 3) Traer cuotas en rango amplio (último año y próximo año).
+      const now = new Date();
+      const start = new Date(now);
+      start.setDate(start.getDate() - 365);
+      const end = new Date(now);
+      end.setDate(end.getDate() + 365);
+      const toIso = (d: Date) => d.toISOString().slice(0, 10);
+      const fechaDesde = toIso(start);
+      const fechaHasta = toIso(end);
+
+      const cuotasByCode: Record<string, PaymentCuotaRow[]> = {};
+      const CUOTAS_PS = 200;
+      let cPage = 1;
+      let cTotalPages = 1;
+      setAlumnosProgress({ stage: "cuotas", fetched: 0, total: null });
+      do {
+        const env = await getPaymentCuotas({
+          fechaDesde,
+          fechaHasta,
+          page: cPage,
+          pageSize: CUOTAS_PS,
+          background: true,
+        });
+        if (alumnosReqIdRef.current !== reqId) return;
+        const data = Array.isArray(env?.data) ? env.data : [];
+        for (const row of data) {
+          const code = String(row?.cliente_codigo ?? "")
+            .trim()
+            .toLowerCase();
+          if (!code) continue;
+          if (!cuotasByCode[code]) cuotasByCode[code] = [];
+          cuotasByCode[code].push(row);
+        }
+        cTotalPages = Math.max(1, Number(env?.totalPages ?? 1) || 1);
+        setAlumnosProgress({
+          stage: "cuotas",
+          fetched: cPage,
+          total: cTotalPages,
+        });
+        cPage += 1;
+      } while (cPage <= cTotalPages);
+
+      setAlumnosStudents(allStudents);
+      setAlumnosPaymentsByCode(paymentsByCode);
+      setAlumnosCuotasByCode(cuotasByCode);
+      setAlumnosLoadedAt(Date.now());
+      setAlumnosProgress({
+        stage: "done",
+        fetched: allStudents.length,
+        total: allStudents.length,
+      });
+    } catch (e: any) {
+      if (alumnosReqIdRef.current !== reqId) return;
+      setAlumnosError(e?.message || "No se pudo cargar el estado de alumnos");
+    } finally {
+      if (alumnosReqIdRef.current === reqId) setAlumnosLoading(false);
     }
   }
 
@@ -2199,6 +2483,14 @@ function PaymentsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isStudent]);
 
+  useEffect(() => {
+    if (activeTab !== "alumnos") return;
+    if (isStudent) return;
+    if (alumnosLoadedAt) return;
+    void loadAlumnos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isStudent]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -2219,7 +2511,7 @@ function PaymentsContent() {
         className="space-y-4"
       >
         <TabsList
-          className={`grid h-10 w-full ${isStudent ? "max-w-md grid-cols-1" : "max-w-2xl grid-cols-3"} items-center rounded-xl border bg-muted/40 p-1`}
+          className={`grid h-10 w-full ${isStudent ? "max-w-md grid-cols-1" : "max-w-3xl grid-cols-4"} items-center rounded-xl border bg-muted/40 p-1`}
         >
           <TabsTrigger
             value="pagos"
@@ -2234,6 +2526,12 @@ function PaymentsContent() {
                 className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
               >
                 Cuotas por vencer
+              </TabsTrigger>
+              <TabsTrigger
+                value="alumnos"
+                className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                Estado alumnos
               </TabsTrigger>
               <TabsTrigger
                 value="sin-plan"
@@ -3058,6 +3356,360 @@ function PaymentsContent() {
                   </TableBody>
                 </Table>
               </div>
+            </div>
+          </TabsContent>
+        ) : null}
+
+        {!isStudent ? (
+          <TabsContent value="alumnos" className="space-y-4">
+            <div className="rounded-lg border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-700">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold">
+                      Estado de alumnos y morosidad
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Se cruzan todos los pagos y cuotas con el listado de
+                      alumnos para obtener el estado actual. Se considera
+                      <strong> moroso</strong> a toda cuota pendiente cuyo
+                      vencimiento supere los{" "}
+                      <strong>{MORA_GRACE_DAYS} días</strong> de gracia o cuyo
+                      estatus ya sea &quot;moroso&quot; / &quot;vencido&quot;.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={alumnosLoading}
+                  onClick={() => {
+                    setAlumnosLoadedAt(null);
+                    void loadAlumnos();
+                  }}
+                >
+                  {alumnosLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  Recargar
+                </Button>
+              </div>
+
+              {alumnosLoading ? (
+                <div className="mt-3 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  {alumnosProgress.stage === "students" ? (
+                    <>Consultando alumnos…</>
+                  ) : alumnosProgress.stage === "payments" ? (
+                    <>
+                      Recorriendo pagos… página {alumnosProgress.fetched}
+                      {alumnosProgress.total
+                        ? ` de ${alumnosProgress.total}`
+                        : ""}
+                    </>
+                  ) : alumnosProgress.stage === "cuotas" ? (
+                    <>
+                      Recorriendo cuotas… página {alumnosProgress.fetched}
+                      {alumnosProgress.total
+                        ? ` de ${alumnosProgress.total}`
+                        : ""}
+                    </>
+                  ) : (
+                    <>Preparando datos…</>
+                  )}
+                </div>
+              ) : null}
+
+              {alumnosError ? (
+                <div className="mt-3">
+                  <Alert variant="destructive">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{alumnosError}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : null}
+
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Total alumnos
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {alumnosLoading && !alumnosLoadedAt
+                      ? "…"
+                      : alumnosStats.totalAlumnos}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Alumnos morosos (&gt;{MORA_GRACE_DAYS} días)
+                  </div>
+                  <div className="text-sm font-semibold text-rose-700">
+                    {alumnosLoading && !alumnosLoadedAt
+                      ? "…"
+                      : alumnosStats.morososAlumnos}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Cuotas morosas
+                  </div>
+                  <div className="text-sm font-semibold text-rose-700">
+                    {alumnosLoading && !alumnosLoadedAt
+                      ? "…"
+                      : alumnosStats.cuotasMorosasTotales}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-card">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  Listado de alumnos
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  <div className="w-full sm:w-72">
+                    <Input
+                      placeholder="Buscar por nombre o código…"
+                      value={alumnosSearch}
+                      onChange={(e) => setAlumnosSearch(e.target.value)}
+                      disabled={alumnosLoading && !alumnosLoadedAt}
+                    />
+                  </div>
+                  <Select
+                    value={alumnosLifecycleFilter}
+                    onValueChange={(v) =>
+                      setAlumnosLifecycleFilter(v as StudentLifecycleFilter)
+                    }
+                  >
+                    <SelectTrigger className="w-full sm:w-52">
+                      <SelectValue placeholder="Estado del alumno" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos los estados</SelectItem>
+                      <SelectItem value="activo">Activo</SelectItem>
+                      <SelectItem value="en_progreso">En progreso</SelectItem>
+                      <SelectItem value="pausa">Pausa</SelectItem>
+                      <SelectItem value="inactivo_pago">
+                        Inactivo por pago
+                      </SelectItem>
+                      <SelectItem value="inactivo">Inactivo</SelectItem>
+                      <SelectItem value="sin_estado">Sin estado</SelectItem>
+                      <SelectItem value="otro">Otro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <label className="inline-flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={alumnosOverdueOnly}
+                      onChange={(e) => setAlumnosOverdueOnly(e.target.checked)}
+                    />
+                    Solo morosos &gt;{MORA_GRACE_DAYS} días
+                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportAlumnos}
+                    disabled={filteredAlumnosRows.length === 0}
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    Excel
+                  </Button>
+                </div>
+              </div>
+
+              <div className="overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Alumno</TableHead>
+                      <TableHead>Estado alumno</TableHead>
+                      <TableHead>Etapa</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead className="text-right">Cuotas pend.</TableHead>
+                      <TableHead className="text-right">Morosas</TableHead>
+                      <TableHead className="text-right">Máx. atraso</TableHead>
+                      <TableHead className="text-right">Deuda</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {alumnosLoading && !alumnosLoadedAt ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={9}
+                          className="py-8 text-center text-sm text-muted-foreground"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Cargando estado de alumnos…
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ) : !filteredAlumnosRows.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={9}
+                          className="py-8 text-center text-sm text-muted-foreground"
+                        >
+                          {alumnosLoadedAt
+                            ? "No hay coincidencias para los filtros seleccionados."
+                            : "Aún no se han cargado datos."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredAlumnosRows.map((row) => {
+                        const lifecycleLabel = getStudentLifecycleStateLabel(
+                          row.student?.state,
+                        );
+                        const lifecycleClass = getStudentLifecycleBadgeClass(
+                          row.lifecycleKind,
+                        );
+                        const isMoroso = row.cuotasMorosas > 0;
+                        const rawState = String(
+                          row.student?.state ?? "",
+                        ).trim();
+                        const showRawState =
+                          rawState &&
+                          rawState.toLowerCase() !==
+                            lifecycleLabel.toLowerCase();
+                        return (
+                          <TableRow
+                            key={row.student.id}
+                            className={
+                              isMoroso
+                                ? "bg-rose-50/40 dark:bg-rose-950/20"
+                                : undefined
+                            }
+                          >
+                            <TableCell className="font-medium">
+                              {fixMojibake(row.student?.name || "") || "—"}
+                            </TableCell>
+                            <TableCell>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${lifecycleClass}`}
+                              >
+                                {lifecycleLabel}
+                              </span>
+                              {showRawState ? (
+                                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                                  {rawState}
+                                </div>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              {row.student?.stage ? (
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${getOptionBadgeClass(
+                                    "etapa",
+                                    row.student.stage,
+                                  )}`}
+                                >
+                                  {row.student.stage}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {row.hasPlan ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px]"
+                                >
+                                  {row.paymentsCount} pago
+                                  {row.paymentsCount === 1 ? "" : "s"}
+                                </Badge>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-200">
+                                  Sin plan
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {row.cuotasPendientes}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {row.cuotasMorosas > 0 ? (
+                                <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/35 dark:text-rose-200">
+                                  {row.cuotasMorosas}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  0
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {row.maxDiasAtraso > 0 ? (
+                                <span className="font-semibold text-rose-700">
+                                  {row.maxDiasAtraso}d
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right text-xs">
+                              {Object.keys(row.totalDeudaByCurrency).length ===
+                              0
+                                ? "—"
+                                : Object.entries(row.totalDeudaByCurrency)
+                                    .map(([c, v]) => formatMoney(v, c))
+                                    .join(" / ")}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {(() => {
+                                const firstPaymentCodigo = row.code
+                                  ? String(
+                                      alumnosPaymentsByCode[
+                                        row.code.toLowerCase()
+                                      ]?.[0]?.codigo ?? "",
+                                    ).trim()
+                                  : "";
+                                return firstPaymentCodigo ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Ver plan de pagos"
+                                    onClick={() =>
+                                      openDetail(firstPaymentCodigo)
+                                    }
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    —
+                                  </span>
+                                );
+                              })()}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {alumnosLoadedAt ? (
+                <div className="border-t p-3 text-[11px] text-muted-foreground">
+                  Mostrando {filteredAlumnosRows.length} de {alumnosRows.length}{" "}
+                  alumnos · Última actualización{" "}
+                  {formatDateTime(new Date(alumnosLoadedAt).toISOString())}
+                </div>
+              ) : null}
             </div>
           </TabsContent>
         ) : null}
