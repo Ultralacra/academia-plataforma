@@ -1259,13 +1259,14 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
 function inferProgramDuration(program?: string): string {
   const p = String(program || "").toLowerCase();
   if (p.includes("pro")) return "cuatro (4) meses";
-  if (p.includes("foundation")) return "dos (2) meses";
+  // Acepta el nombre nuevo "starter" y el legado "foundation".
+  if (p.includes("starter") || p.includes("foundation")) return "dos (2) meses";
   return "cuatro (4) meses";
 }
 
 function inferProgramDurationNumber(program?: string): number {
   const p = String(program || "").toLowerCase();
   if (p.includes("pro")) return 4;
-  if (p.includes("foundation")) return 2;
+  if (p.includes("starter") || p.includes("foundation")) return 2;
   return 4;
 }

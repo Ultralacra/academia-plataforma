@@ -133,14 +133,16 @@ function inferProgramKey(program?: string | null) {
   const v = String(program ?? "")
     .trim()
     .toLowerCase();
-  if (v.includes("foundation")) return "FOUNDATION" as const;
+  // Acepta tanto el nuevo nombre "starter" como el legado "foundation".
+  if (v.includes("starter") || v.includes("foundation"))
+    return "STARTER" as const;
   if (v.includes("pro")) return "PRO" as const;
   return "UNKNOWN" as const;
 }
 
 const PRODUCT_OPTIONS = [
   { value: "HOTSELLING PRO", label: "HOTSELLING PRO" },
-  { value: "HOTSELLING FOUNDATION", label: "HOTSELLING FOUNDATION" },
+  { value: "HOTSELLING STARTER", label: "HOTSELLING STARTER" },
 ] as const;
 
 const PRICING = {
@@ -148,7 +150,7 @@ const PRICING = {
     list: { total: 5000, installments: { count: 3, amount: 1800 } },
     discount: { cashTotal: 3990, installments: { count: 3, amount: 1600 } },
   },
-  FOUNDATION: {
+  STARTER: {
     list: { total: 2000, installments: { count: 2, amount: 1100 } },
     discount: { cashTotal: 1500, installments: { count: 2, amount: 825 } },
   },
@@ -544,8 +546,8 @@ export function CloseSaleForm({
     const pricing =
       programKey === "PRO"
         ? PRICING.PRO
-        : programKey === "FOUNDATION"
-          ? PRICING.FOUNDATION
+        : programKey === "STARTER"
+          ? PRICING.STARTER
           : null;
 
     const planType: PaymentPlanType =
@@ -1542,8 +1544,8 @@ export function CloseSaleForm({
                 const pricing =
                   programKey === "PRO"
                     ? PRICING.PRO
-                    : programKey === "FOUNDATION"
-                      ? PRICING.FOUNDATION
+                    : programKey === "STARTER"
+                      ? PRICING.STARTER
                       : null;
 
                 const plan = (form.paymentPlanType ||
@@ -1563,8 +1565,8 @@ export function CloseSaleForm({
                 const stdPlanLabel =
                   programKey === "PRO"
                     ? "PRO"
-                    : programKey === "FOUNDATION"
-                      ? "FOUNDATION"
+                    : programKey === "STARTER"
+                      ? "STARTER"
                       : "—";
 
                 const stdQuotaCount = stdInstallments?.count ?? 0;

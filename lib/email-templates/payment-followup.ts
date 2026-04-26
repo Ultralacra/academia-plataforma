@@ -33,7 +33,7 @@ const HEADER_IMAGE =
 export const DEFAULT_PAYMENT_LINKS_HTML = `
 <div style="margin:18px 0;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:16px;">
   <div style="margin:0 0 10px 0;color:#111827;font-size:14px;font-weight:800;">🔗 Enlaces de pago</div>
-  <div style="margin:0 0 8px 0;color:#374151;font-size:13px;font-weight:700;">Hotselling Foundation:</div>
+  <div style="margin:0 0 8px 0;color:#374151;font-size:13px;font-weight:700;">Hotselling Starter:</div>
   <div style="margin:4px 0;"><a href="https://pay.hotmart.com/Y93936435M?off=vcnatosn&checkoutMode=10" target="_blank" rel="noreferrer" style="color:#2563eb;font-size:13px;">👉 Pagar en 2 cuotas</a></div>
   <div style="margin:4px 0;"><a href="https://pay.hotmart.com/Y93936435M?off=kxxqvjut&checkoutMode=10" target="_blank" rel="noreferrer" style="color:#2563eb;font-size:13px;">👉 Pagar en 3 cuotas</a></div>
   <div style="margin:12px 0 8px 0;color:#374151;font-size:13px;font-weight:700;">Hotselling PRO:</div>
@@ -42,7 +42,7 @@ export const DEFAULT_PAYMENT_LINKS_HTML = `
   <div style="margin:10px 0 0 0;color:#6b7280;font-size:11px;">Selecciona el enlace que corresponda a tu plan.</div>
 </div>`;
 
-export const DEFAULT_PAYMENT_LINKS_TEXT = `\nEnlaces de pago:\n\nHostelling Foundation:\n- Pagar en 2 cuotas: https://pay.hotmart.com/Y93936435M?off=vcnatosn&checkoutMode=10\n- Pagar en 3 cuotas: https://pay.hotmart.com/Y93936435M?off=kxxqvjut&checkoutMode=10\n\nHostelling PRO:\n- Pagar en 2 cuotas: https://pay.hotmart.com/Y93936435M?off=4gkynmtm&checkoutMode=10&bid=1770540069632\n- Pagar en 3 cuotas: https://pay.hotmart.com/Y93936435M?off=9ns5b9wf&checkoutMode=10\n\nSelecciona el enlace que corresponda a tu plan.\n`;
+export const DEFAULT_PAYMENT_LINKS_TEXT = `\nEnlaces de pago:\n\nHotselling Starter:\n- Pagar en 2 cuotas: https://pay.hotmart.com/Y93936435M?off=vcnatosn&checkoutMode=10\n- Pagar en 3 cuotas: https://pay.hotmart.com/Y93936435M?off=kxxqvjut&checkoutMode=10\n\nHostelling PRO:\n- Pagar en 2 cuotas: https://pay.hotmart.com/Y93936435M?off=4gkynmtm&checkoutMode=10&bid=1770540069632\n- Pagar en 3 cuotas: https://pay.hotmart.com/Y93936435M?off=9ns5b9wf&checkoutMode=10\n\nSelecciona el enlace que corresponda a tu plan.\n`;
 
 function wrap(bodyHtml: string) {
   return `<!doctype html>

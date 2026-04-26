@@ -69,7 +69,7 @@ const CUSTOMER_TYPE_OPTIONS = [
 
 const PRODUCT_PRESENTED_OPTIONS = [
   { value: "hotselling_pro", label: "Hotselling PRO" },
-  { value: "hotselling_foundation", label: "Hotselling Foundation" },
+  { value: "hotselling_starter", label: "Hotselling Starter" },
 ];
 
 const OBJECTION_OPTIONS = [
