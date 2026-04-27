@@ -3076,10 +3076,20 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       )}
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">
-                        Días restantes
+                        {accessStats.isExpired || accessStats.remainingDays < 0
+                          ? "Días vencido"
+                          : "Días restantes"}
                       </span>
-                      <span className="font-medium">
-                        {Math.max(0, accessStats.remainingDays)}
+                      <span
+                        className={`font-medium ${
+                          accessStats.isExpired || accessStats.remainingDays < 0
+                            ? "text-rose-600 dark:text-rose-400"
+                            : ""
+                        }`}
+                      >
+                        {accessStats.isExpired || accessStats.remainingDays < 0
+                          ? Math.abs(accessStats.remainingDays)
+                          : accessStats.remainingDays}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">

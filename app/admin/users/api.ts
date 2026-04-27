@@ -11,6 +11,8 @@ export type SysUser = {
   tipo: "equipo" | "cliente" | string | null; // origen o tipo de cuenta
   created_at: string | null;
   updated_at: string | null;
+  area?: string | null;
+  puesto?: string | null;
 };
 
 export type UsersEnvelope = {

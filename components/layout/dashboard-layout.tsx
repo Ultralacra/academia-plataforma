@@ -16,6 +16,7 @@ import {
   RefreshCw,
   BadgeDollarSign,
   KeyRound,
+  Search,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -51,6 +52,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Spinner from "@/components/ui/spinner";
 
 interface DashboardLayoutProps {
@@ -662,11 +671,30 @@ function TasksNotificationsBadge() {
   );
 }
 
+function canSeePaymentsAndAccessNotifications(
+  user:
+    | {
+        role?: string | null;
+        area?: string | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (user.role === "atc") return true;
+  const area = String(user.area ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+  if (user.role === "equipo" && area === "ATENCION_AL_CLIENTE") return true;
+  return false;
+}
+
 function PaymentsDueBadge() {
   const router = useRouter();
   const { user } = useAuth();
-  const enabled =
-    user?.role === "admin" || user?.role === "coach" || user?.role === "equipo";
+  const enabled = canSeePaymentsAndAccessNotifications(user);
   const { dueCount, loading, error, refresh, items } =
     usePaymentDueNotifications({
       enabled,
@@ -932,14 +960,172 @@ function PaymentsDueBadge() {
 function AccessDueBadge() {
   const { user } = useAuth();
   const router = useRouter();
-  const enabled =
-    user?.role === "admin" || user?.role === "coach" || user?.role === "equipo";
-  const { dueCount, loading, error, refresh, items } =
-    useAccessDueNotifications({ enabled, daysWindow: 5 });
+  const enabled = canSeePaymentsAndAccessNotifications(user);
+  const {
+    dueCount,
+    overdueCount,
+    totalCount,
+    loading,
+    error,
+    refresh,
+    items,
+    overdueItems,
+  } = useAccessDueNotifications({ enabled, daysWindow: 30 });
 
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"due" | "overdue">("due");
+  const [search, setSearch] = useState("");
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [monthFilter, setMonthFilter] = useState<string>(currentMonthKey);
+
+  // Construir lista de meses disponibles a partir de items vencidos
+  const monthOptions = useMemo(() => {
+    const MONTH_NAMES = [
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre",
+    ];
+    const map = new Map<
+      string,
+      { key: string; label: string; count: number }
+    >();
+    for (const it of overdueItems) {
+      const d = it.fechaVence;
+      const m = /^(\d{4})-(\d{2})/.exec(d || "");
+      if (!m) continue;
+      const key = `${m[1]}-${m[2]}`;
+      const monthIdx = Number(m[2]) - 1;
+      const label = `${MONTH_NAMES[monthIdx] ?? "?"} ${m[1]}`;
+      const prev = map.get(key);
+      if (prev) prev.count += 1;
+      else map.set(key, { key, label, count: 1 });
+    }
+    // Asegurar que el mes actual aparezca aunque no tenga items
+    if (!map.has(currentMonthKey)) {
+      const monthIdx = now.getMonth();
+      map.set(currentMonthKey, {
+        key: currentMonthKey,
+        label: `${MONTH_NAMES[monthIdx]} ${now.getFullYear()}`,
+        count: 0,
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
+  }, [overdueItems, currentMonthKey]);
+
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  const matchesSearch = (it: (typeof items)[number]) => {
+    const q = normalize(search.trim());
+    if (!q) return true;
+    return (
+      normalize(String(it.alumnoNombre ?? "")).includes(q) ||
+      normalize(String(it.alumnoCodigo ?? "")).includes(q) ||
+      normalize(String(it.alumnoEstado ?? "")).includes(q)
+    );
+  };
+
+  const filteredDue = useMemo(
+    () => items.filter(matchesSearch),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, search],
+  );
+  const filteredOverdue = useMemo(
+    () =>
+      overdueItems.filter((it) => {
+        if (!matchesSearch(it)) return false;
+        const m = /^(\d{4})-(\d{2})/.exec(it.fechaVence || "");
+        if (!m) return false;
+        return `${m[1]}-${m[2]}` === monthFilter;
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [overdueItems, search, monthFilter],
+  );
 
   if (!enabled) return null;
+
+  const renderItem = (
+    it: (typeof items)[number],
+    variant: "due" | "overdue",
+  ) => {
+    const who =
+      String(it.alumnoNombre ?? "").trim() ||
+      String(it.alumnoCodigo ?? "").trim() ||
+      "Alumno";
+    const when =
+      variant === "overdue"
+        ? `Vencido hace ${Math.abs(it.daysLeft)} día(s)`
+        : it.daysLeft === 0
+          ? "Vence hoy"
+          : `Vence en ${it.daysLeft} día(s)`;
+    const estado = it.alumnoEstado ? String(it.alumnoEstado).trim() : "";
+    return (
+      <div
+        key={it.key}
+        className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div
+            className="text-sm font-medium leading-snug truncate"
+            title={who}
+          >
+            {who}
+          </div>
+          {estado && (
+            <span
+              className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full border ${
+                variant === "overdue"
+                  ? "bg-destructive/10 text-destructive border-destructive/20"
+                  : "bg-muted text-muted-foreground border-muted-foreground/20"
+              }`}
+              title={`Estado: ${estado}`}
+            >
+              {estado}
+            </span>
+          )}
+        </div>
+        <div
+          className={`text-xs ${
+            variant === "overdue" ? "text-destructive" : "text-muted-foreground"
+          }`}
+        >
+          {when}
+          {it.fechaVence ? ` (${it.fechaVence})` : ""}
+        </div>
+        {it.alumnoCodigo && (
+          <div className="mt-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-[11px]"
+              onClick={() => {
+                setOpen(false);
+                router.push(
+                  `/admin/alumnos/${encodeURIComponent(it.alumnoCodigo!)}/perfil`,
+                );
+              }}
+            >
+              Ver perfil
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <Popover
@@ -957,22 +1143,22 @@ function AccessDueBadge() {
               ? "No se pudieron cargar accesos"
               : loading
                 ? "Cargando accesos..."
-                : dueCount > 0
-                  ? `Accesos por vencer: ${dueCount}`
+                : totalCount > 0
+                  ? `Accesos: ${dueCount} por vencer · ${overdueCount} vencidos`
                   : "No hay accesos por vencer"
           }
           type="button"
         >
           <KeyRound className={`h-4 w-4 ${loading ? "opacity-60" : ""}`} />
-          {dueCount > 0 && (
+          {totalCount > 0 && (
             <span
               className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
-              title="Accesos por vencer"
+              title="Accesos por vencer / vencidos"
             >
-              {dueCount > 99 ? "99+" : dueCount}
+              {totalCount > 99 ? "99+" : totalCount}
             </span>
           )}
-          {dueCount === 0 && !!error && (
+          {totalCount === 0 && !!error && (
             <span
               className="absolute -top-1 -right-1 bg-muted text-muted-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
               title="Error al cargar accesos"
@@ -982,67 +1168,109 @@ function AccessDueBadge() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-3">
-        <div className="text-base font-semibold px-2 py-1">
-          Accesos por vencer (≤5 días)
+      <PopoverContent className="w-[22rem] p-0" align="end">
+        <div className="px-3 pt-3 pb-2 border-b">
+          <div className="text-base font-semibold">Accesos</div>
+          <div className="text-[11px] text-muted-foreground">
+            {dueCount} por vencer · {overdueCount} vencidos
+          </div>
         </div>
-        <div className="max-h-80 overflow-y-auto">
-          {loading ? (
-            <div className="p-3 text-xs text-muted-foreground">Cargando…</div>
-          ) : items.length === 0 ? (
-            <div className="p-3 text-xs text-muted-foreground">
-              {error
-                ? "No se pudieron cargar los accesos"
-                : "No hay accesos por vencer"}
-            </div>
-          ) : (
-            items.slice(0, 30).map((it) => {
-              const who =
-                String(it.alumnoNombre ?? "").trim() ||
-                String(it.alumnoCodigo ?? "").trim() ||
-                "Alumno";
-              const when =
-                it.daysLeft === 0
-                  ? "Vence hoy"
-                  : `Vence en ${it.daysLeft} día(s)`;
-              return (
-                <div
-                  key={it.key}
-                  className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
-                >
-                  <div
-                    className="text-sm font-medium leading-snug truncate"
-                    title={who}
-                  >
-                    {who}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {when}
-                    {it.fechaVence ? ` (${it.fechaVence})` : ""}
-                  </div>
-                  {it.alumnoCodigo && (
-                    <div className="mt-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 text-[11px]"
-                        onClick={() => {
-                          setOpen(false);
-                          router.push(
-                            `/admin/alumnos/${encodeURIComponent(it.alumnoCodigo!)}/perfil`,
-                          );
-                        }}
-                      >
-                        Ver perfil
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })
+
+        <div className="px-3 pt-3 pb-2 space-y-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre, código o estado…"
+              className="h-8 pl-7 text-xs"
+            />
+          </div>
+          {tab === "overdue" && (
+            <Select value={monthFilter} onValueChange={setMonthFilter}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Selecciona mes" />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                {monthOptions.map((m) => (
+                  <SelectItem key={m.key} value={m.key} className="text-xs">
+                    <span className="flex items-center justify-between gap-2 w-full">
+                      <span>{m.label}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {m.count}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
+
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as "due" | "overdue")}
+          className="px-3"
+        >
+          <TabsList className="grid w-full grid-cols-2 h-9">
+            <TabsTrigger
+              value="due"
+              className="text-[11px] truncate gap-1 px-1"
+            >
+              <span className="truncate">Por vencer</span>
+              <span className="shrink-0 rounded bg-muted px-1 text-[10px]">
+                {filteredDue.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="overdue"
+              className="text-[11px] truncate gap-1 px-1"
+            >
+              <span className="truncate">Vencidos</span>
+              <span className="shrink-0 rounded bg-muted px-1 text-[10px]">
+                {filteredOverdue.length}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="due" className="mt-2 pb-3">
+            <div className="max-h-80 overflow-y-auto">
+              {loading ? (
+                <div className="p-3 text-xs text-muted-foreground">
+                  Cargando…
+                </div>
+              ) : filteredDue.length === 0 ? (
+                <div className="p-3 text-xs text-muted-foreground">
+                  {error
+                    ? "No se pudieron cargar los accesos"
+                    : search
+                      ? "Sin resultados para tu búsqueda"
+                      : "No hay accesos por vencer"}
+                </div>
+              ) : (
+                filteredDue.slice(0, 100).map((it) => renderItem(it, "due"))
+              )}
+            </div>
+          </TabsContent>
+          <TabsContent value="overdue" className="mt-2 pb-3">
+            <div className="max-h-80 overflow-y-auto">
+              {loading ? (
+                <div className="p-3 text-xs text-muted-foreground">
+                  Cargando…
+                </div>
+              ) : filteredOverdue.length === 0 ? (
+                <div className="p-3 text-xs text-muted-foreground">
+                  {error
+                    ? "No se pudieron cargar los accesos"
+                    : search
+                      ? "Sin resultados para tu búsqueda"
+                      : "No hay accesos vencidos en ese mes"}
+                </div>
+              ) : (
+                filteredOverdue.map((it) => renderItem(it, "overdue"))
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </PopoverContent>
     </Popover>
   );
@@ -1123,8 +1351,12 @@ export function DashboardLayout({
                   variant="ghost"
                   className="h-9 w-9 rounded-xl hover:bg-muted/60"
                 />
-                <PaymentsDueBadge />
-                <AccessDueBadge />
+                {canSeePaymentsAndAccessNotifications(user) && (
+                  <>
+                    <PaymentsDueBadge />
+                    <AccessDueBadge />
+                  </>
+                )}
                 <TasksNotificationsBadge />
                 <NotificationsBadge />
               </div>

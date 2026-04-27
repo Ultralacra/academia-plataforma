@@ -48,11 +48,11 @@ export default function UsersTable({
             <TableRow>
               <TableHead className="whitespace-nowrap">Nombre</TableHead>
               <TableHead className="whitespace-nowrap">Email</TableHead>
-              <TableHead className="whitespace-nowrap">Código</TableHead>
               <TableHead className="whitespace-nowrap">Rol</TableHead>
               <TableHead className="whitespace-nowrap">Tipo</TableHead>
+              <TableHead className="whitespace-nowrap">Área</TableHead>
+              <TableHead className="whitespace-nowrap">Puesto</TableHead>
               <TableHead className="whitespace-nowrap">Creado</TableHead>
-              <TableHead className="whitespace-nowrap">Actualizado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -105,9 +105,6 @@ export default function UsersTable({
                     >
                       {r.email || "—"}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {r.codigo || "—"}
-                    </TableCell>
                     <TableCell>
                       <Badge className={roleBadgeCls(r.role)}>
                         {r.role || "—"}
@@ -119,13 +116,14 @@ export default function UsersTable({
                       </Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {r.created_at
-                        ? new Date(r.created_at).toLocaleString()
-                        : "—"}
+                      {r.area || "—"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {r.updated_at
-                        ? new Date(r.updated_at).toLocaleString()
+                      {r.puesto || "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {r.created_at
+                        ? new Date(r.created_at).toLocaleString()
                         : "—"}
                     </TableCell>
                   </TableRow>
