@@ -405,28 +405,6 @@ export function useAccessDueNotifications(opts: {
       dueItems.sort((a, b) => a.fechaVence.localeCompare(b.fechaVence));
       // Vencimiento de menor a mayor (fecha más antigua primero)
       overdue.sort((a, b) => a.fechaVence.localeCompare(b.fechaVence));
-      // Debug: imprimir en consola ambas listas (solo nombre, estado y días)
-      const formatDue = (it: AccessDueItem) => ({
-        nombre: it.alumnoNombre,
-        estado: it.alumnoEstado,
-        diasRestantes: it.daysLeft,
-      });
-      const formatOverdue = (it: AccessDueItem) => ({
-        nombre: it.alumnoNombre,
-        estado: it.alumnoEstado,
-        diasVencidos: Math.abs(it.daysLeft),
-        fechaVence: it.fechaVence,
-      });
-      // eslint-disable-next-line no-console
-      console.log(
-        "[AccessDue] Por vencer (≤" + daysWindow + "d):",
-        dueItems.map(formatDue),
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        "[AccessDue] Vencidos (mes en curso):",
-        overdue.map(formatOverdue),
-      );
       setItems(dueItems);
       setOverdueItems(overdue);
       lastFetchRef.current = Date.now();

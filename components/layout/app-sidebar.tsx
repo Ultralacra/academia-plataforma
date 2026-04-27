@@ -222,14 +222,35 @@ export function AppSidebar() {
         const adminArea = (user?.area || "").toUpperCase();
         const isAdminAtc =
           adminTipo === "equipo" && adminArea === "ATENCION_AL_CLIENTE";
-        const baseAdmin = isAdminAtc
-          ? adminItems.filter(
-              (item) =>
-                !["Opciones", "Roles", "Usuarios sistema", "Pagos"].includes(
-                  item.title,
-                ),
-            )
-          : adminItems;
+        const baseAdmin = (
+          isAdminAtc
+            ? adminItems.filter(
+                (item) =>
+                  !["Opciones", "Roles", "Usuarios sistema", "Pagos"].includes(
+                    item.title,
+                  ),
+              )
+            : adminItems
+        ).map((item) =>
+          item.title === "Alumnos"
+            ? ({
+                title: "Alumnos",
+                icon: GraduationCap,
+                children: [
+                  {
+                    title: "Listado",
+                    url: "/admin/alumnos",
+                    icon: GraduationCap,
+                  },
+                  {
+                    title: "Vista Mariana",
+                    url: "/admin/alumnos/vista-enriquecida",
+                    icon: Sparkles,
+                  },
+                ],
+              } as MenuItem)
+            : item,
+        );
 
         return (
           alumnoCodeInPath

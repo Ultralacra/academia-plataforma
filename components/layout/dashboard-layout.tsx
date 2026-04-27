@@ -1055,6 +1055,38 @@ function AccessDueBadge() {
     [overdueItems, search, monthFilter],
   );
 
+  // Imprimir en consola los resultados aplicando el filtro actual (tab/búsqueda/mes)
+  useEffect(() => {
+    if (!enabled) return;
+    const fmtDue = (it: (typeof items)[number]) => ({
+      nombre: it.alumnoNombre,
+      codigo: it.alumnoCodigo,
+      estado: it.alumnoEstado,
+      diasRestantes: it.daysLeft,
+      fechaVence: it.fechaVence,
+    });
+    const fmtOver = (it: (typeof items)[number]) => ({
+      nombre: it.alumnoNombre,
+      codigo: it.alumnoCodigo,
+      estado: it.alumnoEstado,
+      diasVencidos: Math.abs(it.daysLeft),
+      fechaVence: it.fechaVence,
+    });
+    if (tab === "due") {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[AccessDue] Por vencer (filtrado, búsqueda="${search}") — ${filteredDue.length}:`,
+        filteredDue.map(fmtDue),
+      );
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[AccessDue] Vencidos (filtrado, mes=${monthFilter}, búsqueda="${search}") — ${filteredOverdue.length}:`,
+        filteredOverdue.map(fmtOver),
+      );
+    }
+  }, [enabled, tab, search, monthFilter, filteredDue, filteredOverdue]);
+
   if (!enabled) return null;
 
   const renderItem = (

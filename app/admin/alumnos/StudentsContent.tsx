@@ -6,11 +6,16 @@ import {
   getAllStudents,
   getAllStudentsPaged,
   getAllCoachesFromTeams,
+  getCoachStudentsByCoachId,
   createStudent,
   getOpciones,
   updateClientEtapa,
   updateClientIngreso,
 } from "./api";
+import {
+  getPayments as getPaymentsGlobal,
+  getPaymentCuotas,
+} from "../payments/api";
 import {
   Search,
   Activity,
@@ -28,6 +33,12 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  Eye,
+  Sparkles,
+  CreditCard,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -145,7 +156,7 @@ const nfNumber = new Intl.NumberFormat("es-ES", {
 const EXPORT_COLUMNS = [
   "Código",
   "Nombre",
-  "Coachs",
+  "Equipo asignado",
   "Fase",
   "Estado",
   "Ingreso",
@@ -156,6 +167,14 @@ const EXPORT_COLUMNS = [
   "trascendencia",
   "Última actividad",
   "Días inactividad",
+  "Plan de pago (monto)",
+  "Plan de pago (moneda)",
+  "Plan de pago (cuotas total)",
+  "Cuotas pagadas",
+  "Cuotas pendientes",
+  "Cuotas en proceso",
+  "Cuotas vencidas",
+  "Estado plan de pago",
 ] as const;
 
 const clean = (s: string) => s.replaceAll(".", "");
@@ -487,6 +506,509 @@ function normalizeSearchText(value?: string | null) {
     .toLowerCase();
 }
 
+type ExportRow = Record<string, any>;
+
+export function ExportPreviewPanel({
+  loading,
+  rows,
+  search,
+  setSearch,
+  onExportXlsx,
+  onExportCsv,
+  onRefresh,
+  exportingFormat,
+}: {
+  loading: boolean;
+  rows: ExportRow[];
+  search: string;
+  setSearch: (v: string) => void;
+  onExportXlsx: () => void;
+  onExportCsv: () => void;
+  onRefresh: () => void;
+  exportingFormat: "csv" | "xlsx" | null;
+}) {
+  const filtered = useMemo(() => {
+    const q = normalizeSearchText(search);
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay =
+        normalizeSearchText(r["Código"]) +
+        " " +
+        normalizeSearchText(r["Nombre"]) +
+        " " +
+        normalizeSearchText(r["Equipo asignado"]) +
+        " " +
+        normalizeSearchText(r["Fase"]) +
+        " " +
+        normalizeSearchText(r["Estado"]);
+      return hay.includes(q);
+    });
+  }, [rows, search]);
+
+  const totals = useMemo(() => {
+    const t = {
+      total: rows.length,
+      inversion: 0,
+      facturacion: 0,
+      cuotasPagadas: 0,
+      cuotasPendientes: 0,
+      cuotasEnProceso: 0,
+      cuotasVencidas: 0,
+    };
+    for (const r of rows) {
+      t.inversion += Number(r["Inversión"]) || 0;
+      t.facturacion += Number(r["Facturación"]) || 0;
+      t.cuotasPagadas += Number(r["Cuotas pagadas"]) || 0;
+      t.cuotasPendientes += Number(r["Cuotas pendientes"]) || 0;
+      t.cuotasEnProceso += Number(r["Cuotas en proceso"]) || 0;
+      t.cuotasVencidas += Number(r["Cuotas vencidas"]) || 0;
+    }
+    return t;
+  }, [rows]);
+
+  const fmtMoney = (n: number) =>
+    n.toLocaleString("es-AR", {
+      maximumFractionDigits: 0,
+    });
+
+  const planStatusColor = (s?: string) => {
+    const v = String(s ?? "").toLowerCase();
+    if (v.includes("pag"))
+      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-emerald-500/30";
+    if (v.includes("venc") || v.includes("moros"))
+      return "bg-rose-500/15 text-rose-700 dark:text-rose-300 ring-rose-500/30";
+    if (v.includes("proc") || v.includes("progres"))
+      return "bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-amber-500/30";
+    if (v.includes("pend"))
+      return "bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-blue-500/30";
+    return "bg-muted text-muted-foreground ring-border";
+  };
+
+  const trascendenciaColor = (t?: string) => {
+    const v = String(t ?? "").toLowerCase();
+    if (v.includes("rojo") || v === "red") return "bg-rose-500";
+    if (v.includes("amar") || v === "yellow") return "bg-amber-500";
+    if (v.includes("verd") || v === "green") return "bg-emerald-500";
+    if (v.includes("azul") || v === "blue") return "bg-blue-500";
+    return "bg-slate-400";
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden flex flex-col">
+      <div className="relative px-6 py-5 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-transparent border-b border-border">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-blue-600 dark:text-blue-300">
+              <Sparkles className="h-3.5 w-3.5" />
+              Vista enriquecida
+            </div>
+            <div className="mt-1 text-2xl font-bold">
+              {loading
+                ? "Cargando datos…"
+                : `${filtered.length} de ${rows.length} alumnos`}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Misma información que el archivo exportado, presentada de forma
+              visual.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              disabled={loading}
+              title="Recargar datos"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Actualizar"
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExportCsv}
+              disabled={loading || !!exportingFormat || rows.length === 0}
+            >
+              <FileText className="h-4 w-4" />
+              CSV
+            </Button>
+            <Button
+              size="sm"
+              onClick={onExportXlsx}
+              disabled={loading || !!exportingFormat || rows.length === 0}
+            >
+              {exportingFormat === "xlsx" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4" />
+              )}
+              Excel
+            </Button>
+          </div>
+        </div>
+
+        {!loading && rows.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <StatPill
+              icon={<Users className="h-3.5 w-3.5" />}
+              label="Alumnos"
+              value={totals.total.toString()}
+              tone="blue"
+            />
+            <StatPill
+              icon={<TrendingUp className="h-3.5 w-3.5" />}
+              label="Facturación"
+              value={fmtMoney(totals.facturacion)}
+              tone="emerald"
+            />
+            <StatPill
+              icon={<BarChart3 className="h-3.5 w-3.5" />}
+              label="Inversión"
+              value={fmtMoney(totals.inversion)}
+              tone="indigo"
+            />
+            <StatPill
+              icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+              label="Cuotas pagadas"
+              value={totals.cuotasPagadas.toString()}
+              tone="emerald"
+            />
+            <StatPill
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="Pendientes"
+              value={(
+                totals.cuotasPendientes + totals.cuotasEnProceso
+              ).toString()}
+              tone="amber"
+            />
+            <StatPill
+              icon={<AlertCircle className="h-3.5 w-3.5" />}
+              label="Vencidas"
+              value={totals.cuotasVencidas.toString()}
+              tone="rose"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="px-6 pt-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-10 h-10 rounded-xl"
+            placeholder="Buscar en la vista previa…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            disabled={loading}
+          />
+        </div>
+      </div>
+
+      <div className="px-6 py-4">
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-44 rounded-2xl border border-border bg-gradient-to-br from-card to-muted/30 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 grid place-items-center text-sm text-muted-foreground">
+            No hay resultados.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {filtered.map((r, idx) => {
+              const code = String(r["Código"] ?? "");
+              const name = String(r["Nombre"] ?? "");
+              const equipo = String(r["Equipo asignado"] ?? "");
+              const fase = String(r["Fase"] ?? "");
+              const estado = String(r["Estado"] ?? "");
+              const ingreso = String(r["Ingreso"] ?? "");
+              const inv = Number(r["Inversión"]) || 0;
+              const fact = Number(r["Facturación"]) || 0;
+              const inact = Number(r["Días inactividad"]) || 0;
+              const planMonto = Number(r["Plan de pago (monto)"]) || 0;
+              const planMoneda = String(r["Plan de pago (moneda)"] ?? "");
+              const cuotasTotal = Number(r["Plan de pago (cuotas total)"]) || 0;
+              const pagadas = Number(r["Cuotas pagadas"]) || 0;
+              const pendientes = Number(r["Cuotas pendientes"]) || 0;
+              const enProceso = Number(r["Cuotas en proceso"]) || 0;
+              const vencidas = Number(r["Cuotas vencidas"]) || 0;
+              const planEstado = String(r["Estado plan de pago"] ?? "");
+              const trasc = String(r["trascendencia"] ?? "");
+              const subfase = String(r["subfase"] ?? "");
+
+              const teamList = equipo
+                .split("|")
+                .map((s) => s.trim())
+                .filter(Boolean);
+
+              const pct =
+                cuotasTotal > 0
+                  ? Math.min(100, Math.round((pagadas / cuotasTotal) * 100))
+                  : 0;
+
+              return (
+                <div
+                  key={`${code}-${idx}`}
+                  className="group relative overflow-hidden rounded-2xl border border-border bg-card hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500/60 via-indigo-500/60 to-purple-500/60 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "h-2 w-2 rounded-full ring-2 ring-background",
+                              trascendenciaColor(trasc),
+                            )}
+                            title={`Trascendencia: ${trasc || "—"}`}
+                          />
+                          <p className="text-sm font-semibold truncate">
+                            {name || "Sin nombre"}
+                          </p>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          {code || "—"}
+                        </p>
+                      </div>
+                      {planEstado && (
+                        <span
+                          className={cn(
+                            "shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase rounded-full ring-1",
+                            planStatusColor(planEstado),
+                          )}
+                        >
+                          {planEstado}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {fase && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {fase}
+                        </Badge>
+                      )}
+                      {estado && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {estado}
+                        </Badge>
+                      )}
+                      {subfase && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-indigo-600 dark:text-indigo-300 border-indigo-300/60"
+                        >
+                          {subfase}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl bg-muted/40 p-2.5 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        <Users className="h-3 w-3" />
+                        Equipo asignado
+                      </div>
+                      {teamList.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">
+                          Sin equipo
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {teamList.map((t) => (
+                            <span
+                              key={t}
+                              className="px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[10px] font-medium"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-2">
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                          Facturación
+                        </div>
+                        <div className="font-semibold text-emerald-700 dark:text-emerald-300">
+                          {fact > 0 ? fmtMoney(fact) : "—"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/10 p-2">
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                          Inversión
+                        </div>
+                        <div className="font-semibold text-indigo-700 dark:text-indigo-300">
+                          {inv > 0 ? fmtMoney(inv) : "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {(planMonto > 0 || cuotasTotal > 0) && (
+                      <div className="rounded-xl border border-border p-2.5 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                            <CreditCard className="h-3 w-3" />
+                            Plan de pago
+                          </div>
+                          {planMonto > 0 && (
+                            <span className="text-xs font-bold">
+                              {planMoneda} {fmtMoney(planMonto)}
+                            </span>
+                          )}
+                        </div>
+
+                        {cuotasTotal > 0 && (
+                          <>
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-[10px] text-muted-foreground">
+                              <span>
+                                {pagadas}/{cuotasTotal} pagadas
+                              </span>
+                              <span>{pct}%</span>
+                            </div>
+                          </>
+                        )}
+
+                        <div className="grid grid-cols-4 gap-1 text-center">
+                          <CuotaChip
+                            icon={<CheckCircle2 className="h-3 w-3" />}
+                            tone="emerald"
+                            label="Pag."
+                            value={pagadas}
+                          />
+                          <CuotaChip
+                            icon={<Clock className="h-3 w-3" />}
+                            tone="blue"
+                            label="Pend."
+                            value={pendientes}
+                          />
+                          <CuotaChip
+                            icon={<Loader2 className="h-3 w-3" />}
+                            tone="amber"
+                            label="Proc."
+                            value={enProceso}
+                          />
+                          <CuotaChip
+                            icon={<AlertCircle className="h-3 w-3" />}
+                            tone="rose"
+                            label="Venc."
+                            value={vencidas}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
+                      <span>Ingreso: {ingreso || "—"}</span>
+                      <span
+                        className={cn(
+                          inact > 14
+                            ? "text-rose-600 dark:text-rose-300 font-semibold"
+                            : "",
+                        )}
+                      >
+                        Inactivo: {inact}d
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function StatPill({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: "blue" | "emerald" | "indigo" | "amber" | "rose";
+}) {
+  const tones: Record<string, string> = {
+    blue: "from-blue-500/10 to-blue-500/5 text-blue-700 dark:text-blue-300 border-blue-500/20",
+    emerald:
+      "from-emerald-500/10 to-emerald-500/5 text-emerald-700 dark:text-emerald-300 border-emerald-500/20",
+    indigo:
+      "from-indigo-500/10 to-indigo-500/5 text-indigo-700 dark:text-indigo-300 border-indigo-500/20",
+    amber:
+      "from-amber-500/10 to-amber-500/5 text-amber-700 dark:text-amber-300 border-amber-500/20",
+    rose: "from-rose-500/10 to-rose-500/5 text-rose-700 dark:text-rose-300 border-rose-500/20",
+  };
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-gradient-to-br px-3 py-2",
+        tones[tone],
+      )}
+    >
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider opacity-80">
+        {icon}
+        {label}
+      </div>
+      <div className="text-base font-bold mt-0.5">{value}</div>
+    </div>
+  );
+}
+
+export function CuotaChip({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  tone: "emerald" | "blue" | "amber" | "rose";
+}) {
+  const tones: Record<string, string> = {
+    emerald:
+      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20",
+    blue: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20",
+    amber:
+      "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20",
+    rose: "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20",
+  };
+  return (
+    <div
+      className={cn(
+        "rounded-md border px-1 py-0.5 flex flex-col items-center gap-0",
+        tones[tone],
+      )}
+    >
+      <div className="flex items-center gap-0.5 text-[9px] uppercase tracking-wider opacity-80">
+        {icon}
+        {label}
+      </div>
+      <div className="text-xs font-bold leading-tight">{value}</div>
+    </div>
+  );
+}
+
 export default function StudentsContent() {
   const [coach, setCoach] = useState<string>("todos"); // formato: "todos" | `id:${id}` | `name:${name}`
   const [loading, setLoading] = useState(true);
@@ -563,6 +1085,12 @@ export default function StudentsContent() {
   const [exportingFormat, setExportingFormat] = useState<"csv" | "xlsx" | null>(
     null,
   );
+  // Vista previa del export
+  const [viewMode, setViewMode] = useState<"lista" | "visual">("lista");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewRows, setPreviewRows] = useState<Record<string, any>[]>([]);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [previewSearch, setPreviewSearch] = useState("");
   // Crear alumno
   const [openCreate, setOpenCreate] = useState(false);
   const [createNombre, setCreateNombre] = useState("");
@@ -1777,7 +2305,21 @@ export default function StudentsContent() {
   const stampNow = () =>
     new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 
-  const buildExportRowsFromSource = (sourceAll: StudentRow[]) => {
+  const buildExportRowsFromSource = (
+    sourceAll: StudentRow[],
+    paymentsByCode: Record<string, any[]> = {},
+    cuotaCountsByCode: Record<
+      string,
+      {
+        total: number;
+        pagadas: number;
+        pendientes: number;
+        enProceso: number;
+        vencidas: number;
+      }
+    > = {},
+    teamsByCode: Record<string, string[]> = {},
+  ) => {
     const q = normalizeSearchText(search);
     const NO_STAGE = "Sin fase";
     const NO_STATE = "Sin estado";
@@ -1981,13 +2523,75 @@ export default function StudentsContent() {
       const inversion = summary?.inversion ?? null;
       const facturacion = summary?.facturacion ?? null;
 
+      // Plan de pagos del alumno (puede haber más de uno; tomamos el más reciente)
+      const planList: any[] = id ? (paymentsByCode[id] ?? []) : [];
+      // Ordenar por created_at desc para tomar el más reciente
+      const plans = [...planList].sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta;
+      });
+      const plan = plans[0] ?? null;
+
+      // Resumen de cuotas: preferir el resumen externo (cuotaCountsByCode);
+      // si no, fallback a los detalles incluidos en el plan.
+      let cuotasTotal = 0;
+      let cuotasPagadas = 0;
+      let cuotasPendientes = 0;
+      let cuotasEnProceso = 0;
+      let cuotasVencidas = 0;
+      const cuotaSummary = id ? cuotaCountsByCode[id] : undefined;
+      if (cuotaSummary) {
+        cuotasTotal = cuotaSummary.total;
+        cuotasPagadas = cuotaSummary.pagadas;
+        cuotasPendientes = cuotaSummary.pendientes;
+        cuotasEnProceso = cuotaSummary.enProceso;
+        cuotasVencidas = cuotaSummary.vencidas;
+      } else {
+        for (const p of plans) {
+          const detalles: any[] = p.detalles ?? p.details ?? [];
+          for (const d of detalles) {
+            cuotasTotal++;
+            const est = String(d.estatus ?? "")
+              .toLowerCase()
+              .trim();
+            if (est === "pagado" || est === "pagada" || est === "paid")
+              cuotasPagadas++;
+            else if (est === "pendiente" || est === "pending")
+              cuotasPendientes++;
+            else if (
+              est === "en_proceso" ||
+              est === "en proceso" ||
+              est === "in_progress"
+            )
+              cuotasEnProceso++;
+            else if (
+              est === "vencido" ||
+              est === "vencida" ||
+              est === "overdue"
+            )
+              cuotasVencidas++;
+          }
+          // Fallback si no hay detalles pero el plan tiene nro_cuotas
+          if (detalles.length === 0 && p.nro_cuotas) {
+            cuotasTotal += Number(p.nro_cuotas) || 0;
+          }
+        }
+      }
+
+      // Equipo: preferir el mapa por código (consultado vía /clients-coaches)
+      const equipoFromMap = id ? (teamsByCode[id] ?? []) : [];
+      const teamFromStudent = (student.teamMembers ?? [])
+        .map((tm) => String(tm?.name ?? "").trim())
+        .filter(Boolean);
+      const teamNames = Array.from(
+        new Set(equipoFromMap.length > 0 ? equipoFromMap : teamFromStudent),
+      ).join(" | ");
+
       return {
         Código: student.code || "",
         Nombre: student.name || "",
-        Coachs: (student.teamMembers ?? [])
-          .map((tm) => String(tm?.name ?? "").trim())
-          .filter(Boolean)
-          .join(" | "),
+        "Equipo asignado": teamNames,
         Fase: stageLabel(student.stage),
         Estado: student.state || "",
         Ingreso: fmtDateSmart(student.joinDate),
@@ -1999,58 +2603,221 @@ export default function StudentsContent() {
         "Última actividad": fmtDateSmart(student.lastActivity),
         "Días inactividad":
           student.inactivityDays == null ? "" : Number(student.inactivityDays),
+        "Plan de pago (monto)": plan?.monto != null ? Number(plan.monto) : "",
+        "Plan de pago (moneda)": plan?.moneda ?? "",
+        "Plan de pago (cuotas total)":
+          plan?.nro_cuotas != null
+            ? Number(plan.nro_cuotas)
+            : cuotasTotal || "",
+        "Cuotas pagadas": cuotasPagadas || "",
+        "Cuotas pendientes": cuotasPendientes || "",
+        "Cuotas en proceso": cuotasEnProceso || "",
+        "Cuotas vencidas": cuotasVencidas || "",
+        "Estado plan de pago": plan?.estatus ?? "",
       };
     });
+  };
+
+  const loadExportRows = async () => {
+    let sourceForExport = [...all];
+
+    if (coach === "todos" && hasMore) {
+      setLoadingMore(true);
+      let nextPage = serverPage;
+      let keepGoing = true;
+      let acc = [...sourceForExport];
+
+      while (keepGoing) {
+        nextPage += 1;
+        const res = await getAllStudentsPaged({
+          page: nextPage,
+          pageSize: SERVER_PAGE_SIZE,
+        });
+        const items = res.items ?? [];
+        acc = [...acc, ...items];
+
+        setAll(acc);
+        setServerPage(nextPage);
+        setServerTotal(res.total ?? serverTotal ?? null);
+        setServerTotalPages(res.totalPages ?? serverTotalPages ?? null);
+
+        if (res.totalPages != null) {
+          keepGoing = nextPage < res.totalPages;
+        } else {
+          keepGoing = items.length >= SERVER_PAGE_SIZE;
+        }
+      }
+
+      setHasMore(false);
+      sourceForExport = acc;
+    }
+
+    if (
+      coach !== "todos" &&
+      selectedCoachId &&
+      serverTotal != null &&
+      all.length < serverTotal
+    ) {
+      const fullCoachRows = await loadAllForSelectedCoach();
+      if (fullCoachRows) sourceForExport = fullCoachRows;
+    }
+
+    // Obtener todos los planes de pago en una sola consulta
+    let paymentsByCode: Record<string, any[]> = {};
+    try {
+      const PAGE_SIZE_PAY = 1000;
+      let allPayments: any[] = [];
+      let payPage = 1;
+      let keepFetching = true;
+      while (keepFetching) {
+        const env = await getPaymentsGlobal({
+          page: payPage,
+          pageSize: PAGE_SIZE_PAY,
+        });
+        const rows: any[] = Array.isArray(env?.data) ? env.data : [];
+        allPayments = allPayments.concat(rows);
+        if (env.totalPages != null) {
+          keepFetching = payPage < env.totalPages;
+        } else {
+          keepFetching = rows.length >= PAGE_SIZE_PAY;
+        }
+        payPage++;
+      }
+      for (const p of allPayments) {
+        const cc = String(p?.cliente_codigo ?? "").trim();
+        if (!cc) continue;
+        if (!paymentsByCode[cc]) paymentsByCode[cc] = [];
+        paymentsByCode[cc].push(p);
+      }
+    } catch {
+      // Si falla, exportamos sin columnas de pago (no bloqueamos la exportación)
+    }
+
+    // Resumen de cuotas (estatus por cliente) usando /payments/get/cuotas
+    // con un rango de fechas amplio.
+    const cuotaCountsByCode: Record<
+      string,
+      {
+        total: number;
+        pagadas: number;
+        pendientes: number;
+        enProceso: number;
+        vencidas: number;
+      }
+    > = {};
+    try {
+      const FECHA_DESDE = "2020-01-01";
+      const FECHA_HASTA = "2099-12-31";
+      const PAGE_SIZE_CUOTAS = 1000;
+      let cuotaPage = 1;
+      let keepCuotas = true;
+      while (keepCuotas) {
+        const env = await getPaymentCuotas({
+          fechaDesde: FECHA_DESDE,
+          fechaHasta: FECHA_HASTA,
+          page: cuotaPage,
+          pageSize: PAGE_SIZE_CUOTAS,
+          background: true,
+        });
+        const rows: any[] = Array.isArray(env?.data) ? env.data : [];
+        for (const c of rows) {
+          const cc = String(c?.cliente_codigo ?? "").trim();
+          if (!cc) continue;
+          if (!cuotaCountsByCode[cc]) {
+            cuotaCountsByCode[cc] = {
+              total: 0,
+              pagadas: 0,
+              pendientes: 0,
+              enProceso: 0,
+              vencidas: 0,
+            };
+          }
+          const bucket = cuotaCountsByCode[cc];
+          bucket.total++;
+          const est = String(c?.estatus ?? "")
+            .toLowerCase()
+            .trim();
+          if (est === "pagado" || est === "pagada" || est === "paid")
+            bucket.pagadas++;
+          else if (est === "pendiente" || est === "pending")
+            bucket.pendientes++;
+          else if (
+            est === "en_proceso" ||
+            est === "en proceso" ||
+            est === "in_progress"
+          )
+            bucket.enProceso++;
+          else if (
+            est === "vencido" ||
+            est === "vencida" ||
+            est === "overdue" ||
+            est === "moroso"
+          )
+            bucket.vencidas++;
+        }
+        if (env.totalPages != null) {
+          keepCuotas = cuotaPage < env.totalPages;
+        } else {
+          keepCuotas = rows.length >= PAGE_SIZE_CUOTAS;
+        }
+        cuotaPage++;
+      }
+    } catch {
+      // No bloquear si falla
+    }
+
+    // Obtener equipos asignados por alumno consultando /clients-coaches
+    // por cada coach (con concurrencia limitada).
+    const teamsByCode: Record<string, string[]> = {};
+    try {
+      const allCoaches = await getAllCoachesFromTeams();
+      const concurrency = 6;
+      let cursor = 0;
+      const workers = Array.from(
+        { length: Math.min(concurrency, allCoaches.length) },
+        async () => {
+          while (true) {
+            const idx = cursor++;
+            if (idx >= allCoaches.length) return;
+            const cTeam = allCoaches[idx];
+            const coachKey =
+              (cTeam.codigo && String(cTeam.codigo).trim()) ||
+              String(cTeam.id ?? "").trim();
+            if (!coachKey) continue;
+            try {
+              const rows = await getCoachStudentsByCoachId(coachKey);
+              for (const r of rows) {
+                const ac = String(r.alumno ?? "").trim();
+                if (!ac) continue;
+                if (!teamsByCode[ac]) teamsByCode[ac] = [];
+                if (cTeam.name && !teamsByCode[ac].includes(cTeam.name)) {
+                  teamsByCode[ac].push(cTeam.name);
+                }
+              }
+            } catch {
+              /* ignore individual coach failures */
+            }
+          }
+        },
+      );
+      await Promise.all(workers);
+    } catch {
+      // Si falla, usaremos los teamMembers que vengan en cada alumno.
+    }
+
+    return buildExportRowsFromSource(
+      sourceForExport,
+      paymentsByCode,
+      cuotaCountsByCode,
+      teamsByCode,
+    );
   };
 
   const handleExport = async (format: "csv" | "xlsx") => {
     if (exportingFormat) return;
     setExportingFormat(format);
     try {
-      let sourceForExport = [...all];
-
-      if (coach === "todos" && hasMore) {
-        setLoadingMore(true);
-        let nextPage = serverPage;
-        let keepGoing = true;
-        let acc = [...sourceForExport];
-
-        while (keepGoing) {
-          nextPage += 1;
-          const res = await getAllStudentsPaged({
-            page: nextPage,
-            pageSize: SERVER_PAGE_SIZE,
-          });
-          const items = res.items ?? [];
-          acc = [...acc, ...items];
-
-          setAll(acc);
-          setServerPage(nextPage);
-          setServerTotal(res.total ?? serverTotal ?? null);
-          setServerTotalPages(res.totalPages ?? serverTotalPages ?? null);
-
-          if (res.totalPages != null) {
-            keepGoing = nextPage < res.totalPages;
-          } else {
-            keepGoing = items.length >= SERVER_PAGE_SIZE;
-          }
-        }
-
-        setHasMore(false);
-        sourceForExport = acc;
-      }
-
-      if (
-        coach !== "todos" &&
-        selectedCoachId &&
-        serverTotal != null &&
-        all.length < serverTotal
-      ) {
-        const fullCoachRows = await loadAllForSelectedCoach();
-        if (fullCoachRows) sourceForExport = fullCoachRows;
-      }
-
-      const exportRows = buildExportRowsFromSource(sourceForExport);
+      const exportRows = await loadExportRows();
       if (exportRows.length === 0) {
         toast({ title: "No hay alumnos para exportar" });
         return;
@@ -2106,6 +2873,26 @@ export default function StudentsContent() {
     } finally {
       setLoadingMore(false);
       setExportingFormat(null);
+    }
+  };
+
+  const handleOpenPreview = async (force = false) => {
+    if (previewLoading) return;
+    if (!force && previewLoaded) return;
+    setPreviewLoading(true);
+    try {
+      const rows = await loadExportRows();
+      setPreviewRows(rows);
+      setPreviewLoaded(true);
+    } catch (e) {
+      toast({
+        title: "No se pudo cargar la vista previa",
+        description: getSpanishApiError(e, "Intenta nuevamente"),
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingMore(false);
+      setPreviewLoading(false);
     }
   };
 
@@ -3163,7 +3950,10 @@ export default function StudentsContent() {
                                             setAll((prev) =>
                                               prev.map((r) =>
                                                 r.code === student.code
-                                                  ? { ...r, stage: prevStage }
+                                                  ? {
+                                                      ...r,
+                                                      stage: prevStage,
+                                                    }
                                                   : r,
                                               ),
                                             );
