@@ -323,11 +323,62 @@ function CopyAgentWorkspace() {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
 
+    const PARSEABLE_EXTS = /\.(docx|pdf)$/i;
+    const UNSUPPORTED_EXTS = /\.(xlsx?|pptx?|doc)$/i;
+
     const results: Array<{ name: string; content: string }> = [];
     for (const file of files) {
+      if (UNSUPPORTED_EXTS.test(file.name)) {
+        results.push({
+          name: file.name,
+          content: `[⚠️ Formato no soportado: ${file.name}. Usa .docx, .pdf o copia el texto directamente.]`,
+        });
+        continue;
+      }
+
+      if (PARSEABLE_EXTS.test(file.name)) {
+        if (file.size > 8 * 1024 * 1024) {
+          results.push({
+            name: file.name,
+            content: `[⚠️ El archivo "${file.name}" es demasiado grande (${(file.size / 1024 / 1024).toFixed(1)} MB). El límite es 8 MB. Intenta comprimir el PDF o copia el texto directamente.]`,
+          });
+          continue;
+        }
+        try {
+          const form = new FormData();
+          form.append("file", file);
+          const res = await fetch("/api/agentes/copy/parse-file", {
+            method: "POST",
+            body: form,
+          });
+          const json = await res.json();
+          if (!res.ok || json.error) {
+            results.push({
+              name: file.name,
+              content: `[⚠️ No se pudo extraer el texto de "${file.name}": ${json.error ?? "Error desconocido"}]`,
+            });
+          } else {
+            results.push({ name: file.name, content: json.text });
+          }
+        } catch {
+          results.push({
+            name: file.name,
+            content: `[⚠️ Error al procesar "${file.name}". Intenta copiar el texto directamente.]`,
+          });
+        }
+        continue;
+      }
+
       try {
         const text = await file.text();
-        results.push({ name: file.name, content: text });
+        if (!text.trim()) {
+          results.push({
+            name: file.name,
+            content: `[⚠️ El archivo "${file.name}" está vacío o no tiene texto legible.]`,
+          });
+        } else {
+          results.push({ name: file.name, content: text });
+        }
       } catch {
         results.push({
           name: file.name,
@@ -708,7 +759,7 @@ function CopyAgentWorkspace() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.md,.csv,.html,.json,.doc,.docx"
+                accept=".txt,.md,.csv,.html,.json,.docx,.pdf"
                 multiple
                 className="hidden"
                 onChange={handleFileAttach}
