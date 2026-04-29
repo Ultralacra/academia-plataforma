@@ -361,13 +361,24 @@ export default function StudentPaymentsPage() {
         search: "",
       });
       const plans = Array.isArray(list) ? list : (list as any)?.data;
-      const planRow = Array.isArray(plans)
-        ? (plans.find(
-            (p: any) =>
-              String(p?.cliente_codigo ?? "").toLowerCase() ===
-              code.toLowerCase(),
-          ) ?? plans[0])
-        : null;
+      const HIDDEN_PLAN_CODES = new Set([
+        "L4SzLGXEXLa7in1C",
+        "Rqcc9iY9aSpNG_bz",
+        "o1AMJ3P-5-kynF83",
+      ]);
+      const visiblePlans = Array.isArray(plans)
+        ? plans.filter(
+            (p: any) => !HIDDEN_PLAN_CODES.has(String(p?.codigo ?? "").trim()),
+          )
+        : [];
+      const planRow =
+        visiblePlans.length > 0
+          ? (visiblePlans.find(
+              (p: any) =>
+                String(p?.cliente_codigo ?? "").toLowerCase() ===
+                code.toLowerCase(),
+            ) ?? visiblePlans[0])
+          : null;
 
       const planCodigo = String(planRow?.codigo ?? "").trim();
       if (!planCodigo) {

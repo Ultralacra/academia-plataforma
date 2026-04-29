@@ -59,6 +59,12 @@ type PaymentSummary = {
   planDetail: PaymentPlanDetail | null;
 };
 
+const HIDDEN_PAYMENT_CODES = new Set([
+  "L4SzLGXEXLa7in1C",
+  "Rqcc9iY9aSpNG_bz",
+  "o1AMJ3P-5-kynF83",
+]);
+
 export default function PaymentSummaryCard({ code }: { code: string }) {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<PaymentSummary | null>(null);
@@ -81,13 +87,20 @@ export default function PaymentSummaryCard({ code }: { code: string }) {
         search: "",
       });
       const plans = Array.isArray(list) ? list : (list as any)?.data;
-      const planRow = Array.isArray(plans)
-        ? (plans.find(
+      const visiblePlans = Array.isArray(plans)
+        ? plans.filter(
             (p: any) =>
-              String(p?.cliente_codigo ?? "").toLowerCase() ===
-              code.toLowerCase(),
-          ) ?? plans[0])
-        : null;
+              !HIDDEN_PAYMENT_CODES.has(String(p?.codigo ?? "").trim()),
+          )
+        : [];
+      const planRow =
+        visiblePlans.length > 0
+          ? (visiblePlans.find(
+              (p: any) =>
+                String(p?.cliente_codigo ?? "").toLowerCase() ===
+                code.toLowerCase(),
+            ) ?? visiblePlans[0])
+          : null;
 
       const planCodigo = String(planRow?.codigo ?? "").trim();
       if (!planCodigo) {

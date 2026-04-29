@@ -718,7 +718,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
           pageSize: 100,
           search: "",
         });
-        const plans = Array.isArray(list) ? list : ((list as any)?.data ?? []);
+        const allPlans = Array.isArray(list)
+          ? list
+          : ((list as any)?.data ?? []);
+        const HIDDEN_PLAN_CODES = new Set([
+          "L4SzLGXEXLa7in1C",
+          "Rqcc9iY9aSpNG_bz",
+          "o1AMJ3P-5-kynF83",
+        ]);
+        const plans = allPlans.filter(
+          (p: any) => !HIDDEN_PLAN_CODES.has(String(p?.codigo ?? "").trim()),
+        );
 
         if (cancelled) return;
 
