@@ -75,6 +75,8 @@ export interface CloseSaleInput {
   reservePaidDate?: string; // YYYY-MM-DD
   reserveRemainingDueDate?: string; // YYYY-MM-DD
   reserveNotes?: string;
+  // Cuotas del saldo restante cuando el plan es "reserva"
+  reserveInstallments?: PaymentCustomInstallment[];
 
   paymentAttachments?: Array<{
     id: string;
@@ -266,6 +268,53 @@ function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
     payment_reserve_amount: payment?.hasReserve
       ? (payment?.reserveAmount ?? null)
       : null,
+    payment_reserve_installments: Array.isArray(payment?.reserve?.installments)
+      ? (payment.reserve.installments as any[]).map((it: any, idx: number) => ({
+          id: String(it?.id ?? `ri_${idx}`),
+          amount: String(it?.amount ?? ""),
+          dueDate: String(it?.dueDate ?? it?.due_date ?? ""),
+        }))
+      : null,
+    // Cuando es plan reserva con cuotas, replicamos en payment_custom_installments y count
+    // para que la pantalla de contratos las consuma sin cambios adicionales.
+    payment_custom_installments:
+      payment?.plan_type === "reserva" &&
+      Array.isArray(payment?.reserve?.installments) &&
+      payment.reserve.installments.length
+        ? (payment.reserve.installments as any[]).map(
+            (it: any, idx: number) => ({
+              id: String(it?.id ?? `ri_${idx}`),
+              amount: String(it?.amount ?? ""),
+              dueDate: String(it?.dueDate ?? it?.due_date ?? ""),
+            }),
+          )
+        : payment?.plan_type === "excepcion_2_cuotas" &&
+            Array.isArray(payment?.custom_installments)
+          ? (payment.custom_installments as any[]).map(
+              (it: any, idx: number) => ({
+                id: String(it?.id ?? `ci_${idx}`),
+                amount: String(it?.amount ?? ""),
+                dueDate: String(it?.dueDate ?? it?.due_date ?? ""),
+              }),
+            )
+          : null,
+    payment_installments_count:
+      payment?.plan_type === "reserva" &&
+      Array.isArray(payment?.reserve?.installments)
+        ? payment.reserve.installments.length || null
+        : (payment?.installments?.count ?? null),
+    payment_installments_schedule:
+      payment?.plan_type === "cuotas" &&
+      Array.isArray(payment?.installments?.schedule)
+        ? (payment.installments.schedule as any[]).map(
+            (it: any, idx: number) => ({
+              id: String(it?.id ?? `si_${idx}`),
+              amount: String(it?.amount ?? ""),
+              dueDate: String(it?.dueDate ?? it?.due_date ?? ""),
+            }),
+          )
+        : null,
+    payment_plan_type: payment?.plan_type ?? null,
 
     sale_notes: salePayload?.notes ?? null,
 
@@ -411,6 +460,9 @@ export function CloseSaleForm({
     reservePaidDate: (initial as any)?.reservePaidDate,
     reserveRemainingDueDate: (initial as any)?.reserveRemainingDueDate,
     reserveNotes: (initial as any)?.reserveNotes || "",
+    reserveInstallments: normalizeInstallmentsSchedule(
+      (initial as any)?.reserveInstallments,
+    ),
     paymentAttachments: Array.isArray((initial as any)?.paymentAttachments)
       ? ((initial as any).paymentAttachments as any)
       : [],
@@ -590,6 +642,35 @@ export function CloseSaleForm({
         return n !== null || Boolean(it.due_date);
       });
 
+    const reserveInstallmentsUi: PaymentCustomInstallment[] = Array.isArray(
+      (form as any).reserveInstallments,
+    )
+      ? (((form as any).reserveInstallments as any[]) || [])
+          .map((it: any, idx: number) => ({
+            id: String(it?.id || `ri_${idx}`),
+            amount: String(it?.amount ?? ""),
+            dueDate: String(it?.dueDate ?? it?.due_date ?? ""),
+          }))
+          .filter(Boolean)
+      : [];
+
+    const reserveInstallments = reserveInstallmentsUi
+      .map((it, idx) => ({
+        index: idx + 1,
+        amount: String(it.amount || ""),
+        due_date: String(it.dueDate || ""),
+      }))
+      .filter((it) => {
+        const n = toNumberOrNull(it.amount);
+        return n !== null || Boolean(it.due_date);
+      });
+
+    const reserveInstallmentsSum = reserveInstallments.reduce((acc, it) => {
+      const n = toNumberOrNull(it.amount);
+      return acc + (n ?? 0);
+    }, 0);
+    const reserveAmountNum = toNumberOrNull(form.paymentReserveAmount);
+
     const defaultInstallments = pricing?.discount.installments;
     const defaultCashTotal = pricing?.discount.cashTotal;
     const defaultInstallmentsTotal =
@@ -647,6 +728,14 @@ export function CloseSaleForm({
         return String(form.paymentAmount || defaultCashTotal || "");
       }
       // reserva
+      if (
+        reserveInstallments.length &&
+        Number.isFinite(reserveInstallmentsSum) &&
+        reserveInstallmentsSum > 0
+      ) {
+        const total = (reserveAmountNum ?? 0) + reserveInstallmentsSum;
+        if (total > 0) return String(total);
+      }
       return String(form.paymentAmount || defaultCashTotal || "");
     })();
 
@@ -723,6 +812,8 @@ export function CloseSaleForm({
           paid_date: form.reservePaidDate || null,
           remaining_due_date: form.reserveRemainingDueDate || null,
           notes: form.reserveNotes || null,
+          installments: reserveInstallments.length ? reserveInstallments : null,
+          installments_count: reserveInstallments.length || null,
         },
         total: computedTotalCommitted || null,
         paid_amount: computedPaidAmount || null,
@@ -792,6 +883,10 @@ export function CloseSaleForm({
                 paid_date: form.reservePaidDate || null,
                 remaining_due_date: form.reserveRemainingDueDate || null,
                 notes: form.reserveNotes || null,
+                installments: reserveInstallments.length
+                  ? reserveInstallments
+                  : null,
+                installments_count: reserveInstallments.length || null,
               }
             : null,
         attachments: Array.isArray(form.paymentAttachments)
@@ -914,6 +1009,9 @@ export function CloseSaleForm({
       reservePaidDate: (initial as any)?.reservePaidDate,
       reserveRemainingDueDate: (initial as any)?.reserveRemainingDueDate,
       reserveNotes: (initial as any)?.reserveNotes,
+      reserveInstallments: Array.isArray((initial as any)?.reserveInstallments)
+        ? ((initial as any).reserveInstallments as any)
+        : null,
       paymentAttachments: Array.isArray((initial as any)?.paymentAttachments)
         ? ((initial as any).paymentAttachments as any)
         : null,
@@ -976,6 +1074,11 @@ export function CloseSaleForm({
           (initial as any)?.reserveRemainingDueDate ??
           prev.reserveRemainingDueDate,
         reserveNotes: (initial as any)?.reserveNotes ?? prev.reserveNotes,
+        reserveInstallments: Array.isArray(
+          (initial as any)?.reserveInstallments,
+        )
+          ? normalizeInstallmentsSchedule((initial as any)?.reserveInstallments)
+          : prev.reserveInstallments,
         paymentAttachments: Array.isArray((initial as any)?.paymentAttachments)
           ? ((initial as any).paymentAttachments as any)
           : prev.paymentAttachments,
@@ -2497,6 +2600,185 @@ export function CloseSaleForm({
                             }
                           />
                         </div>
+
+                        {(() => {
+                          const schedule: PaymentCustomInstallment[] =
+                            normalizeInstallmentsSchedule(
+                              (form as any).reserveInstallments,
+                            );
+                          const setSchedule = (
+                            next: PaymentCustomInstallment[],
+                          ) => {
+                            setForm({
+                              ...form,
+                              reserveInstallments: next,
+                              nextChargeDate:
+                                next?.[0]?.dueDate ||
+                                form.reserveRemainingDueDate ||
+                                form.nextChargeDate ||
+                                "",
+                            });
+                          };
+                          const sum = schedule.reduce((acc, it) => {
+                            const n = toNumberOrNull(it.amount);
+                            return acc + (n ?? 0);
+                          }, 0);
+                          const reserveNum =
+                            toNumberOrNull(form.paymentReserveAmount) ?? 0;
+                          const total = reserveNum + sum;
+                          return (
+                            <div className="rounded-md border border-amber-200 bg-amber-50/40 p-3 space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="font-semibold">
+                                    Cuotas del saldo restante
+                                  </div>
+                                  <div className="mt-1 text-xs text-slate-600">
+                                    Define las cuotas del monto restante (no
+                                    incluye la reserva). Cada cuota requiere
+                                    monto y fecha de pago.
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9"
+                                  onClick={() => {
+                                    const lastDate =
+                                      schedule[schedule.length - 1]?.dueDate ||
+                                      form.reserveRemainingDueDate ||
+                                      "";
+                                    const nextDate = lastDate
+                                      ? isoDatePlusDays(lastDate, 30)
+                                      : isoPlusDays(30);
+                                    const next: PaymentCustomInstallment[] = [
+                                      ...schedule,
+                                      {
+                                        id: `ri_${Date.now()}_${schedule.length}`,
+                                        amount: "",
+                                        dueDate: nextDate,
+                                      },
+                                    ];
+                                    setSchedule(next);
+                                  }}
+                                >
+                                  Agregar cuota
+                                </Button>
+                              </div>
+
+                              {schedule.length === 0 ? (
+                                <div className="text-xs text-slate-500">
+                                  Aún no se han añadido cuotas. La reserva
+                                  cubrirá el primer pago y el saldo restante
+                                  podrá pagarse con o sin cuotas.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {schedule.map((it, idx) => (
+                                    <div
+                                      key={it.id}
+                                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-md border border-slate-200 bg-white p-3"
+                                    >
+                                      <div className="md:col-span-2">
+                                        <Label className="text-xs text-slate-600">
+                                          Cuota
+                                        </Label>
+                                        <div className="h-10 flex items-center text-sm font-medium">
+                                          #{idx + 1}
+                                        </div>
+                                      </div>
+                                      <div className="md:col-span-5 space-y-1.5">
+                                        <Label>Monto (USD) *</Label>
+                                        <Input
+                                          placeholder="$"
+                                          className={inputAccent}
+                                          value={it.amount}
+                                          onChange={(e) => {
+                                            const next = schedule.map((x, i) =>
+                                              i === idx
+                                                ? {
+                                                    ...x,
+                                                    amount: e.target.value,
+                                                  }
+                                                : x,
+                                            );
+                                            setSchedule(next);
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="md:col-span-5 space-y-1.5">
+                                        <Label>Fecha de pago *</Label>
+                                        <Input
+                                          type="date"
+                                          className={inputAccent}
+                                          value={it.dueDate || ""}
+                                          onChange={(e) => {
+                                            const next = schedule.map((x, i) =>
+                                              i === idx
+                                                ? {
+                                                    ...x,
+                                                    dueDate: e.target.value,
+                                                  }
+                                                : x,
+                                            );
+                                            setSchedule(next);
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="md:col-span-12 flex justify-end">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="h-9"
+                                          onClick={() => {
+                                            const next = schedule.filter(
+                                              (_, i) => i !== idx,
+                                            );
+                                            setSchedule(next);
+                                          }}
+                                        >
+                                          Quitar
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div className="text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1 pt-1">
+                                    <span>
+                                      Reserva:{" "}
+                                      <strong>
+                                        {reserveNum.toLocaleString("es-ES", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}{" "}
+                                        USD
+                                      </strong>
+                                    </span>
+                                    <span>
+                                      Suma cuotas:{" "}
+                                      <strong>
+                                        {sum.toLocaleString("es-ES", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}{" "}
+                                        USD
+                                      </strong>
+                                    </span>
+                                    <span>
+                                      Total:{" "}
+                                      <strong>
+                                        {total.toLocaleString("es-ES", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}{" "}
+                                        USD
+                                      </strong>
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : null}
 

@@ -866,6 +866,14 @@ function Content({ id }: { id: string }) {
           (d as any).paymentCustomInstallments,
         )
           ? (d as any).paymentCustomInstallments
+          : (d as any).paymentPlanType === "reserva" &&
+              Array.isArray((d as any).reserveInstallments)
+            ? (d as any).reserveInstallments
+            : undefined,
+        payment_reserve_installments: Array.isArray(
+          (d as any).reserveInstallments,
+        )
+          ? (d as any).reserveInstallments
           : undefined,
         payment_exception_notes: (d as any).paymentExceptionNotes ?? undefined,
 
@@ -1442,6 +1450,30 @@ function Content({ id }: { id: string }) {
         payMerged?.downPayment ??
         payMerged?.anticipo ??
         "") as any,
+      reservePaidDate: toDateInput(
+        payMerged?.reserve?.paid_date ??
+          (p as any)?.payment_reserve_paid_date ??
+          "",
+      ),
+      reserveRemainingDueDate: toDateInput(
+        payMerged?.reserve?.remaining_due_date ??
+          (p as any)?.payment_reserve_remaining_due_date ??
+          "",
+      ),
+      reserveNotes:
+        payMerged?.reserve?.notes ?? (p as any)?.payment_reserve_notes ?? "",
+      reserveInstallments: (() => {
+        const raw =
+          payMerged?.reserve?.installments ??
+          (p as any)?.payment_reserve_installments ??
+          null;
+        if (!Array.isArray(raw)) return [];
+        return (raw as any[]).map((it: any, idx: number) => ({
+          id: String(it?.id || `ri_${idx}`),
+          amount: String(it?.amount ?? ""),
+          dueDate: toDateInput(it?.due_date ?? it?.dueDate ?? ""),
+        }));
+      })(),
       paymentPlatform:
         pickValue(payMerged?.platform, leadPayment.platform) ?? "hotmart",
       nextChargeDate:

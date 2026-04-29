@@ -1023,9 +1023,15 @@ function extractPaymentInfoFromMetadata(
     return s || null;
   };
   const installmentsRaw = payload.payment_custom_installments;
+  const reserveInstallmentsRaw = payload.payment_reserve_installments;
+  const planTypeRaw = String(payload.payment_plan_type ?? "")
+    .trim()
+    .toLowerCase();
   const customInstallments = Array.isArray(installmentsRaw)
     ? installmentsRaw
-    : [];
+    : planTypeRaw === "reserva" && Array.isArray(reserveInstallmentsRaw)
+      ? reserveInstallmentsRaw
+      : [];
 
   return {
     program: str("program"),
@@ -2535,7 +2541,9 @@ function PaymentInfoPanel({
       {info.customInstallments && info.customInstallments.length > 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-900">
-            Cronograma de cuotas personalizadas
+            {info.planType === "reserva"
+              ? "Cronograma de cuotas del saldo restante"
+              : "Cronograma de cuotas personalizadas"}
           </h3>
           <Table>
             <TableHeader>
