@@ -30,6 +30,9 @@ SEGUNDA. ALCANCE DEL SERVICIO
 ● Acceso a la comunidad privada de Hotselling y networking.
 ● Acceso a eventos especiales y ofertas exclusivas.
 ● Oportunidad de ascenso a Hotselling Pro pagando solo la diferencia.
+[[IF:TIENE_BONOS]]
+{{BONOS_LISTA}}
+[[ENDIF]]
 
 2.2 Soporte: El CLIENTE tiene acceso a las sesiones grupales en vivo para aclarar las dudas que se le presenten. El soporte incluido comprende atención grupal en las sesiones en vivo, y consultas en la comunidad digital.
 

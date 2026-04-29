@@ -19,6 +19,7 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import { bonoLabel, BONOS_BY_KEY } from "./bonos";
 
 const DOC_FONT = {
   ascii: "Arial",
@@ -138,6 +139,43 @@ function normalizeInstallmentItems(input: unknown) {
   }));
 }
 
+function formatAssignedBonusTitles(bonuses: unknown, fallback?: string): string {
+  if (!Array.isArray(bonuses) || bonuses.length === 0) {
+    return fallback || "—";
+  }
+
+  const seen = new Set<string>();
+  const titles: string[] = [];
+
+  for (const bonus of bonuses) {
+    if (typeof bonus !== "string") continue;
+    const raw = bonus.trim();
+    if (!raw) continue;
+
+    const canonicalKeys = resolveBonoCanonicalKeys(raw);
+    if (canonicalKeys.length > 0) {
+      for (const key of canonicalKeys) {
+        const title = bonoLabel(key).trim();
+        if (!title || seen.has(title)) continue;
+        seen.add(title);
+        titles.push(title);
+      }
+      continue;
+    }
+
+    if (!seen.has(raw)) {
+      seen.add(raw);
+      titles.push(raw);
+    }
+  }
+
+  return titles.length > 0 ? titles.map((t) => `● ${t}`).join("\n") : fallback || "—";
+}
+
+function formatAssignedBonusTitleList(bonuses: unknown): string {
+  return formatAssignedBonusTitles(bonuses, "");
+}
+
 function formatDateToSpanish(d: Date): string {
   const months = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -235,9 +273,7 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
   const cuota3 = getScheduleItem(2);
 
   // Bonuses como texto
-  const bonusesText = Array.isArray(data.bonuses) && data.bonuses.length > 0
-    ? data.bonuses.join(", ")
-    : data.bonusesText || "—";
+  const bonusesText = formatAssignedBonusTitles(data.bonuses, data.bonusesText);
 
   // Modalidad de pago formateada (alineada a los códigos del CRM)
   const paymentModeText = (() => {
@@ -341,6 +377,7 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
     DURACION_NUMERO: String(durationNum),
     DURACION_TEXTO: durationText,
     BONOS: bonusesText,
+    BONOS_LISTA: formatAssignedBonusTitleList(data.bonuses),
 
     // Pago
     MODALIDAD_PAGO: paymentModeText,
@@ -647,7 +684,8 @@ function parseContractTextToParagraphs(
 ): ContractBlock[] {
   const lines = contractText
     .split(/\r?\n/)
-    .map((l) => fillPlaceholders(l, values).trimEnd());
+    .flatMap((l) => fillPlaceholders(l, values).split(/\r?\n/))
+    .map((l) => l.trimEnd());
 
   const paragraphs: ContractBlock[] = [];
   let buffer: string[] = [];
@@ -833,6 +871,7 @@ export async function loadContractTextFromUrl(url: string): Promise<string> {
  *   [[IF:MODO==3_cuotas]]     → solo si paymentMode es 3_cuotas
  *   [[IF:MODO==excepcion_2_cuotas]] → solo si paymentMode es excepcion_2_cuotas o 2_cuotas
  *   [[IF:TIENE_RESERVA]]      → solo si reserveAmount tiene valor
+ *   [[IF:TIENE_BONOS]]        → solo si bonuses contiene al menos un valor
  *   [[IF:BONO:BONO_KEY]]      → solo si el array bonuses incluye la clave indicada
  *   [[ENDIF]]                 → cierre del bloque
  *
@@ -880,6 +919,9 @@ function resolveBonoCanonicalKeys(input: string): string[] {
   const hit = new Set<string>();
 
   // Mapeo directo por código del catálogo remoto (codigo)
+  // Normalizar formato compacto sin guión: BONO202609 → BONO2026-09
+  const upperNormalized = upper.replace(/^(BONO\d{4})(\d{2,})$/, "$1-$2");
+
   const CODE_TO_KEY: Record<string, string> = {
     "BONO2026-09": "BONO_TRAFFICKER",
     "BONO2026-07": "BONO_IMPLEMENTACION_TECNICA",
@@ -895,9 +937,10 @@ function resolveBonoCanonicalKeys(input: string): string[] {
     BONO_001: "BONO_1A1_COACH_COPY",
   };
   if (CODE_TO_KEY[upper]) hit.add(CODE_TO_KEY[upper]);
+  if (CODE_TO_KEY[upperNormalized]) hit.add(CODE_TO_KEY[upperNormalized]);
 
-  // La clave pasada ya puede ser canónica
-  hit.add(normalized);
+  // La clave pasada ya puede ser canónica (solo si existe en el catálogo)
+  if (BONOS_BY_KEY[normalized]) hit.add(normalized);
 
   // Heurísticas por nombre (tolerante a acentos/espacios)
   const flat = raw
@@ -977,6 +1020,9 @@ export function applyConditionalBlocks(text: string, data: Partial<ContractData>
   const mode = String(data.paymentMode ?? "").toLowerCase().trim();
   const hasReserve = !!data.reserveAmount && String(data.reserveAmount).trim() !== "";
   const bonusesNormalized = collectBonusCanonicalKeys(data.bonuses);
+  const hasBonuses = Array.isArray(data.bonuses) && data.bonuses.some((bonus) => {
+    return typeof bonus === "string" && bonus.trim() !== "";
+  });
 
   // Bloques [[IF:MODO==valor]] ... [[ENDIF]]
   text = text.replace(
@@ -995,6 +1041,12 @@ export function applyConditionalBlocks(text: string, data: Partial<ContractData>
   text = text.replace(
     /\[\[IF:TIENE_RESERVA\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
     (_, content: string) => (hasReserve ? content : ""),
+  );
+
+  // Bloques [[IF:TIENE_BONOS]] ... [[ENDIF]]
+  text = text.replace(
+    /\[\[IF:TIENE_BONOS\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, content: string) => (hasBonuses ? content : ""),
   );
 
   // Bloques [[IF:BONO:KEY]] ... [[ENDIF]]

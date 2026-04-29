@@ -134,6 +134,30 @@ export function SalePreview({
       ? ((draft as any)?.paymentCustomInstallments as any[])
       : [];
 
+    // Cuotas restantes asociadas a la reserva (saldo dividido en cuotas)
+    const draftReserveSchedule = Array.isArray(
+      (draft as any)?.reserveInstallments,
+    )
+      ? ((draft as any)?.reserveInstallments as any[])
+      : Array.isArray((primaryPlan as any)?.reserve?.installments)
+        ? ((primaryPlan as any)?.reserve?.installments as any[])
+        : Array.isArray((payload as any)?.payment?.reserve?.installments)
+          ? ((payload as any)?.payment?.reserve?.installments as any[])
+          : [];
+
+    const reserveAmountRawForTicket =
+      (draft as any)?.paymentReserveAmount ??
+      (primaryPlan as any)?.reserve?.amount ??
+      (payload as any)?.payment?.reserve?.amount ??
+      pay?.reserveAmount ??
+      null;
+    const reserveAmountNumForTicket = (() => {
+      const n = Number(reserveAmountRawForTicket);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    })();
+
+    const isReservaPlan = planType === "reserva" || mode.includes("reserva");
+
     const modeCuotasMatch = mode.match(/(\d+)_cuotas/);
     const modeCuotasCount = modeCuotasMatch?.[1]
       ? Number(modeCuotasMatch[1])
@@ -157,6 +181,9 @@ export function SalePreview({
     })();
 
     const cuotasCount =
+      (isReservaPlan && draftReserveSchedule.length
+        ? draftReserveSchedule.length
+        : null) ??
       (draft as any)?.paymentInstallmentsCount ??
       (draftStdSchedule.length ? draftStdSchedule.length : null) ??
       (draftCustomSchedule.length ? draftCustomSchedule.length : null) ??
@@ -166,6 +193,19 @@ export function SalePreview({
       null;
 
     const cuotaAmount =
+      (isReservaPlan
+        ? (() => {
+            if (!draftReserveSchedule.length) return null;
+            const nums = draftReserveSchedule
+              .map((it) => Number(it?.amount))
+              .filter((n) => Number.isFinite(n));
+            if (!nums.length) return null;
+            const allSame = nums.every((n) => n === nums[0]);
+            if (allSame) return String(nums[0]);
+            const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+            return String(Math.round(avg * 100) / 100);
+          })()
+        : null) ??
       (draft as any)?.paymentInstallmentAmount ??
       (() => {
         const schedule = draftStdSchedule.length
@@ -187,7 +227,22 @@ export function SalePreview({
       null;
 
     const total =
-      pay?.amount ??
+      (pay?.amount !== null &&
+      pay?.amount !== undefined &&
+      String(pay?.amount).trim() !== ""
+        ? pay.amount
+        : null) ??
+      (isReservaPlan
+        ? (() => {
+            const installmentsSum = draftReserveSchedule
+              .map((it) => Number(it?.amount))
+              .filter((n) => Number.isFinite(n))
+              .reduce((a, b) => a + b, 0);
+            const sum =
+              (reserveAmountNumForTicket ?? 0) + (installmentsSum || 0);
+            return sum > 0 ? String(sum) : null;
+          })()
+        : null) ??
       (() => {
         const schedule = draftStdSchedule.length
           ? draftStdSchedule
@@ -199,10 +254,19 @@ export function SalePreview({
           .reduce((a, b) => a + b, 0);
         return Number.isFinite(sum) && sum > 0 ? String(sum) : null;
       })() ??
+      (isReservaPlan && reserveAmountNumForTicket
+        ? String(reserveAmountNumForTicket)
+        : null) ??
       (primaryPlan as any)?.total ??
       null;
 
-    const pagado = pay?.paidAmount ?? (primaryPlan as any)?.paid_amount ?? null;
+    const pagado =
+      pay?.paidAmount ??
+      (isReservaPlan && reserveAmountNumForTicket
+        ? String(reserveAmountNumForTicket)
+        : null) ??
+      (primaryPlan as any)?.paid_amount ??
+      null;
 
     return {
       program: program || "—",
@@ -211,6 +275,18 @@ export function SalePreview({
       cuotaAmount,
       total,
       pagado,
+      isReservaPlan,
+      reserveAmount: reserveAmountNumForTicket,
+      schedule: (isReservaPlan
+        ? draftReserveSchedule
+        : draftStdSchedule.length
+          ? draftStdSchedule
+          : draftCustomSchedule
+      ).map((it: any, idx: number) => ({
+        idx: idx + 1,
+        amount: it?.amount ?? null,
+        dueDate: it?.dueDate ?? it?.due_date ?? null,
+      })),
     };
   })();
   const contract = payload?.contract || {};
@@ -377,7 +453,13 @@ export function SalePreview({
   if (!phone) missing.push("Teléfono");
   if (!program) missing.push("Programa");
   if (!pay.mode) missing.push("Modalidad de pago");
-  if (!pay.amount) missing.push("Monto");
+  if (
+    ticket.total === null ||
+    ticket.total === undefined ||
+    String(ticket.total).trim() === ""
+  ) {
+    missing.push("Monto");
+  }
   if (!pay.platform) missing.push("Plataforma de pago");
 
   return (
@@ -436,7 +518,13 @@ export function SalePreview({
             { label: "Teléfono", ok: !!phone },
             { label: "Programa", ok: !!program },
             { label: "Modalidad", ok: !!pay.mode },
-            { label: "Monto", ok: !!pay.amount },
+            {
+              label: "Monto",
+              ok:
+                ticket.total !== null &&
+                ticket.total !== undefined &&
+                String(ticket.total).trim() !== "",
+            },
             { label: "Plataforma", ok: !!pay.platform },
             { label: "Bonos (opc.)", ok: bonuses.length > 0 },
           ].map((it) => (
@@ -501,6 +589,47 @@ export function SalePreview({
             </span>
           </div>
         </div>
+
+        {/* Desglose: reserva + cronograma de cuotas */}
+        {ticket.isReservaPlan &&
+        ticket.reserveAmount !== null &&
+        ticket.reserveAmount !== undefined ? (
+          <div className="mt-3 flex items-center justify-between gap-2 text-sm border-t border-slate-100 pt-2">
+            <span className="text-slate-500">Reserva (abono inicial)</span>
+            <span className="text-slate-900 font-medium">
+              {String(ticket.reserveAmount)}
+            </span>
+          </div>
+        ) : null}
+
+        {Array.isArray(ticket.schedule) && ticket.schedule.length > 0 ? (
+          <div className="mt-3 border-t border-slate-100 pt-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+              {ticket.isReservaPlan
+                ? "Cuotas restantes"
+                : "Cronograma de cuotas"}
+            </div>
+            <div className="space-y-1 text-sm">
+              {ticket.schedule.map((it) => (
+                <div
+                  key={it.idx}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="text-slate-500">Cuota {it.idx}</span>
+                  <span className="text-slate-900">
+                    {it.amount ? String(it.amount) : "—"}
+                    {it.dueDate ? (
+                      <span className="text-slate-500">
+                        {" "}
+                        · vence {String(it.dueDate)}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Secciones claras */}

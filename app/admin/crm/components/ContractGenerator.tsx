@@ -434,7 +434,8 @@ export function ContractGenerator({
     (contractText: string, values: Record<string, string>): PreviewBlock[] => {
       const lines = contractText
         .split(/\r?\n/)
-        .map((l) => fillPlaceholdersLocal(l, values).trimEnd());
+        .flatMap((l) => fillPlaceholdersLocal(l, values).split(/\r?\n/))
+        .map((l) => l.trimEnd());
 
       const blocks: PreviewBlock[] = [];
       let buffer: string[] = [];

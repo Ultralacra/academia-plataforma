@@ -27,6 +27,9 @@ SEGUNDA. ALCANCE DEL SERVICIO.
 [[IF:BONO:BONO_MESES_EXTRA_2]]
 ● Incluido bono de accion rapida de 2 meses de extension de los accesos (este bono extiende los accesos de 4 a 6 meses).
 [[ENDIF]]
+[[IF:TIENE_BONOS]]
+{{BONOS_LISTA}}
+[[ENDIF]]
 
 2.2 Soporte: LA EMPRESA atendera dudas e inquietudes del CLIENTE exclusivamente por los canales referidos, sin asumir responsabilidad por fallas de terceros (p. ej., conectividad).
 

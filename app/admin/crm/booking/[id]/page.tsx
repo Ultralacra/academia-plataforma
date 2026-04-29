@@ -877,6 +877,24 @@ function Content({ id }: { id: string }) {
           : undefined,
         payment_exception_notes: (d as any).paymentExceptionNotes ?? undefined,
 
+        // Fechas de reserva (saldo y pago de reserva)
+        payment_reserve_paid_date: toLeadIsoDateOrNull(
+          (d as any).reservePaidDate ?? null,
+        ),
+        payment_reserve_remaining_due_date: toLeadIsoDateOrNull(
+          (d as any).reserveRemainingDueDate ?? null,
+        ),
+        payment_reserve_notes: (d as any).reserveNotes ?? undefined,
+
+        // Fechas de cuotas (excepción 2 cuotas y cronograma estándar)
+        payment_first_installment_amount:
+          (d as any).paymentFirstInstallmentAmount ?? undefined,
+        payment_second_installment_amount:
+          (d as any).paymentSecondInstallmentAmount ?? undefined,
+        payment_second_installment_date: toLeadIsoDateOrNull(
+          (d as any).paymentSecondInstallmentDate ?? null,
+        ),
+
         sale_notes: (d as any).notes ?? undefined,
 
         contract_third_party: (d as any).contractThirdParty ? 1 : 0,
@@ -1426,9 +1444,19 @@ function Content({ id }: { id: string }) {
       paymentInstallmentsCount: payMerged?.installments?.count ?? undefined,
       paymentInstallmentAmount: payMerged?.installments?.amount ?? undefined,
       paymentInstallmentsSchedule,
-      paymentFirstInstallmentAmount: ex?.first_amount ?? undefined,
-      paymentSecondInstallmentAmount: ex?.second_amount ?? undefined,
-      paymentSecondInstallmentDate: toDateInput(ex?.second_due_date ?? ""),
+      paymentFirstInstallmentAmount:
+        ex?.first_amount ??
+        (p as any)?.payment_first_installment_amount ??
+        undefined,
+      paymentSecondInstallmentAmount:
+        ex?.second_amount ??
+        (p as any)?.payment_second_installment_amount ??
+        undefined,
+      paymentSecondInstallmentDate: toDateInput(
+        ex?.second_due_date ??
+          (p as any)?.payment_second_installment_date ??
+          "",
+      ),
       paymentCustomInstallments,
       paymentExceptionNotes: ex?.notes ?? plan0?.notes ?? "",
       paymentHasReserve: !!(
@@ -1476,8 +1504,9 @@ function Content({ id }: { id: string }) {
       })(),
       paymentPlatform:
         pickValue(payMerged?.platform, leadPayment.platform) ?? "hotmart",
-      nextChargeDate:
+      nextChargeDate: toDateInput(
         pickValue(payMerged?.nextChargeDate, leadPayment.nextChargeDate) ?? "",
+      ),
       contractThirdParty: !!(
         salePayload?.contract?.thirdParty ?? (p as any)?.contract_third_party
       ),

@@ -20,6 +20,9 @@ SEGUNDA. ALCANCE DEL SERVICIO.
 ●	Box de herramientas de implementación rápida.
 ●	Trafficker interno asignado para montaje de campañas publicitarias (excluyendo gestión de ads), disponible únicamente dentro de los {{DURACION_TEXTO}} meses de vigencia del contrato, según cláusula décimo tercera.
 ●	Bono de Implementación Técnica disponible únicamente dentro de los {{DURACION_TEXTO}} meses de vigencia del contrato, según cláusula décimo cuarta.
+[[IF:TIENE_BONOS]]
+{{BONOS_LISTA}}
+[[ENDIF]]
 
 2.2 Soporte: LA EMPRESA atenderá dudas e inquietudes del CLIENTE exclusivamente por los canales referidos, sin asumir responsabilidad por fallas de terceros (p. ej., conectividad).
 
