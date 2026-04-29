@@ -123,6 +123,17 @@ function formatDateSpanish(dateStr?: string | null): string {
     return formatDateToSpanish(now);
   }
   try {
+    // Caso YYYY-MM-DD: parsear como fecha local para evitar el desfase
+    // de zona horaria (Date("2026-04-29") se interpreta como UTC y puede
+    // mostrar el día anterior en zonas con offset negativo).
+    const ymd = /^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/.exec(String(dateStr));
+    if (ymd) {
+      const y = Number(ymd[1]);
+      const m = Number(ymd[2]);
+      const d = Number(ymd[3]);
+      const local = new Date(y, m - 1, d);
+      if (!Number.isNaN(local.getTime())) return formatDateToSpanish(local);
+    }
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return dateStr;
     return formatDateToSpanish(d);
@@ -272,6 +283,31 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
   const cuota2 = getScheduleItem(1);
   const cuota3 = getScheduleItem(2);
 
+  // Lista vertical de cuotas (estilo bullet) que se inserta en el contrato
+  // cuando hay un cronograma con varias cuotas (3_cuotas o reserva con cuotas).
+  const allScheduleItems = (() => {
+    const merged = standardSchedule.length ? standardSchedule : customSchedule;
+    return merged.filter(
+      (it) => (it?.amount && String(it.amount).trim()) || (it?.dueDate && String(it.dueDate).trim()),
+    );
+  })();
+  const cuotasListaText = (() => {
+    if (!allScheduleItems.length) return "";
+    const labels = ["Primera cuota", "Segunda cuota", "Tercera cuota", "Cuarta cuota", "Quinta cuota", "Sexta cuota"];
+    return allScheduleItems
+      .map((it, idx) => {
+        const label = labels[idx] || `Cuota ${idx + 1}`;
+        const monto = it.amount
+          ? formatCurrency(it.amount, data.paymentCurrency)
+          : "___________________________";
+        const fecha = it.dueDate
+          ? formatDateSpanish(it.dueDate)
+          : "___________________________";
+        return `● ${label}: ${monto} — Fecha de pago: ${fecha}`;
+      })
+      .join("\n");
+  })();
+
   // Bonuses como texto
   const bonusesText = formatAssignedBonusTitles(data.bonuses, data.bonusesText);
 
@@ -390,6 +426,7 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
     NUM_CUOTAS: String(data.installmentsCount || "—"),
     MONTO_CUOTA: formatCurrency(data.installmentAmount, data.paymentCurrency),
     MONTO_RESERVA: formatCurrency(data.reserveAmount, data.paymentCurrency),
+    CUOTAS_LISTA: cuotasListaText,
     MONTO_CUOTA_1: formatCurrency(cuota1.amount || data.paymentPaidAmount || data.installmentAmount, data.paymentCurrency),
     MONTO_CUOTA_2: formatCurrency(cuota2.amount || data.installmentAmount, data.paymentCurrency),
     MONTO_CUOTA_3: formatCurrency(cuota3.amount || data.installmentAmount, data.paymentCurrency),
@@ -1019,28 +1056,65 @@ export function describeBonoContractEffects(bono: string): {
 export function applyConditionalBlocks(text: string, data: Partial<ContractData>): string {
   const mode = String(data.paymentMode ?? "").toLowerCase().trim();
   const hasReserve = !!data.reserveAmount && String(data.reserveAmount).trim() !== "";
+  const hasInstallmentsList = (() => {
+    const sources: any[] = [
+      (data as any).paymentInstallmentsSchedule,
+      (data as any).paymentCustomInstallments,
+    ];
+    return sources.some(
+      (s) => Array.isArray(s) && s.some((it: any) => (it?.amount && String(it.amount).trim()) || (it?.dueDate && String(it.dueDate).trim())),
+    );
+  })();
   const bonusesNormalized = collectBonusCanonicalKeys(data.bonuses);
   const hasBonuses = Array.isArray(data.bonuses) && data.bonuses.some((bonus) => {
     return typeof bonus === "string" && bonus.trim() !== "";
   });
 
-  // Bloques [[IF:MODO==valor]] ... [[ENDIF]]
+  // Procesamos primero los bloques internos (RESERVA_CON_CUOTAS / TIENE_CUOTAS /
+  // TIENE_RESERVA / TIENE_BONOS) porque pueden aparecer anidados dentro de un
+  // bloque [[IF:MODO==...]]. Si procesáramos MODO primero, el regex no-greedy
+  // cerraría el bloque exterior en el primer [[ENDIF]] interno.
+
+  // Bloques [[IF:RESERVA_CON_CUOTAS]] ... [[ENDIF]]
   text = text.replace(
-    /\[\[IF:MODO==([^\]]+)\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
-    (_, condition: string, content: string) => {
-      const cond = condition.trim().toLowerCase();
-      const matches =
-        (cond === "pago_total" && (mode === "pago_total" || mode.includes("contado"))) ||
-        (cond === "3_cuotas" && mode === "3_cuotas") ||
-        (cond === "excepcion_2_cuotas" && (mode === "excepcion_2_cuotas" || mode === "2_cuotas"));
-      return matches ? content : "";
-    },
+    /\[\[IF:RESERVA_CON_CUOTAS\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, content: string) =>
+      hasReserve && hasInstallmentsList ? content : "",
+  );
+
+  // Bloques [[IF:TIENE_CUOTAS]] ... [[ENDIF]]
+  text = text.replace(
+    /\[\[IF:TIENE_CUOTAS\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, content: string) => (hasInstallmentsList ? content : ""),
   );
 
   // Bloques [[IF:TIENE_RESERVA]] ... [[ENDIF]]
   text = text.replace(
     /\[\[IF:TIENE_RESERVA\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
     (_, content: string) => (hasReserve ? content : ""),
+  );
+
+  // Bloques [[IF:MODO==valor]] ... [[ENDIF]]
+  text = text.replace(
+    /\[\[IF:MODO==([^\]]+)\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, condition: string, content: string) => {
+      const cond = condition.trim().toLowerCase();
+      const isCuotasMode =
+        mode === "cuotas" || /^\d+_cuotas$/.test(mode);
+      const isExceptionMode =
+        mode === "excepcion_2_cuotas" ||
+        mode === "2_cuotas" ||
+        mode.startsWith("excepcion_");
+      const matches =
+        (cond === "pago_total" && (mode === "pago_total" || mode.includes("contado"))) ||
+        // Bloque "estándar de cuotas": acepta 3_cuotas histórico,
+        // pero también cualquier N_cuotas o "cuotas" sin sufijo
+        (cond === "3_cuotas" && isCuotasMode && !isExceptionMode) ||
+        (cond === "cuotas" && isCuotasMode && !isExceptionMode) ||
+        (cond === "excepcion_2_cuotas" && isExceptionMode) ||
+        (cond === "reserva" && mode.includes("reserva"));
+      return matches ? content : "";
+    },
   );
 
   // Bloques [[IF:TIENE_BONOS]] ... [[ENDIF]]
@@ -1188,18 +1262,65 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
   const company = contract?.company || {};
   const primaryPlan = Array.isArray(payment?.plans) ? payment.plans[0] : null;
   const paymentInstallments = payment?.installments || primaryPlan?.installments || {};
-  const installmentsSchedule = normalizeInstallmentItems(
-    d.paymentInstallmentsSchedule ||
-      payment?.installments_schedule ||
-      payment?.installments?.schedule ||
+  const paymentReserve = payment?.reserve || primaryPlan?.reserve || {};
+  const installmentsSchedule = (() => {
+    const candidates: any[] = [
+      d.paymentInstallmentsSchedule,
+      payment?.installments_schedule,
+      payment?.installments?.schedule,
       primaryPlan?.installments?.schedule,
-  );
-  const customInstallments = normalizeInstallmentItems(
-    d.paymentCustomInstallments ||
-      payment?.custom_installments ||
+      // Cuando el plan es "reserva" las cuotas viven en reserve.installments
+      primaryPlan?.reserve?.installments,
+      paymentReserve?.installments,
+      d.paymentReserveInstallments,
+    ];
+    for (const c of candidates) {
+      const arr = normalizeInstallmentItems(c);
+      if (arr.length) return arr;
+    }
+    return [] as ReturnType<typeof normalizeInstallmentItems>;
+  })();
+  const customInstallments = (() => {
+    const candidates: any[] = [
+      d.paymentCustomInstallments,
+      payment?.custom_installments,
       primaryPlan?.custom_installments,
-  );
-  const paymentReserve = payment?.reserve || {};
+    ];
+    for (const c of candidates) {
+      const arr = normalizeInstallmentItems(c);
+      if (arr.length) return arr;
+    }
+    // Reconstruir a partir de exception_2_installments / first/second amount + due_date
+    const ex =
+      payment?.exception_2_installments ||
+      primaryPlan?.exception_2_installments ||
+      null;
+    const firstAmount =
+      d.paymentFirstInstallmentAmount ??
+      ex?.first_amount ??
+      (primaryPlan as any)?.first_amount ??
+      null;
+    const secondAmount =
+      d.paymentSecondInstallmentAmount ??
+      ex?.second_amount ??
+      (primaryPlan as any)?.second_amount ??
+      null;
+    const firstDue =
+      d.paymentFirstInstallmentDate ??
+      ex?.first_due_date ??
+      d.contractDate ??
+      null;
+    const secondDue =
+      d.paymentSecondInstallmentDate ??
+      ex?.second_due_date ??
+      (primaryPlan as any)?.second_due_date ??
+      null;
+    const items = [
+      { amount: firstAmount != null ? String(firstAmount) : "", dueDate: firstDue ? String(firstDue) : "" },
+      { amount: secondAmount != null ? String(secondAmount) : "", dueDate: secondDue ? String(secondDue) : "" },
+    ].filter((it) => it.amount.trim() !== "" || it.dueDate.trim() !== "");
+    return items;
+  })();
   const partyName =
     d.contractPartyName ||
     party?.name ||

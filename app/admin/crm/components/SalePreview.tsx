@@ -226,34 +226,36 @@ export function SalePreview({
       (primaryPlan as any)?.installments?.amount ??
       null;
 
+    // Total = suma de las cuotas configuradas + reserva (si la hay).
+    // Esto refleja el monto realmente comprometido por el plan,
+    // independientemente del valor manual escrito en `payment.amount`.
+    const sumScheduleAmounts = (() => {
+      const schedule = isReservaPlan
+        ? draftReserveSchedule
+        : draftStdSchedule.length
+          ? draftStdSchedule
+          : draftCustomSchedule;
+      if (!schedule.length) return 0;
+      return schedule
+        .map((it) => Number(it?.amount))
+        .filter((n) => Number.isFinite(n))
+        .reduce((a, b) => a + b, 0);
+    })();
+
     const total =
+      (() => {
+        const reservePart =
+          isReservaPlan && reserveAmountNumForTicket
+            ? reserveAmountNumForTicket
+            : 0;
+        const sum = reservePart + (sumScheduleAmounts || 0);
+        return sum > 0 ? String(sum) : null;
+      })() ??
       (pay?.amount !== null &&
       pay?.amount !== undefined &&
       String(pay?.amount).trim() !== ""
         ? pay.amount
         : null) ??
-      (isReservaPlan
-        ? (() => {
-            const installmentsSum = draftReserveSchedule
-              .map((it) => Number(it?.amount))
-              .filter((n) => Number.isFinite(n))
-              .reduce((a, b) => a + b, 0);
-            const sum =
-              (reserveAmountNumForTicket ?? 0) + (installmentsSum || 0);
-            return sum > 0 ? String(sum) : null;
-          })()
-        : null) ??
-      (() => {
-        const schedule = draftStdSchedule.length
-          ? draftStdSchedule
-          : draftCustomSchedule;
-        if (!schedule.length) return null;
-        const sum = schedule
-          .map((it) => Number(it?.amount))
-          .filter((n) => Number.isFinite(n))
-          .reduce((a, b) => a + b, 0);
-        return Number.isFinite(sum) && sum > 0 ? String(sum) : null;
-      })() ??
       (isReservaPlan && reserveAmountNumForTicket
         ? String(reserveAmountNumForTicket)
         : null) ??
@@ -565,26 +567,10 @@ export function SalePreview({
             </span>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-slate-500">Monto por cuota</span>
-            <span className="text-slate-900">
-              {ticket.cuotaAmount !== null && ticket.cuotaAmount !== undefined
-                ? String(ticket.cuotaAmount)
-                : "—"}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
             <span className="text-slate-500">Total comprometido</span>
             <span className="text-slate-900">
               {ticket.total !== null && ticket.total !== undefined
                 ? String(ticket.total)
-                : "—"}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-slate-500">Pagado</span>
-            <span className="text-slate-900">
-              {ticket.pagado !== null && ticket.pagado !== undefined
-                ? String(ticket.pagado)
                 : "—"}
             </span>
           </div>

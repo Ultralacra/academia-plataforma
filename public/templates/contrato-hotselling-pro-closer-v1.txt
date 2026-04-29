@@ -95,17 +95,29 @@ PAGO EN TRES (3) CUOTAS
 
 ● Valor total: {{MONTO_TOTAL}}
 ● Numero de cuotas: tres (3)
-● Valor de cada cuota: {{MONTO_CUOTA}}
 ● Periodicidad: cada treinta (30) dias
 
 Calendario de pagos:
 
-Numero de cuotas
-Valor de cuota    Fecha de pago
-Primera cuota     {{MONTO_CUOTA_1}}    {{FECHA_CUOTA_1}}
-Segunda cuota     {{MONTO_CUOTA_2}}    {{FECHA_CUOTA_2}}
-Tercera cuota     {{MONTO_CUOTA_3}}    {{FECHA_CUOTA_3}}
+{{CUOTAS_LISTA}}
 
+● Fecha de inicio del programa: {{FECHA_INICIO}}
+
+[[ENDIF]]
+[[IF:MODO==reserva]]
+PAGO POR RESERVA + SALDO
+
+● Valor total: {{MONTO_TOTAL}}
+● Reserva (abono inicial): {{MONTO_RESERVA}}
+● Fecha de pago de la reserva: {{FECHA_RESERVA_PAGO}}
+● Fecha limite del saldo restante: {{FECHA_RESERVA_SALDO}}
+
+[[IF:RESERVA_CON_CUOTAS]]
+Calendario de cuotas del saldo:
+
+{{CUOTAS_LISTA}}
+
+[[ENDIF]]
 ● Fecha de inicio del programa: {{FECHA_INICIO}}
 
 [[ENDIF]]
@@ -127,15 +139,7 @@ Condiciones obligatorias de esta modalidad:
 
 Pagos autorizados:
 
-PRIMERA CUOTA (minimo USD 1.995,00)
-
-● Valor: {{MONTO_EXCEPCION_CUOTA_1}}
-● Fecha de pago: {{FECHA_EXCEPCION_CUOTA_1}}
-
-SEGUNDA CUOTA (dentro de los 30 dias siguientes a la primera)
-
-● Valor: {{MONTO_EXCEPCION_CUOTA_2}}
-● Fecha de pago: {{FECHA_EXCEPCION_CUOTA_2}}
+{{CUOTAS_LISTA}}
 
 Fecha de inicio del programa: {{FECHA_INICIO}}
 

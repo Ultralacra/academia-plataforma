@@ -184,6 +184,10 @@ export function ContractGenerator({
   );
   const [editBeforeGenerate, setEditBeforeGenerate] = useState(true);
   const [overrides, setOverrides] = useState<Partial<ContractData>>({});
+  // Ref para saber si el usuario editó manualmente "Monto total" (en cuyo
+  // caso ya no debemos sobreescribir con el sugerido). Se reinicia al cerrar
+  // el modal.
+  const userTouchedAmountRef = React.useRef(false);
   const [savingLead, setSavingLead] = useState(false);
   // --- Modal-stack: al abrir preview ocultamos visualmente el dialog principal ---
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -242,6 +246,7 @@ export function ContractGenerator({
     if (!open) return;
     // Cada vez que se abre el diálogo, reiniciamos cambios locales para evitar confusiones
     setOverrides({});
+    userTouchedAmountRef.current = false;
     setPreviewOpen(false);
     setSignatureSuccessOpen(false);
     setSignatureSuccessData(null);
@@ -320,9 +325,8 @@ export function ContractGenerator({
   }, [selectedBuiltinTemplateKey]);
 
   const PAYMENT_MODE_PRESETS: Array<{ value: string; label: string }> = [
-    { value: "pago_total", label: "Pago único" },
-    { value: "3_cuotas", label: "3 cuotas" },
-    { value: "2_cuotas", label: "2 cuotas" },
+    { value: "pago_total", label: "Pago único (contado)" },
+    { value: "3_cuotas", label: "Cuotas estándar" },
     { value: "excepcion_2_cuotas", label: "Excepción 2 cuotas" },
     { value: "reserva", label: "Reserva" },
   ];
@@ -332,6 +336,67 @@ export function ContractGenerator({
   const isPresetPaymentMode = PAYMENT_MODE_PRESETS.some(
     (p) => p.value === currentPaymentMode,
   );
+
+  // Monto total computado a partir del cronograma + reserva configurados en
+  // la pestaña Pagos (suma de cuotas + monto de reserva si aplica). Sirve para
+  // autocompletar el campo "Monto total" del modal de generación de contrato.
+  const computedTotalFromPagos = React.useMemo(() => {
+    const toNum = (v: any) => {
+      if (v === null || v === undefined) return null;
+      const n = parseFloat(String(v).replace(/[^0-9.]/g, ""));
+      return Number.isFinite(n) ? n : null;
+    };
+    const schedule: any[] = Array.isArray(
+      (mergedData as any).paymentInstallmentsSchedule,
+    )
+      ? (mergedData as any).paymentInstallmentsSchedule
+      : [];
+    const custom: any[] = Array.isArray(
+      (mergedData as any).paymentCustomInstallments,
+    )
+      ? (mergedData as any).paymentCustomInstallments
+      : [];
+    const items = schedule.length ? schedule : custom;
+    const sumInstallments = items.reduce((acc, it) => {
+      const n = toNum(it?.amount);
+      return acc + (n ?? 0);
+    }, 0);
+    const reserveNum = toNum((mergedData as any).reserveAmount) ?? 0;
+    const total = reserveNum + sumInstallments;
+    if (total > 0) return String(total);
+    // Fallbacks: monto por cuota * número de cuotas (incluye reserva si aplica)
+    const perInstallment = toNum((mergedData as any).installmentAmount);
+    let count = toNum((mergedData as any).installmentsCount);
+    if (!count) {
+      // Inferir el número de cuotas desde paymentMode (ej. "3_cuotas",
+      // "excepcion_2_cuotas") cuando no esté explícito en los datos.
+      const mode = String((mergedData as any).paymentMode || "").toLowerCase();
+      const m = /(\d+)_cuotas/.exec(mode);
+      if (m?.[1]) {
+        const parsed = Number.parseInt(m[1], 10);
+        if (Number.isFinite(parsed) && parsed > 0) count = parsed;
+      } else if (mode.includes("excepcion_2_cuotas")) {
+        count = 2;
+      }
+    }
+    if (perInstallment && count && count > 0)
+      return String(perInstallment * count + reserveNum);
+    return "";
+  }, [mergedData]);
+
+  // Autocompletar `paymentAmount` con la suma derivada de la pestaña Pagos
+  // (cuotas + reserva). Sobreescribe el valor cargado del lead siempre, salvo
+  // que el usuario haya editado manualmente el campo en este modal.
+  React.useEffect(() => {
+    if (!computedTotalFromPagos) return;
+    if (userTouchedAmountRef.current) return;
+    setOverrides((p) =>
+      p.paymentAmount === computedTotalFromPagos
+        ? p
+        : { ...p, paymentAmount: computedTotalFromPagos },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computedTotalFromPagos]);
 
   const getContractTextWarnings = (txt: string): string[] => {
     const warnings: string[] = [];
@@ -1316,6 +1381,7 @@ export function ContractGenerator({
         ...(nextMetadataId ? { metadata_id: nextMetadataId } : {}),
       }));
       setOverrides({});
+      userTouchedAmountRef.current = false;
       toast({
         title: "Datos guardados",
         description: "Los datos del contrato se guardaron correctamente.",
@@ -1635,342 +1701,509 @@ export function ContractGenerator({
                 </div>
 
                 {editBeforeGenerate && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-fullName">
-                        Nombre completo
-                      </Label>
-                      <Input
-                        id="cg-fullName"
-                        value={overrides.fullName ?? mergedData.fullName ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({
-                            ...p,
-                            fullName: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-dni">
-                        DNI / Documento
-                      </Label>
-                      <Input
-                        id="cg-dni"
-                        value={overrides.dni ?? mergedData.dni ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({ ...p, dni: e.target.value }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-email">
-                        Email
-                      </Label>
-                      <Input
-                        id="cg-email"
-                        value={overrides.email ?? mergedData.email ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({ ...p, email: e.target.value }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-phone">
-                        Teléfono
-                      </Label>
-                      <Input
-                        id="cg-phone"
-                        value={overrides.phone ?? mergedData.phone ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({ ...p, phone: e.target.value }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1 md:col-span-2">
-                      <Label className="text-xs" htmlFor="cg-address">
-                        Dirección
-                      </Label>
-                      <Input
-                        id="cg-address"
-                        value={overrides.address ?? mergedData.address ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({
-                            ...p,
-                            address: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-city">
-                        Ciudad
-                      </Label>
-                      <Input
-                        id="cg-city"
-                        value={overrides.city ?? mergedData.city ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({ ...p, city: e.target.value }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-country">
-                        País
-                      </Label>
-                      <Input
-                        id="cg-country"
-                        value={overrides.country ?? mergedData.country ?? ""}
-                        onChange={(e) =>
-                          setOverrides((p) => ({
-                            ...p,
-                            country: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-duration">
-                        Duración (meses)
-                      </Label>
-                      <Input
-                        id="cg-duration"
-                        type="number"
-                        min={1}
-                        max={36}
-                        value={
-                          overrides.programDurationNumber ??
-                          mergedData.programDurationNumber ??
-                          4
-                        }
-                        onChange={(e) => {
-                          const v = Number.parseInt(e.target.value, 10);
-                          setOverrides((p) => ({
-                            ...p,
-                            programDurationNumber: Number.isFinite(v) ? v : 4,
-                          }));
-                        }}
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-startDate">
-                        Fecha de inicio (editable)
-                      </Label>
-                      <Input
-                        id="cg-startDate"
-                        type="date"
-                        value={(
-                          overrides.startDate ??
-                          mergedData.startDate ??
-                          ""
-                        ).slice(0, 10)}
-                        onChange={(e) =>
-                          setOverrides((p) => ({
-                            ...p,
-                            startDate: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-paymentAmount">
-                        Monto total (USD)
-                      </Label>
-                      <Input
-                        id="cg-paymentAmount"
-                        value={
-                          (overrides.paymentAmount ??
-                            mergedData.paymentAmount ??
-                            "") as any
-                        }
-                        onChange={(e) =>
-                          setOverrides((p) => ({
-                            ...p,
-                            paymentAmount: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs" htmlFor="cg-paymentMode">
-                        Modalidad de pago
-                      </Label>
-                      <Select
-                        value={
-                          isPresetPaymentMode
-                            ? currentPaymentMode
-                            : currentPaymentMode
-                              ? "custom"
-                              : ""
-                        }
-                        onValueChange={(v) => {
-                          if (v === "custom") {
-                            setOverrides((p) => ({ ...p, paymentMode: "" }));
-                            return;
-                          }
-                          setOverrides((p) => ({ ...p, paymentMode: v }));
-                        }}
-                      >
-                        <SelectTrigger id="cg-paymentMode">
-                          <SelectValue placeholder="Selecciona una modalidad" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_MODE_PRESETS.map((p) => (
-                            <SelectItem key={p.value} value={p.value}>
-                              {p.label}
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="custom">
-                            Otro (escribir)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      {!isPresetPaymentMode && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-fullName">
+                          Nombre completo
+                        </Label>
                         <Input
-                          className="mt-2"
-                          value={currentPaymentMode}
+                          id="cg-fullName"
+                          value={
+                            overrides.fullName ?? mergedData.fullName ?? ""
+                          }
                           onChange={(e) =>
                             setOverrides((p) => ({
                               ...p,
-                              paymentMode: e.target.value,
+                              fullName: e.target.value,
                             }))
                           }
-                          placeholder="Ej: pago_total / 3_cuotas / reserva"
                         />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-dni">
+                          DNI / Documento
+                        </Label>
+                        <Input
+                          id="cg-dni"
+                          value={overrides.dni ?? mergedData.dni ?? ""}
+                          onChange={(e) =>
+                            setOverrides((p) => ({ ...p, dni: e.target.value }))
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-email">
+                          Email
+                        </Label>
+                        <Input
+                          id="cg-email"
+                          value={overrides.email ?? mergedData.email ?? ""}
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              email: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-phone">
+                          Teléfono
+                        </Label>
+                        <Input
+                          id="cg-phone"
+                          value={overrides.phone ?? mergedData.phone ?? ""}
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              phone: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1 md:col-span-2">
+                        <Label className="text-xs" htmlFor="cg-address">
+                          Dirección
+                        </Label>
+                        <Input
+                          id="cg-address"
+                          value={overrides.address ?? mergedData.address ?? ""}
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              address: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-city">
+                          Ciudad
+                        </Label>
+                        <Input
+                          id="cg-city"
+                          value={overrides.city ?? mergedData.city ?? ""}
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              city: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-country">
+                          País
+                        </Label>
+                        <Input
+                          id="cg-country"
+                          value={overrides.country ?? mergedData.country ?? ""}
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              country: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-duration">
+                          Duración (meses)
+                        </Label>
+                        <Input
+                          id="cg-duration"
+                          type="number"
+                          min={1}
+                          max={36}
+                          value={
+                            overrides.programDurationNumber ??
+                            mergedData.programDurationNumber ??
+                            4
+                          }
+                          onChange={(e) => {
+                            const v = Number.parseInt(e.target.value, 10);
+                            setOverrides((p) => ({
+                              ...p,
+                              programDurationNumber: Number.isFinite(v) ? v : 4,
+                            }));
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-startDate">
+                          Fecha de inicio (editable)
+                        </Label>
+                        <Input
+                          id="cg-startDate"
+                          type="date"
+                          value={(
+                            overrides.startDate ??
+                            mergedData.startDate ??
+                            ""
+                          ).slice(0, 10)}
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              startDate: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-paymentAmount">
+                          Monto total (USD)
+                        </Label>
+                        <Input
+                          id="cg-paymentAmount"
+                          value={
+                            (overrides.paymentAmount ??
+                              computedTotalFromPagos ??
+                              mergedData.paymentAmount ??
+                              "") as any
+                          }
+                          onChange={(e) => {
+                            userTouchedAmountRef.current = true;
+                            setOverrides((p) => ({
+                              ...p,
+                              paymentAmount: e.target.value,
+                            }));
+                          }}
+                        />
+                        {computedTotalFromPagos ? (
+                          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <span>
+                              Sugerido (suma cuotas + reserva):{" "}
+                              <b>USD {computedTotalFromPagos}</b>
+                            </span>
+                            {(overrides.paymentAmount ??
+                              computedTotalFromPagos ??
+                              "") !== computedTotalFromPagos ? (
+                              <button
+                                type="button"
+                                className="text-emerald-600 hover:underline"
+                                onClick={() => {
+                                  userTouchedAmountRef.current = false;
+                                  setOverrides((p) => ({
+                                    ...p,
+                                    paymentAmount: computedTotalFromPagos,
+                                  }));
+                                }}
+                              >
+                                Usar sugerido
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-paymentMode">
+                          Modalidad de pago
+                        </Label>
+                        <Select
+                          value={
+                            isPresetPaymentMode
+                              ? currentPaymentMode
+                              : currentPaymentMode
+                                ? "custom"
+                                : ""
+                          }
+                          onValueChange={(v) => {
+                            if (v === "custom") {
+                              setOverrides((p) => ({ ...p, paymentMode: "" }));
+                              return;
+                            }
+                            setOverrides((p) => ({ ...p, paymentMode: v }));
+                          }}
+                        >
+                          <SelectTrigger id="cg-paymentMode">
+                            <SelectValue placeholder="Selecciona una modalidad" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_MODE_PRESETS.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>
+                                {p.label}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="custom">
+                              Otro (escribir)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {!isPresetPaymentMode && (
+                          <Input
+                            className="mt-2"
+                            value={currentPaymentMode}
+                            onChange={(e) =>
+                              setOverrides((p) => ({
+                                ...p,
+                                paymentMode: e.target.value,
+                              }))
+                            }
+                            placeholder="Ej: pago_total / 3_cuotas / reserva"
+                          />
+                        )}
+
+                        <div className="mt-2 text-[11px] text-muted-foreground">
+                          En el contrato se mostrará como:{" "}
+                          <b>{preparedData.MODALIDAD_PAGO}</b>
+                        </div>
+                      </div>
+
+                      {(String(currentPaymentMode)
+                        .toLowerCase()
+                        .includes("cuota") ||
+                        String(currentPaymentMode)
+                          .toLowerCase()
+                          .includes("excepcion")) && (
+                        <>
+                          <div className="space-y-1">
+                            <Label
+                              className="text-xs"
+                              htmlFor="cg-installmentsCount"
+                            >
+                              Número de cuotas
+                            </Label>
+                            <Input
+                              id="cg-installmentsCount"
+                              type="number"
+                              min={1}
+                              max={36}
+                              value={
+                                (overrides.installmentsCount ??
+                                  mergedData.installmentsCount ??
+                                  "") as any
+                              }
+                              onChange={(e) => {
+                                const v = Number.parseInt(e.target.value, 10);
+                                setOverrides((p) => ({
+                                  ...p,
+                                  installmentsCount: Number.isFinite(v)
+                                    ? v
+                                    : undefined,
+                                }));
+                              }}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label
+                              className="text-xs"
+                              htmlFor="cg-installmentAmount"
+                            >
+                              Monto por cuota (USD)
+                            </Label>
+                            <Input
+                              id="cg-installmentAmount"
+                              value={
+                                (overrides.installmentAmount ??
+                                  mergedData.installmentAmount ??
+                                  "") as any
+                              }
+                              onChange={(e) =>
+                                setOverrides((p) => ({
+                                  ...p,
+                                  installmentAmount: e.target.value,
+                                }))
+                              }
+                              placeholder="Ej: 1600"
+                            />
+                          </div>
+                        </>
                       )}
 
-                      <div className="mt-2 text-[11px] text-muted-foreground">
-                        En el contrato se mostrará como:{" "}
-                        <b>{preparedData.MODALIDAD_PAGO}</b>
-                      </div>
+                      {String(currentPaymentMode)
+                        .toLowerCase()
+                        .includes("reserva") && (
+                        <>
+                          <div className="space-y-1">
+                            <Label
+                              className="text-xs"
+                              htmlFor="cg-reserveAmount"
+                            >
+                              Monto de reserva (USD)
+                            </Label>
+                            <Input
+                              id="cg-reserveAmount"
+                              value={
+                                (overrides.reserveAmount ??
+                                  mergedData.reserveAmount ??
+                                  "") as any
+                              }
+                              onChange={(e) =>
+                                setOverrides((p) => ({
+                                  ...p,
+                                  reserveAmount: e.target.value,
+                                }))
+                              }
+                              placeholder="Ej: 500"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label
+                              className="text-xs"
+                              htmlFor="cg-reservePaidDate"
+                            >
+                              Fecha de pago de la reserva
+                            </Label>
+                            <Input
+                              id="cg-reservePaidDate"
+                              type="date"
+                              value={
+                                (
+                                  (overrides as any).reservePaidDate ??
+                                  (mergedData as any).reservePaidDate ??
+                                  ""
+                                ).slice(0, 10) as any
+                              }
+                              onChange={(e) =>
+                                setOverrides((p) => ({
+                                  ...p,
+                                  reservePaidDate: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label
+                              className="text-xs"
+                              htmlFor="cg-reserveRemainingDueDate"
+                            >
+                              Fecha límite del saldo restante
+                            </Label>
+                            <Input
+                              id="cg-reserveRemainingDueDate"
+                              type="date"
+                              value={
+                                (
+                                  (overrides as any).reserveRemainingDueDate ??
+                                  (mergedData as any).reserveRemainingDueDate ??
+                                  ""
+                                ).slice(0, 10) as any
+                              }
+                              onChange={(e) =>
+                                setOverrides((p) => ({
+                                  ...p,
+                                  reserveRemainingDueDate: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label
+                              className="text-xs"
+                              htmlFor="cg-nextChargeDate"
+                            >
+                              Próximo cobro (opcional)
+                            </Label>
+                            <Input
+                              id="cg-nextChargeDate"
+                              type="date"
+                              value={
+                                (
+                                  overrides.nextChargeDate ??
+                                  mergedData.nextChargeDate ??
+                                  ""
+                                ).slice(0, 10) as any
+                              }
+                              onChange={(e) =>
+                                setOverrides((p) => ({
+                                  ...p,
+                                  nextChargeDate: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    {(String(currentPaymentMode)
-                      .toLowerCase()
-                      .includes("cuota") ||
-                      String(currentPaymentMode)
-                        .toLowerCase()
-                        .includes("excepcion")) && (
-                      <>
-                        <div className="space-y-1">
-                          <Label
-                            className="text-xs"
-                            htmlFor="cg-installmentsCount"
-                          >
-                            Número de cuotas
-                          </Label>
-                          <Input
-                            id="cg-installmentsCount"
-                            type="number"
-                            min={1}
-                            max={36}
-                            value={
-                              (overrides.installmentsCount ??
-                                mergedData.installmentsCount ??
-                                "") as any
-                            }
-                            onChange={(e) => {
-                              const v = Number.parseInt(e.target.value, 10);
-                              setOverrides((p) => ({
-                                ...p,
-                                installmentsCount: Number.isFinite(v)
-                                  ? v
-                                  : undefined,
-                              }));
-                            }}
-                          />
+                    {/* Resumen del cronograma configurado en la pestaña Pagos */}
+                    {(() => {
+                      const schedule = Array.isArray(
+                        mergedData.paymentInstallmentsSchedule,
+                      )
+                        ? mergedData.paymentInstallmentsSchedule
+                        : [];
+                      const custom = Array.isArray(
+                        mergedData.paymentCustomInstallments,
+                      )
+                        ? mergedData.paymentCustomInstallments
+                        : [];
+                      const items =
+                        schedule.length > 0
+                          ? schedule
+                          : custom.length > 0
+                            ? custom
+                            : [];
+                      if (!items.length) return null;
+                      const labels = [
+                        "Primera cuota",
+                        "Segunda cuota",
+                        "Tercera cuota",
+                        "Cuarta cuota",
+                        "Quinta cuota",
+                        "Sexta cuota",
+                      ];
+                      return (
+                        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                            Cronograma configurado en Pagos
+                          </div>
+                          <div className="space-y-1 text-sm">
+                            {items.map((it: any, idx: number) => {
+                              const label = labels[idx] || `Cuota ${idx + 1}`;
+                              const amount = it?.amount
+                                ? `USD ${String(it.amount)}`
+                                : "—";
+                              const due =
+                                it?.dueDate || it?.due_date
+                                  ? String(it.dueDate || it.due_date).slice(
+                                      0,
+                                      10,
+                                    )
+                                  : "—";
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between gap-2"
+                                >
+                                  <span className="text-slate-600">
+                                    {label}
+                                  </span>
+                                  <span className="text-slate-900">
+                                    {amount}
+                                    <span className="text-slate-500">
+                                      {" "}
+                                      · vence {due}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="mt-2 text-[11px] text-slate-500">
+                            Esta información se toma de la pestaña Pagos y se
+                            inyecta automáticamente en el contrato.
+                          </div>
                         </div>
-
-                        <div className="space-y-1">
-                          <Label
-                            className="text-xs"
-                            htmlFor="cg-installmentAmount"
-                          >
-                            Monto por cuota (USD)
-                          </Label>
-                          <Input
-                            id="cg-installmentAmount"
-                            value={
-                              (overrides.installmentAmount ??
-                                mergedData.installmentAmount ??
-                                "") as any
-                            }
-                            onChange={(e) =>
-                              setOverrides((p) => ({
-                                ...p,
-                                installmentAmount: e.target.value,
-                              }))
-                            }
-                            placeholder="Ej: 1600"
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    {String(currentPaymentMode)
-                      .toLowerCase()
-                      .includes("reserva") && (
-                      <>
-                        <div className="space-y-1">
-                          <Label className="text-xs" htmlFor="cg-reserveAmount">
-                            Monto de reserva (USD)
-                          </Label>
-                          <Input
-                            id="cg-reserveAmount"
-                            value={
-                              (overrides.reserveAmount ??
-                                mergedData.reserveAmount ??
-                                "") as any
-                            }
-                            onChange={(e) =>
-                              setOverrides((p) => ({
-                                ...p,
-                                reserveAmount: e.target.value,
-                              }))
-                            }
-                            placeholder="Ej: 500"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label
-                            className="text-xs"
-                            htmlFor="cg-nextChargeDate"
-                          >
-                            Próximo cobro (opcional)
-                          </Label>
-                          <Input
-                            id="cg-nextChargeDate"
-                            type="date"
-                            value={
-                              (
-                                overrides.nextChargeDate ??
-                                mergedData.nextChargeDate ??
-                                ""
-                              ).slice(0, 10) as any
-                            }
-                            onChange={(e) =>
-                              setOverrides((p) => ({
-                                ...p,
-                                nextChargeDate: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
+                      );
+                    })()}
+                  </>
                 )}
               </CardContent>
             </Card>
