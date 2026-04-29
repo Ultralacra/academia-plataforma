@@ -90,6 +90,12 @@ function isPaidStatus(raw: unknown) {
   );
 }
 
+const HIDDEN_PAYMENT_CODES = new Set([
+  "L4SzLGXEXLa7in1C",
+  "Rqcc9iY9aSpNG_bz",
+  "o1AMJ3P-5-kynF83",
+]);
+
 function makeClientKey(r: PaymentCuotaRow) {
   const cc = String(r?.cliente_codigo ?? "").trim();
   if (cc) return `cliente:${cc}`;
@@ -182,6 +188,8 @@ export function usePaymentDueNotifications(opts: {
       const byClient = new Map<string, PaymentDueItem>();
 
       for (const r of rows) {
+        const pc = String(r?.payment_codigo ?? "").trim();
+        if (pc && HIDDEN_PAYMENT_CODES.has(pc)) continue;
         if (isPaidStatus(r?.estatus)) continue;
         const fecha = r?.fecha_pago ? String(r.fecha_pago) : "";
         const due = fecha ? parseDateSmart(fecha) : null;
