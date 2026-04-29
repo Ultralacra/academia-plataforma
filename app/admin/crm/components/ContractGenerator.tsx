@@ -1328,6 +1328,7 @@ export function ContractGenerator({
       if (overrides.fullName !== undefined) leadPatch.name = overrides.fullName;
       if (overrides.email !== undefined) leadPatch.email = overrides.email;
       if (overrides.phone !== undefined) leadPatch.phone = overrides.phone;
+      // Datos de contrato → metadata
       if (overrides.dni !== undefined)
         metadataPatch.contract_party_document_id = overrides.dni;
       if (overrides.address !== undefined)
@@ -1336,6 +1337,31 @@ export function ContractGenerator({
         metadataPatch.contract_party_city = overrides.city;
       if (overrides.country !== undefined)
         metadataPatch.contract_party_country = overrides.country;
+      // Datos de pago → metadata (para persistir entre recargas)
+      if (overrides.paymentMode !== undefined)
+        metadataPatch.payment_mode = overrides.paymentMode;
+      if (overrides.paymentAmount !== undefined)
+        metadataPatch.payment_amount = overrides.paymentAmount;
+      if (overrides.paymentPlatform !== undefined)
+        metadataPatch.payment_platform = overrides.paymentPlatform;
+      if (overrides.installmentsCount !== undefined)
+        metadataPatch.payment_installments_count = overrides.installmentsCount;
+      if (overrides.installmentAmount !== undefined)
+        metadataPatch.payment_installment_amount = overrides.installmentAmount;
+      if (overrides.reserveAmount !== undefined)
+        metadataPatch.payment_reserve_amount = overrides.reserveAmount;
+      if ((overrides as any).reservePaidDate !== undefined)
+        metadataPatch.reserve_paid_date = (overrides as any).reservePaidDate;
+      if ((overrides as any).reserveRemainingDueDate !== undefined)
+        metadataPatch.reserve_remaining_due_date = (
+          overrides as any
+        ).reserveRemainingDueDate;
+      if (overrides.nextChargeDate !== undefined)
+        metadataPatch.next_charge_date = overrides.nextChargeDate;
+      if (overrides.bonuses !== undefined)
+        metadataPatch.bonuses = overrides.bonuses;
+      if (overrides.program !== undefined)
+        metadataPatch.program = overrides.program;
 
       if (
         Object.keys(leadPatch).length === 0 &&
@@ -1374,12 +1400,91 @@ export function ContractGenerator({
         }
       }
 
-      setLiveLead((prev: any) => ({
-        ...(prev ?? updatedLead ?? {}),
-        ...(updatedLead ?? {}),
-        ...metadataPatch,
-        ...(nextMetadataId ? { metadata_id: nextMetadataId } : {}),
-      }));
+      setLiveLead((prev: any) => {
+        const base = {
+          ...(prev ?? updatedLead ?? {}),
+          ...(updatedLead ?? {}),
+          ...metadataPatch,
+          ...(nextMetadataId ? { metadata_id: nextMetadataId } : {}),
+        };
+        // Parchear también la estructura anidada sale.payment para que
+        // mapLeadToContractData la lea correctamente sin necesitar recarga.
+        const prevSale =
+          base.sale && typeof base.sale === "object" ? base.sale : {};
+        const prevPayment =
+          prevSale.payment && typeof prevSale.payment === "object"
+            ? prevSale.payment
+            : {};
+        const prevInstallments =
+          prevPayment.installments &&
+          typeof prevPayment.installments === "object"
+            ? prevPayment.installments
+            : {};
+        const prevReserve =
+          prevPayment.reserve && typeof prevPayment.reserve === "object"
+            ? prevPayment.reserve
+            : {};
+        const paymentNestedPatch: Record<string, any> = {};
+        if (overrides.paymentMode !== undefined)
+          paymentNestedPatch.mode = overrides.paymentMode;
+        if (overrides.paymentAmount !== undefined)
+          paymentNestedPatch.amount = overrides.paymentAmount;
+        if (overrides.paymentPlatform !== undefined)
+          paymentNestedPatch.platform = overrides.paymentPlatform;
+        if (overrides.nextChargeDate !== undefined)
+          paymentNestedPatch.nextChargeDate = overrides.nextChargeDate;
+        const hasPaymentPatch = Object.keys(paymentNestedPatch).length > 0;
+        const installmentNestedPatch: Record<string, any> = {};
+        if (overrides.installmentsCount !== undefined)
+          installmentNestedPatch.count = overrides.installmentsCount;
+        if (overrides.installmentAmount !== undefined)
+          installmentNestedPatch.amount = overrides.installmentAmount;
+        const hasInstallmentPatch =
+          Object.keys(installmentNestedPatch).length > 0;
+        const reserveNestedPatch: Record<string, any> = {};
+        if (overrides.reserveAmount !== undefined)
+          reserveNestedPatch.amount = overrides.reserveAmount;
+        if ((overrides as any).reservePaidDate !== undefined)
+          reserveNestedPatch.paid_date = (overrides as any).reservePaidDate;
+        if ((overrides as any).reserveRemainingDueDate !== undefined)
+          reserveNestedPatch.remaining_due_date = (
+            overrides as any
+          ).reserveRemainingDueDate;
+        const hasReservePatch = Object.keys(reserveNestedPatch).length > 0;
+        if (
+          hasPaymentPatch ||
+          hasInstallmentPatch ||
+          hasReservePatch ||
+          overrides.bonuses !== undefined ||
+          overrides.program !== undefined
+        ) {
+          base.sale = {
+            ...prevSale,
+            ...(overrides.program !== undefined
+              ? { program: overrides.program }
+              : {}),
+            ...(overrides.bonuses !== undefined
+              ? { bonuses: overrides.bonuses }
+              : {}),
+            payment: {
+              ...prevPayment,
+              ...paymentNestedPatch,
+              ...(hasInstallmentPatch
+                ? {
+                    installments: {
+                      ...prevInstallments,
+                      ...installmentNestedPatch,
+                    },
+                  }
+                : {}),
+              ...(hasReservePatch
+                ? { reserve: { ...prevReserve, ...reserveNestedPatch } }
+                : {}),
+            },
+          };
+        }
+        return base;
+      });
       setOverrides({});
       userTouchedAmountRef.current = false;
       toast({

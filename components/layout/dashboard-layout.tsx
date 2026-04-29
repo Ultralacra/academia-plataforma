@@ -1386,7 +1386,7 @@ export function DashboardLayout({
                 {canSeePaymentsAndAccessNotifications(user) && (
                   <>
                     <PaymentsDueBadge />
-                    <AccessDueBadge />
+                    {/* <AccessDueBadge /> */}
                   </>
                 )}
                 <TasksNotificationsBadge />
