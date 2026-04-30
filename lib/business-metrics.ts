@@ -157,7 +157,10 @@ const BUSINESS_METRICS_ALLOWED_IDS = new Set([
 
 export function canAccessBusinessMetrics(user?: User | null): boolean {
   if (!user) return false;
-  return BUSINESS_METRICS_ALLOWED_IDS.has(String(user.id));
+  return (
+    BUSINESS_METRICS_ALLOWED_IDS.has(String(user.id)) ||
+    (!!user.codigo && BUSINESS_METRICS_ALLOWED_IDS.has(user.codigo))
+  );
 }
 
 export function buildBusinessSeedState(): BusinessMetricsState {
