@@ -78,6 +78,38 @@ function stageLabel(stage?: string | null) {
   return s;
 }
 
+const NO_TAG_FILTER = "Sin programa";
+
+function normalizeTagKey(tag?: string | null) {
+  return String(tag ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function canonicalTagLabel(tag?: string | null) {
+  const normalized = normalizeTagKey(tag);
+  if (!normalized) return "";
+  if (normalized === "hotselling foundation") return "Hotselling Foundation";
+  return String(tag ?? "").trim();
+}
+
+function getUniqueTags(rows: EnrichedRow[]) {
+  const byKey = new Map<string, string>();
+  for (const r of rows) {
+    const normalized = normalizeTagKey(r.tag);
+    if (!normalized) continue;
+    if (!byKey.has(normalized)) {
+      byKey.set(normalized, canonicalTagLabel(r.tag));
+    }
+  }
+  return Array.from(byKey.values()).sort((a, b) =>
+    a.localeCompare(b, "es", { sensitivity: "base" }),
+  );
+}
+
 const PLAN_STATUSES = [
   "todos",
   "pagado",
@@ -110,6 +142,7 @@ type EnrichedRow = {
   nextDueDate: string | null;
   nextDueAmount: number | null;
   nextDueOverdue: boolean;
+  tag: string | null;
   raw: StudentRow;
 };
 
@@ -134,6 +167,7 @@ export default function VistaEnriquecidaContent() {
   const [filterStage, setFilterStage] = useState<string[]>([]);
   const [filterState, setFilterState] = useState<string[]>([]);
   const [filterTeam, setFilterTeam] = useState<string[]>([]);
+  const [filterTag, setFilterTag] = useState<string[]>([]);
   const [filterPlanStatus, setFilterPlanStatus] =
     useState<PlanStatusFilter>("todos");
   const [filterInactividad, setFilterInactividad] = useState<
@@ -345,6 +379,7 @@ export default function VistaEnriquecidaContent() {
           nextDueDate,
           nextDueAmount,
           nextDueOverdue: nextDueIsOverdue,
+          tag: s.tag ?? null,
           raw: s,
         };
       });
@@ -384,6 +419,10 @@ export default function VistaEnriquecidaContent() {
     rows.forEach((r) => r.team.forEach((t) => set.add(t)));
     return Array.from(set).sort();
   }, [rows]);
+  const uniqueTags = useMemo(() => {
+    const tags = getUniqueTags(rows);
+    return [NO_TAG_FILTER, ...tags];
+  }, [rows]);
 
   /* ---------- filtrado ---------- */
   const filtered = useMemo(() => {
@@ -411,6 +450,14 @@ export default function VistaEnriquecidaContent() {
         if (!matches) return false;
       }
       if (filterSinEquipo && r.team.length > 0) return false;
+      if (filterTag.length > 0) {
+        const tagKey = normalizeTagKey(r.tag);
+        const tagMatches = filterTag.some((item) => {
+          if (item === NO_TAG_FILTER) return !tagKey;
+          return normalizeTagKey(item) === tagKey;
+        });
+        if (!tagMatches) return false;
+      }
       if (filterVencidas && r.cuotasVencidas <= 0) return false;
       if (filterPendientes && r.cuotasPendientes + r.cuotasEnProceso <= 0)
         return false;
@@ -442,6 +489,7 @@ export default function VistaEnriquecidaContent() {
     filterStage,
     filterState,
     filterTeam,
+    filterTag,
     filterSinEquipo,
     filterVencidas,
     filterPendientes,
@@ -482,6 +530,7 @@ export default function VistaEnriquecidaContent() {
     filterStage.length > 0 ||
     filterState.length > 0 ||
     filterTeam.length > 0 ||
+    filterTag.length > 0 ||
     filterSinEquipo ||
     filterVencidas ||
     filterPendientes ||
@@ -493,6 +542,7 @@ export default function VistaEnriquecidaContent() {
     setFilterStage([]);
     setFilterState([]);
     setFilterTeam([]);
+    setFilterTag([]);
     setFilterSinEquipo(false);
     setFilterVencidas(false);
     setFilterPendientes(false);
@@ -777,6 +827,12 @@ export default function VistaEnriquecidaContent() {
             options={uniqueTeams}
             value={filterTeam}
             onChange={setFilterTeam}
+          />
+          <ChipMultiSelect
+            label="Programa"
+            options={uniqueTags}
+            value={filterTag}
+            onChange={setFilterTag}
           />
 
           <div>

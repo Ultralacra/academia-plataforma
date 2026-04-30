@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Key, Pencil, TicketIcon, Trash2, User } from "lucide-react";
 import {
   Tooltip,
@@ -41,6 +42,7 @@ export default function Header({
   canChangePassword,
   changePasswordDisabled,
   onChangePassword,
+  extraActions,
 }: {
   name: string;
   email?: string | null;
@@ -57,6 +59,7 @@ export default function Header({
   canChangePassword?: boolean;
   changePasswordDisabled?: boolean;
   onChangePassword?: () => void;
+  extraActions?: React.ReactNode;
 }) {
   // Nota: el conteo real de tickets se muestra desde el padre para evitar fetch doble.
   return (
@@ -202,6 +205,7 @@ export default function Header({
             </AlertDialogContent>
           </AlertDialog>
         ) : null}
+        {extraActions ?? null}
       </div>
     </div>
   );

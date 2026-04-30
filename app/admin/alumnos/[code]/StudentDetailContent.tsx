@@ -106,6 +106,7 @@ import {
 } from "@/lib/email-templates/access-expiry";
 import StudentBrevoEvents from "./_parts/StudentBrevoEvents";
 import StudentProfileDataPanel from "./_parts/StudentProfileDataPanel";
+import StudentAuditButton from "./_parts/StudentAuditButton";
 
 function extractStudentTag(raw: any): string | null {
   const pick = (value: any): string | null => {
@@ -2408,6 +2409,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
           if (changePasswordDisabled) return;
           setChangePasswordOpen(true);
         }}
+        extraActions={
+          <StudentAuditButton
+            studentCode={student.code || code}
+            studentName={student.name || "Alumno"}
+          />
+        }
       />
 
       <div className="rounded-xl border border-border bg-card p-4">
