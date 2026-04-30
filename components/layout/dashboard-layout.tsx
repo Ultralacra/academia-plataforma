@@ -1389,7 +1389,8 @@ export function DashboardLayout({
                     {/* <AccessDueBadge /> */}
                   </>
                 )}
-                <TasksNotificationsBadge />
+                {/* Alumnos: no mostrar notificaciones de tareas */}
+                {user?.role !== "student" && <TasksNotificationsBadge />}
                 <NotificationsBadge />
               </div>
 
