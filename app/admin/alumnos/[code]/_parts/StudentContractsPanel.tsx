@@ -10,7 +10,9 @@ import {
   ExternalLink,
   Eye,
   FileSignature,
+  FileText,
   Loader2,
+  Paperclip,
   Pencil,
   Plus,
   RefreshCw,
@@ -18,6 +20,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +49,12 @@ import {
   type LeadContractSignatureSendResponse,
 } from "@/app/admin/crm/api";
 import { apiFetch } from "@/lib/api-config";
-import { listMetadata } from "@/lib/metadata";
+import {
+  listMetadata,
+  createMetadata,
+  updateMetadata,
+  type MetadataRecord,
+} from "@/lib/metadata";
 
 /* ─── envío de otrosí para clientes (no leads) ──────────────── */
 
@@ -109,6 +117,437 @@ const OTROSI_TYPES = [
 
 const CONTRACT_TEMPLATES_ENTITY = "plantillas_contratos";
 const ALL_TEMPLATES_ENTITY_ID = "all_templates";
+
+/* ─── documentos extra ────────────────────────────────────────── */
+
+// Un único registro de metadata por alumno:
+//   entity = "student_extra_docs"
+//   entity_id = studentCode
+//   payload  = { docs: ExtraDocItem[] }
+// Así nunca se crean registros extra — solo se actualiza el mismo.
+
+const EXTRA_DOCS_ENTITY = "student_extra_docs";
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+type ExtraDocItem = {
+  id: string; // uuid local para identificar el ítem dentro del array
+  title: string;
+  date: string; // YYYY-MM-DD
+  url: string;
+  notes?: string;
+  fileData?: string; // data URL base64
+  fileName?: string;
+};
+
+type ExtraDocsPayload = { docs: ExtraDocItem[] };
+
+const EMPTY_DOC_FORM: Omit<ExtraDocItem, "id"> = {
+  title: "",
+  date: new Date().toISOString().slice(0, 10),
+  url: "",
+  notes: "",
+  fileData: "",
+  fileName: "",
+};
+
+function nanoid8() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function downloadBase64(dataUrl: string, fileName: string) {
+  const a = window.document.createElement("a");
+  a.href = dataUrl;
+  a.download = fileName || "documento";
+  window.document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function ExtraDocCard({
+  doc,
+  onEdit,
+}: {
+  doc: ExtraDocItem;
+  onEdit: (doc: ExtraDocItem) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2.5 space-y-1">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            {doc.fileData ? (
+              <Paperclip className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+            ) : null}
+            <p className="text-sm font-medium text-foreground truncate">
+              {doc.title || "Sin título"}
+            </p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {doc.fileName ? `${doc.fileName} · ` : ""}
+            Agregado:{" "}
+            {doc.date
+              ? new Date(doc.date + "T00:00:00").toLocaleDateString("es-ES", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "—"}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 flex-none">
+          {doc.fileData ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              title="Descargar archivo"
+              onClick={() =>
+                downloadBase64(doc.fileData!, doc.fileName || doc.title)
+              }
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          ) : doc.url ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              title="Ver documento"
+              asChild
+            >
+              <Link href={doc.url} target="_blank" rel="noreferrer">
+                <Eye className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          ) : null}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            title="Editar"
+            onClick={() => onEdit(doc)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      {doc.notes ? (
+        <p className="text-xs text-muted-foreground line-clamp-2">
+          {doc.notes}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function StudentExtraDocsPanel({ studentCode }: { studentCode: string }) {
+  // El registro de metadata completo (único por alumno)
+  const [metaRec, setMetaRec] =
+    useState<MetadataRecord<ExtraDocsPayload> | null>(null);
+  const [docs, setDocs] = useState<ExtraDocItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<Omit<ExtraDocItem, "id">>(EMPTY_DOC_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [fileError, setFileError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function load() {
+    if (!studentCode) return;
+    setLoading(true);
+    try {
+      const { items } = await listMetadata<ExtraDocsPayload>();
+      const found = items.find(
+        (r) =>
+          String(r.entity) === EXTRA_DOCS_ENTITY &&
+          String(r.entity_id) === studentCode,
+      ) as MetadataRecord<ExtraDocsPayload> | undefined;
+      setMetaRec(found ?? null);
+      setDocs(Array.isArray(found?.payload?.docs) ? found!.payload.docs : []);
+    } catch {
+      /* silencioso */
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentCode]);
+
+  // Persiste el array de docs: crea el registro si no existe, lo actualiza si ya existe
+  async function persist(nextDocs: ExtraDocItem[]) {
+    if (metaRec) {
+      const updated = await updateMetadata<ExtraDocsPayload>(metaRec.id, {
+        ...metaRec,
+        payload: { docs: nextDocs },
+      });
+      setMetaRec(updated as MetadataRecord<ExtraDocsPayload>);
+    } else {
+      const created = await createMetadata<ExtraDocsPayload>({
+        entity: EXTRA_DOCS_ENTITY,
+        entity_id: studentCode,
+        payload: { docs: nextDocs },
+      });
+      setMetaRec(created as MetadataRecord<ExtraDocsPayload>);
+    }
+    setDocs(nextDocs);
+  }
+
+  function openNew() {
+    setEditingId(null);
+    setForm({ ...EMPTY_DOC_FORM, date: new Date().toISOString().slice(0, 10) });
+    setFileError("");
+    setDialogOpen(true);
+  }
+
+  function openEdit(doc: ExtraDocItem) {
+    setEditingId(doc.id);
+    setForm({ ...doc });
+    setFileError("");
+    setDialogOpen(true);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setFileError(
+        `El archivo supera el límite de 5 MB (${(file.size / 1024 / 1024).toFixed(1)} MB).`,
+      );
+      e.target.value = "";
+      return;
+    }
+    setFileError("");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setForm((f) => ({
+        ...f,
+        fileData: dataUrl,
+        fileName: file.name,
+        url: "",
+      }));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeFile() {
+    setForm((f) => ({ ...f, fileData: "", fileName: "" }));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleSave() {
+    if (!form.title.trim()) {
+      toast({ title: "El título es obligatorio", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      let nextDocs: ExtraDocItem[];
+      if (editingId) {
+        // Editar ítem existente dentro del array
+        nextDocs = docs.map((d) =>
+          d.id === editingId ? { ...form, id: editingId } : d,
+        );
+        toast({ title: "Documento actualizado" });
+      } else {
+        // Nuevo ítem — añadir al array
+        nextDocs = [...docs, { ...form, id: nanoid8() }];
+        toast({ title: "Documento guardado" });
+      }
+      await persist(nextDocs);
+      setDialogOpen(false);
+    } catch (e: any) {
+      toast({
+        title: "Error al guardar",
+        description: e?.message ?? "Error desconocido",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* cabecera */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Documentos ({docs.length})
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            title="Recargar"
+            onClick={load}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 text-xs"
+            onClick={openNew}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo documento
+          </Button>
+        </div>
+      </div>
+
+      {/* listado */}
+      {loading && docs.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando documentos...
+        </div>
+      ) : docs.length === 0 ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">
+          Sin documentos agregados para este alumno.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {docs.map((doc) => (
+            <ExtraDocCard key={doc.id} doc={doc} onEdit={openEdit} />
+          ))}
+        </div>
+      )}
+
+      {/* dialog agregar / editar */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingId ? "Editar documento" : "Nuevo documento"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingId
+                ? "Modifica los datos del documento. No se puede eliminar."
+                : "Agrega un nuevo documento con su título y fecha."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Título *</Label>
+              <Input
+                value={form.title}
+                placeholder="Ej. Contrato de adhesión"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, title: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Fecha</Label>
+              <Input
+                type="date"
+                value={form.date}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, date: e.target.value }))
+                }
+              />
+            </div>
+
+            {/* archivo o URL — excluyentes */}
+            <div className="space-y-2">
+              <Label>Archivo</Label>
+              {form.fileData ? (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+                  <Paperclip className="h-4 w-4 flex-none text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-xs">
+                    {form.fileName || "Archivo seleccionado"}
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 flex-none"
+                    onClick={removeFile}
+                    title="Quitar archivo"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-sm text-muted-foreground hover:bg-muted/40 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" />
+                  Haz clic para seleccionar un archivo (máx. 5 MB)
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                onChange={handleFileChange}
+              />
+              {fileError ? (
+                <p className="text-xs text-destructive">{fileError}</p>
+              ) : null}
+            </div>
+
+            {/* URL alternativa — solo si no hay archivo */}
+            {!form.fileData && (
+              <div className="space-y-1.5">
+                <Label>O bien, URL externa</Label>
+                <Input
+                  value={form.url}
+                  placeholder="https://drive.google.com/..."
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, url: e.target.value }))
+                  }
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Enlace a Google Drive, Dropbox u otro servicio.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Notas</Label>
+              <Textarea
+                rows={2}
+                value={form.notes ?? ""}
+                placeholder="Observaciones opcionales..."
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, notes: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setDialogOpen(false)}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {editingId ? "Guardar cambios" : "Agregar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
 type ContractTemplate = {
   id: string;
@@ -1569,84 +2008,103 @@ export default function StudentContractsPanel({
   }
 
   return (
-    <div className="space-y-3">
-      {/* Cabecera */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Historial contractual ({docs.length})
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7"
-            title="Recargar"
-            onClick={load}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 text-xs"
-            onClick={() => setSendOpen(true)}
-            title="Enviar nuevo Otrosí a firma"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nuevo Otrosí
-          </Button>
-        </div>
-      </div>
+    <Tabs defaultValue="contratos" className="space-y-3">
+      <TabsList className="h-8">
+        <TabsTrigger value="contratos" className="gap-1.5 text-xs h-7">
+          <FileSignature className="h-3.5 w-3.5" />
+          Contratos
+        </TabsTrigger>
+        <TabsTrigger value="documentos" className="gap-1.5 text-xs h-7">
+          <FileText className="h-3.5 w-3.5" />
+          Documentos
+        </TabsTrigger>
+      </TabsList>
 
-      {/* Listado */}
-      {loading && docs.length === 0 ? (
-        <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Cargando contratos...
-        </div>
-      ) : docs.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">
-          Sin documentos enviados a firma para este alumno.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {docs.map((doc, idx) => (
-            <DocCard
-              key={doc.id}
-              doc={doc}
-              idx={idx}
-              downloading={downloadingId === doc.signature_request_id}
-              onDownload={handleDownload}
-            />
-          ))}
-        </div>
-      )}
+      <TabsContent value="contratos" className="mt-0">
+        <div className="space-y-3">
+          {/* Cabecera */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Historial contractual ({docs.length})
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                title="Recargar"
+                onClick={load}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-xs"
+                onClick={() => setSendOpen(true)}
+                title="Enviar nuevo Otrosí a firma"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nuevo Otrosí
+              </Button>
+            </div>
+          </div>
 
-      {/* Enlace a vista global */}
-      <div className="pt-1">
-        <Link
-          href="/admin/crm/contracts"
-          target="_blank"
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-        >
-          Ver todos los contratos en CRM
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
+          {/* Listado */}
+          {loading && docs.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Cargando contratos...
+            </div>
+          ) : docs.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              Sin documentos enviados a firma para este alumno.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {docs.map((doc, idx) => (
+                <DocCard
+                  key={doc.id}
+                  doc={doc}
+                  idx={idx}
+                  downloading={downloadingId === doc.signature_request_id}
+                  onDownload={handleDownload}
+                />
+              ))}
+            </div>
+          )}
 
-      {/* Modal de envío */}
-      <SendOtrosiModal
-        open={sendOpen}
-        studentCode={studentCode}
-        studentName={studentName}
-        onOpenChange={setSendOpen}
-        onSent={load}
-      />
-    </div>
+          {/* Enlace a vista global */}
+          <div className="pt-1">
+            <Link
+              href="/admin/crm/contracts"
+              target="_blank"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              Ver todos los contratos en CRM
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+
+          {/* Modal de envío */}
+          <SendOtrosiModal
+            open={sendOpen}
+            studentCode={studentCode}
+            studentName={studentName}
+            onOpenChange={setSendOpen}
+            onSent={load}
+          />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="documentos" className="mt-0">
+        <StudentExtraDocsPanel studentCode={studentCode} />
+      </TabsContent>
+    </Tabs>
   );
 }
