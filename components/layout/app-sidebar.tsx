@@ -47,6 +47,7 @@ import { useMemo, useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { useTheme } from "next-themes";
 import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
+import { canAccessBusinessMetrics } from "@/lib/business-metrics";
 
 /* ====================== Tipos ====================== */
 type MenuItem = {
@@ -62,6 +63,12 @@ const agentsMenuItem: MenuItem = {
   title: "Agentes",
   url: "/admin/agentes",
   icon: Sparkles,
+};
+
+const businessMetricsMenuItem: MenuItem = {
+  title: "Inteligencia negocio",
+  url: "/admin/metricas-negocio",
+  icon: BarChart3,
 };
 
 /* ====================== Menús (admin con top-level Coachs/Alumnos/Tickets + grupo “Métricas”) ====================== */
@@ -252,10 +259,14 @@ export function AppSidebar() {
             : item,
         );
 
+        const adminWithConfidentialModule = canAccessBusinessMetrics(user)
+          ? [...baseAdmin, businessMetricsMenuItem]
+          : baseAdmin;
+
         return (
           alumnoCodeInPath
             ? [
-                ...baseAdmin,
+                ...adminWithConfidentialModule,
                 { title: "Vista Alumno", isSeparator: true },
                 {
                   title: "Inicio",
@@ -298,7 +309,7 @@ export function AppSidebar() {
                   icon: CreditCard,
                 },
               ]
-            : baseAdmin
+            : adminWithConfidentialModule
         ) as MenuItem[];
       }
       case "coach":

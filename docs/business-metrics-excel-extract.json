@@ -1,0 +1,756 @@
+{
+  "roic_expenses": [
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Plataforma",
+      "amount": 2833.69
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "N\u00f3mina Enero",
+      "amount": 22878.67
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Freelancers",
+      "amount": 2770.04
+    },
+    {
+      "month": "2026-01",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Closer",
+      "amount": 14953.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Bonificaci\u00f3n",
+      "amount": 4620.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Ventas",
+      "category": "Bonificaci\u00f3n closer",
+      "amount": 900.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Carla",
+      "amount": 2720.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Rutsi",
+      "amount": 796.65
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Otros pagos n\u00f3mina",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Ventas",
+      "category": "Publicidad",
+      "amount": 90644.21
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Reembolso",
+      "amount": 3125.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Servicios varios",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Otros gastos",
+      "amount": 2.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Jur\u00eddico",
+      "amount": 372.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Referidos",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Gastos Bancarios",
+      "amount": 26.4
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Capacitaci\u00f3n",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Servicios Contables",
+      "amount": 980.0
+    },
+    {
+      "month": "2026-01",
+      "scope": "Operativo",
+      "category": "Premio Estudiantes",
+      "amount": 400.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Plataforma",
+      "amount": 2727.98
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "N\u00f3mina Enero",
+      "amount": 25760.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Freelancers",
+      "amount": 2037.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Closer",
+      "amount": 16707.5
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Bonificaci\u00f3n",
+      "amount": 2035.5
+    },
+    {
+      "month": "2026-02",
+      "scope": "Ventas",
+      "category": "Bonificaci\u00f3n closer",
+      "amount": 550.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Carla",
+      "amount": 1685.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Rutsi",
+      "amount": 1389.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Otros pagos n\u00f3mina",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Ventas",
+      "category": "Publicidad",
+      "amount": 63529.07
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Reembolso",
+      "amount": 5090.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Servicios varios",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Otros gastos",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Jur\u00eddico",
+      "amount": 593.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Referidos",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Gastos Bancarios",
+      "amount": 20.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Capacitaci\u00f3n",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Servicios Contables",
+      "amount": 400.0
+    },
+    {
+      "month": "2026-02",
+      "scope": "Operativo",
+      "category": "Premio Estudiantes",
+      "amount": 805.5
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Plataforma",
+      "amount": 4791.38
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "N\u00f3mina Marzo",
+      "amount": 28794.5
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Freelancers",
+      "amount": 3655.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Closer",
+      "amount": 13805.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Bonificaci\u00f3n",
+      "amount": 3913.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Ventas",
+      "category": "Bonificaci\u00f3n closer",
+      "amount": 700.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Carla",
+      "amount": 2763.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Rutsi",
+      "amount": 999.25
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Otros pagos n\u00f3mina",
+      "amount": 34.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Publicidad",
+      "amount": 44632.66
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Reembolso",
+      "amount": 4082.21
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Servicios varios",
+      "amount": 4757.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Otros gastos",
+      "amount": 483.89
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Jur\u00eddico",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Referidos",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Gastos Bancarios",
+      "amount": 108.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Capacitaci\u00f3n",
+      "amount": 0.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Servicios Contables",
+      "amount": 1369.0
+    },
+    {
+      "month": "2026-03",
+      "scope": "Operativo",
+      "category": "Premio Estudiantes",
+      "amount": 202.0
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "Plataforma",
+      "amount": 4258.98
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "N\u00f3mina Septiembre",
+      "amount": 21075.3
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "Freelancers",
+      "amount": 2302.0
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "Bonificaci\u00f3n",
+      "amount": 860.0
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "Publicidad",
+      "amount": 84241.13
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "Reembolso",
+      "amount": 3500.0
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "Otros gastos",
+      "amount": 246.98
+    },
+    {
+      "month": "2025-09",
+      "scope": "Operativo",
+      "category": "Gastos Bancarios",
+      "amount": 5.0
+    },
+    {
+      "month": "2025-10",
+      "scope": "Operativo",
+      "category": "Plataforma",
+      "amount": 3429.18
+    },
+    {
+      "month": "2025-10",
+      "scope": "Operativo",
+      "category": "N\u00f3mina Octubre",
+      "amount": 22133.0
+    },
+    {
+      "month": "2025-10",
+      "scope": "Operativo",
+      "category": "Freelancers",
+      "amount": 530.0
+    },
+    {
+      "month": "2025-10",
+      "scope": "Operativo",
+      "category": "Bonificaci\u00f3n",
+      "amount": 3943.0
+    },
+    {
+      "month": "2025-10",
+      "scope": "Operativo",
+      "category": "Publicidad",
+      "amount": 56536.75
+    },
+    {
+      "month": "2025-10",
+      "scope": "Operativo",
+      "category": "Otros gastos",
+      "amount": 1298.66
+    },
+    {
+      "month": "2025-10",
+      "scope": "Operativo",
+      "category": "Gastos Bancarios",
+      "amount": 11.13
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Plataforma",
+      "amount": 3379.41
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "N\u00f3mina Noviembre",
+      "amount": 19358.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Freelancers",
+      "amount": 895.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Bonificaci\u00f3n",
+      "amount": 3559.3
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Rutsi",
+      "amount": 1000.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Publicidad",
+      "amount": 74348.59
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Jur\u00eddico",
+      "amount": 119.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Referidos",
+      "amount": 870.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Gastos Bancarios",
+      "amount": 6.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Operativo",
+      "category": "Premio Estudiantes",
+      "amount": 200.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Plataforma",
+      "amount": 3184.48
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "N\u00f3mina Diciembre",
+      "amount": 18151.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Freelancers",
+      "amount": 1207.71
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Bonificaci\u00f3n",
+      "amount": 2089.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Comisi\u00f3n Rutsi",
+      "amount": 1000.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Publicidad",
+      "amount": 40292.68
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Otros gastos",
+      "amount": 87.35
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Jur\u00eddico",
+      "amount": 250.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Gastos Bancarios",
+      "amount": 273.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Premio Estudiantes",
+      "amount": 604.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Operativo",
+      "category": "Servicio Contable",
+      "amount": 4650.0
+    },
+    {
+      "month": "2025-09",
+      "scope": "Ventas",
+      "category": "Bonificaci\u00f3n closer",
+      "amount": 202.0
+    },
+    {
+      "month": "2025-09",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Carla",
+      "amount": 2272.0
+    },
+    {
+      "month": "2025-09",
+      "scope": "Ventas",
+      "category": "Publicidad",
+      "amount": 84241.13
+    },
+    {
+      "month": "2025-10",
+      "scope": "Ventas",
+      "category": "Bonificaci\u00f3n closer",
+      "amount": 552.0
+    },
+    {
+      "month": "2025-10",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Carla",
+      "amount": 3701.0
+    },
+    {
+      "month": "2025-10",
+      "scope": "Ventas",
+      "category": "Publicidad",
+      "amount": 56536.75
+    },
+    {
+      "month": "2025-11",
+      "scope": "Ventas",
+      "category": "Bonificaci\u00f3n closer",
+      "amount": 602.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Carla",
+      "amount": 2602.0
+    },
+    {
+      "month": "2025-11",
+      "scope": "Ventas",
+      "category": "Publicidad",
+      "amount": 74348.59
+    },
+    {
+      "month": "2025-12",
+      "scope": "Ventas",
+      "category": "Bonificaci\u00f3n closer",
+      "amount": 750.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Ventas",
+      "category": "Comisi\u00f3n Carla",
+      "amount": 2858.0
+    },
+    {
+      "month": "2025-12",
+      "scope": "Ventas",
+      "category": "Publicidad",
+      "amount": 40292.68
+    }
+  ],
+  "summary_cells": [
+    {
+      "cell": "1:1",
+      "value": "\ud83d\udcca RESUMEN DE M\u00c9TRICAS"
+    },
+    {
+      "cell": "2:1",
+      "value": "Mes Inicio"
+    },
+    {
+      "cell": "2:2",
+      "value": "2025-09-30"
+    },
+    {
+      "cell": "3:1",
+      "value": "Mes Fin"
+    },
+    {
+      "cell": "3:2",
+      "value": "2025-11-30"
+    },
+    {
+      "cell": "5:2",
+      "value": "\ud83d\udcb8 CAC (Costo de adquisici\u00f3n)"
+    },
+    {
+      "cell": "5:6",
+      "value": "\ud83d\udcb0 Ingreso por cliente"
+    },
+    {
+      "cell": "5:10",
+      "value": "\u2696\ufe0f CAC Ratio"
+    },
+    {
+      "cell": "6:2",
+      "value": "183655.95299270074"
+    },
+    {
+      "cell": "6:6",
+      "value": "#REF!"
+    },
+    {
+      "cell": "6:10",
+      "value": "#REF!"
+    },
+    {
+      "cell": "9:15",
+      "value": "#DIV/0!"
+    },
+    {
+      "cell": "12:2",
+      "value": "\ud83d\udcc8 Margen por cliente"
+    },
+    {
+      "cell": "12:6",
+      "value": "\ud83d\udcb5 Beneficio por cliente"
+    },
+    {
+      "cell": "12:10",
+      "value": "\ud83d\udcca ROIC"
+    },
+    {
+      "cell": "13:2",
+      "value": "#REF!"
+    },
+    {
+      "cell": "13:6",
+      "value": "#REF!"
+    },
+    {
+      "cell": "13:10",
+      "value": "#REF!"
+    },
+    {
+      "cell": "20:2",
+      "value": "\u23f1\ufe0fPayback en meses"
+    },
+    {
+      "cell": "20:6",
+      "value": "\u2696\ufe0f Costo operativo por cliente"
+    },
+    {
+      "cell": "20:10",
+      "value": "\u2696\ufe0f Costo operativo por cliente (4 meses)"
+    },
+    {
+      "cell": "21:2",
+      "value": "#REF!"
+    },
+    {
+      "cell": "21:6",
+      "value": "#REF!"
+    },
+    {
+      "cell": "21:10",
+      "value": "#REF!"
+    },
+    {
+      "cell": "27:2",
+      "value": "\ud83d\udd01 Churn estructural"
+    },
+    {
+      "cell": "27:6",
+      "value": "\u2696\ufe0f Relaci\u00f3n entrada/salida"
+    },
+    {
+      "cell": "28:2",
+      "value": "#REF!"
+    },
+    {
+      "cell": "28:6",
+      "value": "#REF!"
+    },
+    {
+      "cell": "34:2",
+      "value": "\ud83d\ude80 Velocidad de ventas"
+    },
+    {
+      "cell": "35:2",
+      "value": "#REF!"
+    }
+  ]
+}
