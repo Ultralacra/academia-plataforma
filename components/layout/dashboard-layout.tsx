@@ -1386,7 +1386,7 @@ export function DashboardLayout({
                 {canSeePaymentsAndAccessNotifications(user) && (
                   <>
                     <PaymentsDueBadge />
-                    {/* <AccessDueBadge /> */}
+                    <AccessDueBadge />
                   </>
                 )}
                 {/* Alumnos: no mostrar notificaciones de tareas */}

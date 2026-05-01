@@ -139,7 +139,7 @@ const adminItems: MenuItem[] = [
   },
   agentsMenuItem,
 
-  /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
+  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare },
 
   {
     title: "Métricas",
