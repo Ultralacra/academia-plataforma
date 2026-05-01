@@ -21,6 +21,7 @@ import {
   CircleHelp,
   FileText,
   FileSignature,
+  KeyRound,
 } from "lucide-react";
 import {
   Sidebar,
@@ -253,6 +254,11 @@ export function AppSidebar() {
                     title: "Vista Mariana",
                     url: "/admin/alumnos/vista-enriquecida",
                     icon: Sparkles,
+                  },
+                  {
+                    title: "Accesos",
+                    url: "/admin/accesos",
+                    icon: KeyRound,
                   },
                 ],
               } as MenuItem)

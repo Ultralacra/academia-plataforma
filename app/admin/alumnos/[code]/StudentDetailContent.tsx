@@ -98,6 +98,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { deleteStudent } from "../api";
 import { useRouter } from "next/navigation";
 import { type MetadataRecord, listMetadata } from "@/lib/metadata";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getAuthToken } from "@/lib/auth";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -451,13 +452,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
     "contractual" | "extraordinaria" | "membresia"
   >("contractual");
   const [tempVenceMotivo, setTempVenceMotivo] = useState<string>("");
-  // Modo rápido: extender N meses contractuales completos a partir del
-  // vencimiento actual (que ya contempla pausas, membresías y extensiones).
-  const [tempVenceMesCompleto, setTempVenceMesCompleto] =
-    useState<boolean>(false);
-  const [tempVenceMesesCompletos, setTempVenceMesesCompletos] = useState<1 | 2>(
-    1,
-  );
+
+  // Duración del programa configurable por alumno (4, 5 o 6 meses).
+  const [tempProgramaMeses, setTempProgramaMeses] = useState<4 | 5 | 6>(4);
+  const [savingProgramaMeses, setSavingProgramaMeses] = useState(false);
 
   // Metadata: vence estimado (persistente)
   const [venceMeta, setVenceMeta] = useState<MetadataRecord<any> | null>(null);
@@ -916,6 +914,16 @@ export default function StudentDetailContent({ code }: { code: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id]);
 
+  // Sincronizar duración del programa cuando llega la metadata
+  useEffect(() => {
+    const v = Number((venceMeta as any)?.payload?.programa_meses);
+    if (Number.isFinite(v) && (v === 4 || v === 5 || v === 6)) {
+      setTempProgramaMeses(v as 4 | 5 | 6);
+    } else {
+      setTempProgramaMeses(4);
+    }
+  }, [venceMeta]);
+
   // Suma N meses calendario a una fecha (ajusta fin de mes corto: ej. 31 ene + 1 = 28/29 feb)
   function addMonthsCalendar(date: Date, months: number): Date {
     const d = new Date(date.getTime());
@@ -1104,28 +1112,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
         return;
       }
 
-      // Modo r\u00e1pido: extender N meses contractuales completos a partir del
-      // vencimiento actual (estimatedEnd ya contempla pausas/membres\u00edas/exts).
-      const useQuickContractual =
-        tempVenceTipo === "contractual" &&
-        tempVenceMesCompleto &&
-        accessStats?.estimatedEnd;
-      const quickFechaDesde = useQuickContractual
-        ? isoDay(accessStats!.estimatedEnd)
-        : null;
-      const quickFechaHasta = useQuickContractual
-        ? isoDay(
-            addMonthsCalendar(
-              accessStats!.estimatedEnd,
-              tempVenceMesesCompletos,
-            ),
-          )
-        : null;
-
-      const fechaDesde = asDateOnly(
-        quickFechaDesde ?? tempVenceFechaDesde ?? todayIso,
-      );
-      const fechaHasta = asDateOnly(quickFechaHasta ?? tempVenceFechaHasta);
+      const fechaDesde = asDateOnly(tempVenceFechaDesde ?? todayIso);
+      const fechaHasta = asDateOnly(tempVenceFechaHasta);
       const parsedHasta = parseMaybe(fechaHasta);
       const parsedDesde = parseMaybe(fechaDesde);
 
@@ -1274,6 +1262,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
           creado_por_id: changedBy.id,
           creado_por_codigo: changedBy.codigo,
           creado_por_nombre: changedBy.nombre,
+          programa_meses: tempProgramaMeses,
           meses_extra: 0,
           vence_tipo: tempVenceTipo,
           vence_motivo: effectiveMotivo || null,
@@ -1447,7 +1436,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
         const txt = await res.text().catch(() => "");
         throw new Error(txt || `HTTP ${res.status}`);
       }
-      await loadVenceMetadata(student.id);
+      // Actualización optimista: no recargar del servidor (puede devolver
+      // datos cacheados que sobreescribirían el cambio recién guardado).
+      setVenceMeta((prev: any) =>
+        prev ? { ...prev, payload: mergedPayload } : prev,
+      );
       toast({ title: "Extensión revertida" });
     } catch (e: any) {
       console.error("Error revirtiendo extensión", e);
@@ -1458,6 +1451,183 @@ export default function StudentDetailContent({ code }: { code: string }) {
       });
     } finally {
       setRevertingExtensionId(null);
+    }
+  }
+
+  async function handleClearLegacyMesesExtra(historyEntry: any) {
+    if (!student?.id || !venceMeta?.id) {
+      toast({
+        title: "No se pudo limpiar",
+        description: "Falta metadata.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setRevertingExtensionId("legacy-meses-extra");
+    try {
+      const now = new Date().toISOString();
+      const changedBy = {
+        id: user?.id ?? null,
+        codigo: (user as any)?.codigo ?? null,
+        nombre: (user as any)?.name ?? null,
+      };
+      const curr = venceMeta as any;
+      const prevPayload = curr?.payload ?? {};
+      const prevHistory: any[] = Array.isArray(prevPayload?.historial)
+        ? prevPayload.historial
+        : [];
+      const { vence_estimado: _legacyVence, ...prevPayloadSansLegacy } =
+        prevPayload;
+      const mergedPayload = {
+        ...prevPayloadSansLegacy,
+        meses_extra: 0,
+        historial: [
+          ...prevHistory,
+          {
+            changed_at: now,
+            from_meses_extra: prevPayload?.meses_extra ?? null,
+            to_meses_extra: 0,
+            motivo: "Meses extra legacy eliminados manualmente",
+            changed_by: changedBy,
+            reason: "revert",
+          },
+        ],
+        ultimo_cambio_at: now,
+        ultimo_cambio_por: changedBy,
+      };
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metadata/${encodeURIComponent(String(curr.id))}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            entity: curr.entity,
+            entity_id: curr.entity_id,
+            payload: mergedPayload,
+          }),
+        },
+      );
+      if (!res.ok)
+        throw new Error(
+          (await res.text().catch(() => "")) || `HTTP ${res.status}`,
+        );
+      // Actualización optimista
+      setVenceMeta((prev: any) =>
+        prev ? { ...prev, payload: mergedPayload } : prev,
+      );
+      toast({ title: "Meses extra legacy eliminados" });
+    } catch (e: any) {
+      toast({
+        title: "Error al limpiar",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+    } finally {
+      setRevertingExtensionId(null);
+    }
+  }
+
+  async function handleSaveProgramaMeses(meses: 4 | 5 | 6) {
+    if (!student?.id) return;
+    setSavingProgramaMeses(true);
+    try {
+      const now = new Date().toISOString();
+      const changedBy = {
+        id: user?.id ?? null,
+        codigo: (user as any)?.codigo ?? null,
+        nombre: (user as any)?.name ?? null,
+      };
+      const token = getAuthToken();
+      if (venceMeta?.id) {
+        const curr = venceMeta as any;
+        const prevPayload = curr?.payload ?? {};
+        const { vence_estimado: _legacy, ...prevSansLegacy } = prevPayload;
+        const mergedPayload = {
+          ...prevSansLegacy,
+          programa_meses: meses,
+          ultimo_cambio_at: now,
+          ultimo_cambio_por: changedBy,
+        };
+        const res = await fetch(
+          `/api/metadata/${encodeURIComponent(String(curr.id))}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              entity: curr.entity,
+              entity_id: curr.entity_id,
+              payload: mergedPayload,
+            }),
+          },
+        );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+      } else {
+        const res = await fetch("/api/metadata", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            entity: "alumno_acceso_vence_estimado",
+            entity_id: String(student.id),
+            payload: {
+              alumno_id: Number(student.id),
+              alumno_codigo: code,
+              alumno_nombre: student?.name ?? null,
+              creado_por_id: changedBy.id,
+              creado_por_codigo: changedBy.codigo,
+              creado_por_nombre: changedBy.nombre,
+              programa_meses: meses,
+              meses_extra: 0,
+              extensiones: [],
+              historial: [],
+              ultimo_cambio_at: now,
+              ultimo_cambio_por: changedBy,
+            },
+          }),
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+      }
+      // Actualización optimista del campo programa_meses
+      setVenceMeta((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              payload: { ...(prev?.payload ?? {}), programa_meses: meses },
+            }
+          : prev,
+      );
+      toast({ title: `Duración del programa: ${meses} meses` });
+    } catch (e: any) {
+      console.error("Error guardando programa_meses", e);
+      toast({
+        title: "Error al guardar duración",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+      // revertir UI
+      const v = Number((venceMeta as any)?.payload?.programa_meses);
+      setTempProgramaMeses(
+        Number.isFinite(v) && (v === 4 || v === 5 || v === 6)
+          ? (v as 4 | 5 | 6)
+          : 4,
+      );
+    } finally {
+      setSavingProgramaMeses(false);
     }
   }
 
@@ -2188,10 +2358,20 @@ export default function StudentDetailContent({ code }: { code: string }) {
       0,
       businessDaysSinceStart - pausedBusinessDaysElapsed,
     );
-    const PROGRAM_DAYS = 120; // 4 meses ~ 120 días (regla operativa)
+    // Duración del programa (en meses calendario): se guarda por alumno en
+    // la metadata `alumno_acceso_vence_estimado`. Default = 4 meses.
+    const programaMesesRaw = (venceMeta as any)?.payload?.programa_meses;
+    const programaMesesParsed = Number(programaMesesRaw);
+    const programaMeses =
+      Number.isFinite(programaMesesParsed) && programaMesesParsed >= 1
+        ? Math.round(programaMesesParsed)
+        : 4;
+    // Fin del programa por meses calendario (ej. 16-oct + 4 = 16-feb).
+    const programEndCalendar = addMonthsCalendar(startDay, programaMeses);
+    const PROGRAM_DAYS = Math.max(0, diffDays(startDay, programEndCalendar));
 
-    // Base (sin metadata): 4 meses + días pausados (TOTAL; incluye pausas futuras planificadas)
-    const baseEnd = addDays(startDay, PROGRAM_DAYS + pausedCalendarDaysTotal);
+    // Base (sin extensiones): N meses calendario + días pausados (TOTAL).
+    const baseEnd = addDays(programEndCalendar, pausedCalendarDaysTotal);
 
     // Vence: se calcula como 4 meses + pausas + meses_extra (si existe en metadata)
     // Retrocompatibilidad: si existe un `vence_estimado` antiguo (fecha),
@@ -2318,7 +2498,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     }>;
 
     const activeRangeExtensions = rangeExtensions.filter(
-      (ext) => ext.end.getTime() >= today.getTime(),
+      (ext) => ext.end.getTime() > today.getTime(),
     );
     const explicitRangeEnd = activeRangeExtensions.reduce<Date | null>(
       (acc, ext) => {
@@ -2448,6 +2628,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
     mergedPauseIntervals,
     (venceMeta as any)?.payload?.meses_extra,
     (venceMeta as any)?.payload?.vence_estimado,
+    (venceMeta as any)?.payload?.programa_meses,
+    venceMeta,
     membresiaExts,
   ]);
 
@@ -3200,6 +3382,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   <p className="mt-2 text-sm text-muted-foreground">
                     No hay fecha de ingreso registrada para calcular el acceso.
                   </p>
+                ) : loadingVenceMeta ? (
+                  <div className="mt-3 space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-4 w-4/6" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                  </div>
                 ) : (
                   <div className="mt-3 space-y-2 text-sm">
                     {(() => {
@@ -4066,6 +4256,48 @@ export default function StudentDetailContent({ code }: { code: string }) {
             <DialogTitle>Extender accesos</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">Duración del programa</Label>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                  Actual: {tempProgramaMeses} meses
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                {([4, 5, 6] as const).map((n) => {
+                  const selected = tempProgramaMeses === n;
+                  return (
+                    <Button
+                      key={`prog-${n}`}
+                      type="button"
+                      size="sm"
+                      variant={selected ? "default" : "outline"}
+                      disabled={savingProgramaMeses}
+                      aria-pressed={selected}
+                      className={
+                        selected
+                          ? "ring-2 ring-primary ring-offset-1 ring-offset-background"
+                          : ""
+                      }
+                      onClick={() => {
+                        setTempProgramaMeses(n);
+                        handleSaveProgramaMeses(n);
+                      }}
+                    >
+                      {selected ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
+                      {n} meses
+                    </Button>
+                  );
+                })}
+                {savingProgramaMeses ? (
+                  <Loader2 className="ml-1 h-4 w-4 animate-spin text-muted-foreground" />
+                ) : null}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Define la duración base del programa para este alumno (se guarda
+                automáticamente al cambiarla).
+              </p>
+            </div>
             <div className="flex justify-end">
               <Button
                 type="button"
@@ -4096,9 +4328,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           ? "membresia"
                           : "contractual";
                     setTempVenceTipo(next);
-                    if (next !== "contractual") {
-                      setTempVenceMesCompleto(false);
-                    }
                     if (next === "membresia") {
                       setTempMesesExtra("1");
                       setTempVenceFechaDesde(isoDay(new Date()));
@@ -4134,72 +4363,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   : "Rango de extensión"}
               </Label>
               <div className="mt-1 space-y-2">
-                {tempVenceTipo === "contractual" ? (
-                  <div className="rounded-md border border-border bg-muted/30 p-3">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <Checkbox
-                        checked={tempVenceMesCompleto}
-                        onCheckedChange={(v) =>
-                          setTempVenceMesCompleto(Boolean(v))
-                        }
-                        className="mt-0.5"
-                      />
-                      <div className="text-sm">
-                        <div className="font-medium">
-                          Extender mes(es) contractual(es) completo(s)
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Suma 1 o 2 meses calendario al vencimiento actual
-                          (incluye pausas, membresías y extensiones previas).
-                        </div>
-                      </div>
-                    </label>
-                    {tempVenceMesCompleto ? (
-                      <div className="mt-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={
-                              tempVenceMesesCompletos === 1
-                                ? "default"
-                                : "outline"
-                            }
-                            onClick={() => setTempVenceMesesCompletos(1)}
-                          >
-                            1 mes
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={
-                              tempVenceMesesCompletos === 2
-                                ? "default"
-                                : "outline"
-                            }
-                            onClick={() => setTempVenceMesesCompletos(2)}
-                          >
-                            2 meses
-                          </Button>
-                        </div>
-                        {accessStats?.estimatedEnd ? (
-                          <div className="text-xs text-muted-foreground">
-                            {`Desde ${fmtES(accessStats.estimatedEnd.toISOString())} → hasta ${fmtES(
-                              addMonthsCalendar(
-                                accessStats.estimatedEnd,
-                                tempVenceMesesCompletos,
-                              ).toISOString(),
-                            )}`}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-rose-600">
-                            No se puede calcular: falta vencimiento actual.
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
                 {tempVenceTipo === "membresia" ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div>
@@ -4258,10 +4421,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         value={tempVenceFechaDesde}
                         onChange={(e) => setTempVenceFechaDesde(e.target.value)}
                         className="mt-1"
-                        disabled={
-                          tempVenceTipo === "contractual" &&
-                          tempVenceMesCompleto
-                        }
                       />
                     </div>
                     <div>
@@ -4277,10 +4436,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         value={tempVenceFechaHasta}
                         onChange={(e) => setTempVenceFechaHasta(e.target.value)}
                         className="mt-1"
-                        disabled={
-                          tempVenceTipo === "contractual" &&
-                          tempVenceMesCompleto
-                        }
                       />
                     </div>
                   </div>
@@ -4336,10 +4491,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   savingVence ||
                   (tempVenceTipo === "extraordinaria" &&
                     !tempVenceMotivo.trim()) ||
-                  (tempVenceTipo === "contractual" && tempVenceMesCompleto
-                    ? !accessStats?.estimatedEnd
-                    : !tempVenceFechaDesde ||
-                      (tempVenceTipo !== "membresia" && !tempVenceFechaHasta))
+                  !tempVenceFechaDesde ||
+                  (tempVenceTipo !== "membresia" && !tempVenceFechaHasta)
                 }
               >
                 {savingVence ? (
@@ -4428,6 +4581,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
                     const isReverting =
                       associatedExt &&
                       revertingExtensionId === String(associatedExt.id);
+                    // Entrada legacy: solo tiene meses_extra, sin rango de fechas
+                    const isLegacyMesesExtra =
+                      h?.reason !== "revert" &&
+                      !associatedExt &&
+                      !h?.to_fecha_desde &&
+                      !h?.to_fecha_hasta &&
+                      !h?.fecha_desde &&
+                      !h?.fecha_hasta &&
+                      (Number(h?.to_meses_extra) > 0 ||
+                        (h?.to_meses_extra === undefined &&
+                          Number(h?.from_meses_extra) === 0 &&
+                          Number((venceMeta as any)?.payload?.meses_extra) >
+                            0));
+                    const isRevertingLegacy =
+                      revertingExtensionId === "legacy-meses-extra";
                     return (
                       <div
                         key={`vence-h-${idx}-${String(h?.changed_at || "")}`}
@@ -4454,6 +4622,22 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                   <Undo2 className="h-3.5 w-3.5" />
                                 )}
                                 <span className="ml-1 text-xs">Revertir</span>
+                              </Button>
+                            ) : isLegacyMesesExtra ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-destructive border-destructive/40 hover:bg-destructive/10"
+                                disabled={Boolean(revertingExtensionId)}
+                                onClick={() => handleClearLegacyMesesExtra(h)}
+                                title="Eliminar meses extra legacy"
+                              >
+                                {isRevertingLegacy ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Undo2 className="h-3.5 w-3.5" />
+                                )}
+                                <span className="ml-1 text-xs">Limpiar</span>
                               </Button>
                             ) : h?.reason === "revert" ? (
                               <span className="text-xs italic text-muted-foreground">

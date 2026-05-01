@@ -109,6 +109,7 @@ function safePayloadForVence(p: any) {
     creado_por_id: payload.creado_por_id ?? null,
     creado_por_codigo: payload.creado_por_codigo ?? null,
     creado_por_nombre: payload.creado_por_nombre ?? null,
+    programa_meses: payload.programa_meses ?? null,
     meses_extra: payload.meses_extra ?? null,
     vence_estimado: payload.vence_estimado ?? null,
     vence_tipo: payload.vence_tipo ?? null,
