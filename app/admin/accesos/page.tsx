@@ -60,7 +60,7 @@ const MONTH_NAMES = [
 ];
 
 type TipoFilter = "todos" | "membresia" | "contractual";
-type QuickFilter = null | "urgentes" | "membresia";
+type QuickFilter = null | "urgentes" | "membresia" | "contractual";
 
 function urgencyColor(daysLeft: number) {
   if (daysLeft < 0) return "text-destructive";
@@ -155,16 +155,14 @@ export default function AccesosPage() {
     loading,
     error,
     refresh,
-  } = useAccessDueNotifications({ enabled, daysWindow: 30 });
+  } = useAccessDueNotifications({ enabled, daysWindow: 90 });
 
   const [tab, setTab] = useState<"due" | "overdue">("due");
   const [search, setSearch] = useState("");
   const [tipoFilter, setTipoFilter] = useState<TipoFilter>("todos");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
 
-  const now = new Date();
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [monthFilter, setMonthFilter] = useState<string>(currentMonthKey);
+  const [monthFilter, setMonthFilter] = useState<string>("todos");
   const [dueMes, setDueMes] = useState<string>("todos");
 
   const dueMesOptions = useMemo(() => {
@@ -198,15 +196,8 @@ export default function AccesosPage() {
       if (prev) prev.count += 1;
       else map.set(key, { key, label, count: 1 });
     }
-    if (!map.has(currentMonthKey)) {
-      map.set(currentMonthKey, {
-        key: currentMonthKey,
-        label: `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`,
-        count: 0,
-      });
-    }
     return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
-  }, [overdueItems, currentMonthKey]);
+  }, [overdueItems]);
 
   const normalize = (s: string) =>
     s
@@ -239,6 +230,7 @@ export default function AccesosPage() {
     if (!quickFilter) return true;
     if (quickFilter === "urgentes") return it.daysLeft <= 7;
     if (quickFilter === "membresia") return esMembresia(it);
+    if (quickFilter === "contractual") return !esMembresia(it);
     return true;
   };
 
@@ -264,6 +256,7 @@ export default function AccesosPage() {
       overdueItems.filter((it) => {
         if (!matchesSearch(it) || !matchesTipo(it) || !matchesQuick(it))
           return false;
+        if (monthFilter === "todos") return true;
         const m = /^(\d{4})-(\d{2})/.exec(it.fechaVence || "");
         if (!m) return false;
         return `${m[1]}-${m[2]}` === monthFilter;
@@ -282,6 +275,7 @@ export default function AccesosPage() {
     (it) => (it.membresiaCount ?? 0) > 0,
   ).length;
   const urgentCount = items.filter((it) => it.daysLeft <= 7).length;
+  const contractualDueCount = items.filter((it) => !esMembresia(it)).length;
 
   if (!enabled) {
     return (
@@ -441,14 +435,10 @@ export default function AccesosPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() =>
-                void exportToExcel(
-                  filteredDue.length > 0 ? filteredDue : items,
-                  filteredOverdue.length > 0 ? filteredOverdue : overdueItems,
-                )
-              }
+              onClick={() => void exportToExcel(filteredDue, filteredOverdue)}
               disabled={
-                loading || (items.length === 0 && overdueItems.length === 0)
+                loading ||
+                (filteredDue.length === 0 && filteredOverdue.length === 0)
               }
               className="gap-2"
             >
@@ -474,7 +464,7 @@ export default function AccesosPage() {
 
         {/* Tarjetas de resumen */}
         {!loading && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
             <div className="rounded-xl border bg-card p-4">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">
                 <Clock className="h-3.5 w-3.5" />
@@ -482,7 +472,7 @@ export default function AccesosPage() {
               </div>
               <div className="text-3xl font-bold">{dueCount}</div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                proximos 30 dias
+                proximos 90 dias
               </div>
             </div>
             <div className="rounded-xl border bg-card p-4">
@@ -555,6 +545,36 @@ export default function AccesosPage() {
                 {alumnosConMembresia} alumnos con membresia
               </div>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("due");
+                setQuickFilter(
+                  quickFilter === "contractual" ? null : "contractual",
+                );
+              }}
+              className={`rounded-xl border p-4 text-left transition-all hover:shadow-sm ${
+                quickFilter === "contractual"
+                  ? "border-blue-400 bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-400"
+                  : "bg-card hover:border-blue-300"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 text-xs text-blue-600 font-medium uppercase tracking-wide mb-2">
+                <KeyRound className="h-3.5 w-3.5" />
+                Contratos
+                {quickFilter === "contractual" && (
+                  <span className="ml-auto text-[10px] text-blue-400 normal-case">
+                    activo
+                  </span>
+                )}
+              </div>
+              <div className="text-3xl font-bold text-blue-600">
+                {contractualDueCount}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                vencen en 90 dias
+              </div>
+            </button>
           </div>
         )}
 
@@ -616,9 +636,10 @@ export default function AccesosPage() {
             <Select value={monthFilter} onValueChange={setMonthFilter}>
               <SelectTrigger className="w-full sm:w-52 gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="Selecciona mes" />
+                <SelectValue placeholder="Todos los meses" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="todos">Todos los meses</SelectItem>
                 {monthOptions.map((m) => (
                   <SelectItem key={m.key} value={m.key}>
                     <span className="flex items-center justify-between gap-4 w-full">
