@@ -337,10 +337,10 @@ function CopyAgentWorkspace() {
       }
 
       if (PARSEABLE_EXTS.test(file.name)) {
-        if (file.size > 8 * 1024 * 1024) {
+        if (file.size > 50 * 1024 * 1024) {
           results.push({
             name: file.name,
-            content: `[⚠️ El archivo "${file.name}" es demasiado grande (${(file.size / 1024 / 1024).toFixed(1)} MB). El límite es 8 MB. Intenta comprimir el PDF o copia el texto directamente.]`,
+            content: `[⚠️ El archivo "${file.name}" es demasiado grande (${(file.size / 1024 / 1024).toFixed(1)} MB). El límite es 50 MB. Intenta comprimir el PDF o copia el texto directamente.]`,
           });
           continue;
         }

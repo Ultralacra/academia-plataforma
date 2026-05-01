@@ -9,10 +9,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["mammoth", "pdf-parse"],
   experimental: {
+    serverComponentsExternalPackages: ["mammoth", "pdf-parse"],
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "50mb",
     },
   },
 }

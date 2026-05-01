@@ -1,6 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
-import pdfParse from "pdf-parse";
+// pdf-parse v1: import dinámico para evitar el bug del bundler que ejecuta su debug script
+// Nota: pdf-parse@1 expone una función callable por default
+async function parsePdf(buffer: Buffer): Promise<string> {
+  const mod = await import("pdf-parse/lib/pdf-parse.js");
+  const fn = (mod as any).default ?? (mod as any);
+  const result = await fn(buffer);
+  return result.text as string;
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,8 +30,7 @@ export async function POST(req: NextRequest) {
       const result = await mammoth.extractRawText({ buffer });
       text = result.value;
     } else if (name.endsWith(".pdf")) {
-      const result = await pdfParse(buffer);
-      text = result.text;
+      text = await parsePdf(buffer);
     } else {
       return NextResponse.json({ error: "Formato no soportado. Solo .docx y .pdf." }, { status: 400 });
     }
@@ -38,7 +44,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ text: text.trim() });
   } catch (err) {
-    console.error("[parse-file] Error:", err);
-    return NextResponse.json({ error: "Error al procesar el archivo." }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[parse-file] Error:", msg);
+    return NextResponse.json({ error: `Error al procesar el archivo: ${msg}` }, { status: 500 });
   }
 }
