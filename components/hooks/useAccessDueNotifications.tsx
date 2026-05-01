@@ -14,10 +14,12 @@ export type AccessDueItem = {
   alumnoCodigo: string | null;
   alumnoNombre: string;
   alumnoEstado: string | null;
+  stage: string | null;
   fechaVence: string;
   daysLeft: number;
   venceTipo: string | null;
   hasMembresia: boolean;
+  membresiaCount: number;
 };
 
 function toDayDate(d: Date) {
@@ -90,6 +92,15 @@ function sumMembresiaMonths(records: MetadataRecord<any>[]) {
     const isAnulado = Boolean(payload?.anulado);
     if (!Number.isFinite(n) || n <= 0 || isAnulado) return acc;
     return acc + Math.max(0, Math.round(n));
+  }, 0);
+}
+
+function countActiveMembresias(records: MetadataRecord<any>[]) {
+  return records.reduce((acc, rec: any) => {
+    const payload = rec?.payload ?? {};
+    const isAnulado = Boolean(payload?.anulado);
+    if (isAnulado) return acc;
+    return acc + 1;
   }, 0);
 }
 
@@ -331,9 +342,11 @@ export function useAccessDueNotifications(opts: {
         alumnoCodigo: string | null;
         alumnoNombre: string;
         alumnoEstado: string | null;
+        stage: string | null;
         baseEstimatedEnd: Date;
         venceTipo: string | null;
         hasMembresia: boolean;
+        membresiaCount: number;
       };
       const candidates: Candidate[] = [];
 
@@ -367,14 +380,21 @@ export function useAccessDueNotifications(opts: {
           (student as any)?.state != null
             ? String((student as any).state).trim() || null
             : null;
+        const stage =
+          (student as any)?.stage != null
+            ? String((student as any).stage).trim() || null
+            : null;
+        const membresiaCount = countActiveMembresias(membresia);
         candidates.push({
           alumnoId,
           alumnoCodigo,
           alumnoNombre,
           alumnoEstado,
+          stage,
           baseEstimatedEnd: estimatedEnd,
           venceTipo: (venceMeta as any)?.payload?.vence_tipo ?? null,
-          hasMembresia: membresia.length > 0,
+          hasMembresia: membresiaCount > 0,
+          membresiaCount,
         });
       }
 
@@ -401,10 +421,12 @@ export function useAccessDueNotifications(opts: {
           alumnoCodigo: c.alumnoCodigo,
           alumnoNombre: c.alumnoNombre,
           alumnoEstado: c.alumnoEstado,
+          stage: c.stage,
           fechaVence: toIsoDay(adjustedEnd),
           daysLeft,
           venceTipo: c.venceTipo,
           hasMembresia: c.hasMembresia,
+          membresiaCount: c.membresiaCount,
         };
         if (isOverdue) overdue.push(item);
         else dueItems.push(item);

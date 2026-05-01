@@ -88,10 +88,12 @@ async function exportToExcel(
       Nombre: it.alumnoNombre ?? "",
       Codigo: it.alumnoCodigo ?? "",
       "Estado alumno": it.alumnoEstado ?? "",
+      Fase: it.stage ?? "",
       "Fecha vence": it.fechaVence,
       "Dias restantes": it.daysLeft,
       "Tipo vence": it.venceTipo ?? "",
       "Tiene membresia": it.hasMembresia ? "Si" : "No",
+      "Cantidad membresias": it.membresiaCount ?? 0,
     }));
 
   const rows = [
@@ -110,10 +112,12 @@ async function exportToExcel(
     { wch: 30 }, // Nombre
     { wch: 12 }, // Codigo
     { wch: 18 }, // Estado alumno
+    { wch: 12 }, // Fase
     { wch: 14 }, // Fecha vence
     { wch: 14 }, // Dias restantes
     { wch: 14 }, // Tipo vence
     { wch: 16 }, // Tiene membresia
+    { wch: 20 }, // Cantidad membresias
   ];
 
   const wb = XLSX.utils.book_new();
@@ -270,6 +274,13 @@ export default function AccesosPage() {
   const membresiaCount = items.filter(
     (it) => it.alumnoEstado?.toLowerCase().includes("membres") ?? false,
   ).length;
+  const membresiasTotal = [...items, ...overdueItems].reduce(
+    (acc, it) => acc + (it.membresiaCount ?? 0),
+    0,
+  );
+  const alumnosConMembresia = [...items, ...overdueItems].filter(
+    (it) => (it.membresiaCount ?? 0) > 0,
+  ).length;
   const urgentCount = items.filter((it) => it.daysLeft <= 7).length;
 
   if (!enabled) {
@@ -291,6 +302,7 @@ export default function AccesosPage() {
       String(it.alumnoCodigo ?? "").trim() ||
       "Alumno";
     const estado = it.alumnoEstado ? String(it.alumnoEstado).trim() : "";
+    const fase = String(it.stage ?? "").trim() || "Sin fase";
     // Membresia solo si el tipo de vence ES membresia (no por tener records de extension)
     const isMembresia = it.venceTipo === "membresia";
     // Requiere membresia: contrato vencido por mas de 1 dia sin membresia
@@ -341,6 +353,12 @@ export default function AccesosPage() {
                 {estado}
               </Badge>
             )}
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 h-4 shrink-0"
+            >
+              Fase: {fase}
+            </Badge>
             {/* Chip de membresia solo si el tipo ES membresia */}
             {isMembresia && (
               <Badge
@@ -348,6 +366,14 @@ export default function AccesosPage() {
                 className="text-[10px] px-1.5 h-4 shrink-0 border-purple-300 text-purple-600 dark:text-purple-400"
               >
                 Membresia
+              </Badge>
+            )}
+            {(it.membresiaCount ?? 0) > 0 && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 h-4 shrink-0 border-purple-300 text-purple-600 dark:text-purple-400"
+              >
+                Membresias: {it.membresiaCount}
               </Badge>
             )}
             {/* Alerta de accion requerida solo para contratos */}
@@ -523,10 +549,10 @@ export default function AccesosPage() {
                 )}
               </div>
               <div className="text-3xl font-bold text-purple-600">
-                {membresiaCount}
+                {membresiasTotal}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                con membresia activa
+                {alumnosConMembresia} alumnos con membresia
               </div>
             </button>
           </div>
