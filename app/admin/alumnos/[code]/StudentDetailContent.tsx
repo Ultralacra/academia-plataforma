@@ -32,6 +32,7 @@ import TareasCard from "./_parts/TareasCard";
 import EditPauseRangeModal from "./_parts/EditPauseRangeModal";
 import StudentContractsPanel from "./_parts/StudentContractsPanel";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
@@ -449,6 +451,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
     "contractual" | "extraordinaria" | "membresia"
   >("contractual");
   const [tempVenceMotivo, setTempVenceMotivo] = useState<string>("");
+  // Modo rápido: extender N meses contractuales completos a partir del
+  // vencimiento actual (que ya contempla pausas, membresías y extensiones).
+  const [tempVenceMesCompleto, setTempVenceMesCompleto] =
+    useState<boolean>(false);
+  const [tempVenceMesesCompletos, setTempVenceMesesCompletos] = useState<1 | 2>(
+    1,
+  );
 
   // Metadata: vence estimado (persistente)
   const [venceMeta, setVenceMeta] = useState<MetadataRecord<any> | null>(null);
@@ -457,6 +466,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
   >([]);
   const [loadingVenceMeta, setLoadingVenceMeta] = useState(false);
   const [openVenceHistory, setOpenVenceHistory] = useState(false);
+  const [revertingExtensionId, setRevertingExtensionId] = useState<
+    string | null
+  >(null);
   const [showAllPauses, setShowAllPauses] = useState(false);
   const [showAllMembresias, setShowAllMembresias] = useState(false);
 
@@ -904,6 +916,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id]);
 
+  // Suma N meses calendario a una fecha (ajusta fin de mes corto: ej. 31 ene + 1 = 28/29 feb)
+  function addMonthsCalendar(date: Date, months: number): Date {
+    const d = new Date(date.getTime());
+    const targetDay = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + months);
+    const lastDayOfTarget = new Date(
+      d.getFullYear(),
+      d.getMonth() + 1,
+      0,
+    ).getDate();
+    d.setDate(Math.min(targetDay, lastDayOfTarget));
+    return d;
+  }
+
   async function handleSaveVence() {
     if (!student?.id) {
       toast({
@@ -991,6 +1018,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
               fecha_desde: fechaDesde,
               fecha_hasta: fechaHasta,
               motivo: effectiveMotivo || null,
+              // Snapshot de pausas al momento de crear: para no doblar conteo
+              paused_calendar_days_at_creation:
+                accessStats?.pausedCalendarDaysTotal ?? 0,
               created_at: now,
               changed_by: changedBy,
             },
@@ -1074,8 +1104,28 @@ export default function StudentDetailContent({ code }: { code: string }) {
         return;
       }
 
-      const fechaDesde = asDateOnly(tempVenceFechaDesde || todayIso);
-      const fechaHasta = asDateOnly(tempVenceFechaHasta);
+      // Modo r\u00e1pido: extender N meses contractuales completos a partir del
+      // vencimiento actual (estimatedEnd ya contempla pausas/membres\u00edas/exts).
+      const useQuickContractual =
+        tempVenceTipo === "contractual" &&
+        tempVenceMesCompleto &&
+        accessStats?.estimatedEnd;
+      const quickFechaDesde = useQuickContractual
+        ? isoDay(accessStats!.estimatedEnd)
+        : null;
+      const quickFechaHasta = useQuickContractual
+        ? isoDay(
+            addMonthsCalendar(
+              accessStats!.estimatedEnd,
+              tempVenceMesesCompletos,
+            ),
+          )
+        : null;
+
+      const fechaDesde = asDateOnly(
+        quickFechaDesde ?? tempVenceFechaDesde ?? todayIso,
+      );
+      const fechaHasta = asDateOnly(quickFechaHasta ?? tempVenceFechaHasta);
       const parsedHasta = parseMaybe(fechaHasta);
       const parsedDesde = parseMaybe(fechaDesde);
 
@@ -1103,6 +1153,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
         fecha_desde: fechaDesde,
         fecha_hasta: fechaHasta,
         motivo: effectiveMotivo || null,
+        // Snapshot de pausas al momento de crear: para no doblar conteo
+        paused_calendar_days_at_creation:
+          accessStats?.pausedCalendarDaysTotal ?? 0,
         created_at: now,
         changed_by: changedBy,
       };
@@ -1150,12 +1203,25 @@ export default function StudentDetailContent({ code }: { code: string }) {
           ...prevHistory,
           {
             changed_at: now,
+            extension_id: extensionEntry.id,
             from_meses_extra: prevExtra,
             to_meses_extra: prevExtra,
             from_total_meses: prevExtra === null ? null : 4 + prevExtra,
             to_total_meses: prevExtra === null ? null : 4 + prevExtra,
             tipo: tempVenceTipo,
             motivo: effectiveMotivo || null,
+            // Rango previo (última extensión del mismo tipo) y nuevo rango
+            from_fecha_desde:
+              (prevExtensiones as any[])
+                .filter((e: any) => e?.tipo === tempVenceTipo)
+                .slice(-1)[0]?.fecha_desde ?? null,
+            from_fecha_hasta:
+              (prevExtensiones as any[])
+                .filter((e: any) => e?.tipo === tempVenceTipo)
+                .slice(-1)[0]?.fecha_hasta ?? null,
+            to_fecha_desde: fechaDesde,
+            to_fecha_hasta: fechaHasta,
+            // Compatibilidad legacy: campos que ya leen vistas antiguas
             fecha_desde: fechaDesde,
             fecha_hasta: fechaHasta,
             changed_by: changedBy,
@@ -1215,12 +1281,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
           historial: [
             {
               changed_at: now,
+              extension_id: extensionEntry.id,
               from_meses_extra: null,
               to_meses_extra: null,
               from_total_meses: null,
               to_total_meses: null,
               tipo: tempVenceTipo,
               motivo: effectiveMotivo || null,
+              from_fecha_desde: null,
+              from_fecha_hasta: null,
+              to_fecha_desde: fechaDesde,
+              to_fecha_hasta: fechaHasta,
               fecha_desde: fechaDesde,
               fecha_hasta: fechaHasta,
               changed_by: changedBy,
@@ -1260,6 +1331,133 @@ export default function StudentDetailContent({ code }: { code: string }) {
       });
     } finally {
       setSavingVence(false);
+    }
+  }
+
+  async function handleRevertExtension(historyEntry: any) {
+    if (!student?.id || !venceMeta?.id) {
+      toast({
+        title: "No se pudo revertir",
+        description: "Falta metadata del alumno.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const curr = venceMeta as any;
+    const prevPayload = curr?.payload ?? {};
+    const prevExtensiones: any[] = Array.isArray(prevPayload?.extensiones)
+      ? prevPayload.extensiones
+      : [];
+    const prevHistory: any[] = Array.isArray(prevPayload?.historial)
+      ? prevPayload.historial
+      : [];
+
+    // Identificar la extensión a remover.
+    // 1) Por extension_id si está en la entrada.
+    // 2) Por created_at == changed_at.
+    // 3) Por (fecha_desde, fecha_hasta, tipo) coincidente.
+    const targetId =
+      historyEntry?.extension_id ??
+      (() => {
+        const byCreated = prevExtensiones.find(
+          (e) => e?.created_at && e.created_at === historyEntry?.changed_at,
+        );
+        if (byCreated) return byCreated.id;
+        const fd =
+          historyEntry?.to_fecha_desde ?? historyEntry?.fecha_desde ?? null;
+        const fh =
+          historyEntry?.to_fecha_hasta ?? historyEntry?.fecha_hasta ?? null;
+        if (!fd || !fh) return null;
+        const byRange = prevExtensiones.find(
+          (e) =>
+            e?.fecha_desde === fd &&
+            e?.fecha_hasta === fh &&
+            (!historyEntry?.tipo || e?.tipo === historyEntry.tipo),
+        );
+        return byRange?.id ?? null;
+      })();
+
+    const targetExt = targetId
+      ? prevExtensiones.find((e) => e?.id === targetId)
+      : null;
+
+    if (!targetExt) {
+      toast({
+        title: "Nada que revertir",
+        description:
+          "Esta extensión ya no existe en el registro o fue revertida antes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setRevertingExtensionId(String(targetExt.id));
+    try {
+      const now = new Date().toISOString();
+      const changedBy = {
+        id: user?.id ?? null,
+        codigo: (user as any)?.codigo ?? null,
+        nombre: (user as any)?.name ?? null,
+      };
+      const nextExtensiones = prevExtensiones.filter(
+        (e) => e?.id !== targetExt.id,
+      );
+      const nextHistory = [
+        ...prevHistory,
+        {
+          changed_at: now,
+          extension_id: targetExt.id,
+          tipo: targetExt?.tipo ?? historyEntry?.tipo ?? null,
+          motivo: `Revertida: ${historyEntry?.motivo ?? ""}`.trim(),
+          from_fecha_desde: targetExt?.fecha_desde ?? null,
+          from_fecha_hasta: targetExt?.fecha_hasta ?? null,
+          to_fecha_desde: null,
+          to_fecha_hasta: null,
+          changed_by: changedBy,
+          reason: "revert",
+        },
+      ];
+      const { vence_estimado: _legacyVence, ...prevPayloadSansLegacy } =
+        prevPayload;
+      const mergedPayload = {
+        ...prevPayloadSansLegacy,
+        extensiones: nextExtensiones,
+        historial: nextHistory,
+        ultimo_cambio_at: now,
+        ultimo_cambio_por: changedBy,
+      };
+
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metadata/${encodeURIComponent(String(curr.id))}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            entity: curr.entity,
+            entity_id: curr.entity_id,
+            payload: mergedPayload,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      await loadVenceMetadata(student.id);
+      toast({ title: "Extensión revertida" });
+    } catch (e: any) {
+      console.error("Error revirtiendo extensión", e);
+      toast({
+        title: "Error al revertir",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+    } finally {
+      setRevertingExtensionId(null);
     }
   }
 
@@ -1892,7 +2090,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
         if (s && e) {
           const startD = toDayDate(s);
           const endD = toDayDate(e);
-          diasUsados += daysBetweenInclusive(startD, endD);
+          // Hasta = día de regreso (no se cuenta) → exclusive end
+          diasUsados += Math.max(0, daysBetweenInclusive(startD, endD) - 1);
         }
       }
 
@@ -1951,23 +2150,37 @@ export default function StudentDetailContent({ code }: { code: string }) {
     let pausedCalendarDaysElapsed = 0;
     let pausedBusinessDaysTotal = 0;
     let pausedCalendarDaysTotal = 0;
+    // Convención: la fecha "Hasta" de la pausa es el día en que el alumno
+    // VOLVIÓ; ese día NO cuenta como pausado. Por eso usamos exclusive end:
+    // (Hasta - Desde) días calendario / días hábiles entre [Desde, Hasta).
     for (const r of mergedPauseIntervals) {
-      // TOTAL (para extender el vencimiento): usar el rango completo de la pausa.
-      if (r.end.getTime() >= r.start.getTime()) {
-        pausedBusinessDaysTotal += businessDaysBetweenInclusive(r.start, r.end);
-        pausedCalendarDaysTotal += daysBetweenInclusive(r.start, r.end);
+      // TOTAL (para extender el vencimiento): rango completo de la pausa.
+      if (r.end.getTime() > r.start.getTime()) {
+        pausedBusinessDaysTotal += Math.max(
+          0,
+          businessDaysBetweenInclusive(r.start, r.end) -
+            (isWeekday(r.end) ? 1 : 0),
+        );
+        pausedCalendarDaysTotal += Math.max(
+          0,
+          daysBetweenInclusive(r.start, r.end) - 1,
+        );
       }
 
       // ELAPSED (para descontar del consumo real): recortar al período
       // [ingreso, hoy] porque solo cuentan los días ya transcurridos tras el ingreso.
       const aElapsed = r.start < startDay ? startDay : r.start;
       const bElapsed = r.end > today ? today : r.end;
-      if (bElapsed.getTime() >= aElapsed.getTime()) {
-        pausedBusinessDaysElapsed += businessDaysBetweenInclusive(
-          aElapsed,
-          bElapsed,
+      if (bElapsed.getTime() > aElapsed.getTime()) {
+        pausedBusinessDaysElapsed += Math.max(
+          0,
+          businessDaysBetweenInclusive(aElapsed, bElapsed) -
+            (isWeekday(bElapsed) ? 1 : 0),
         );
-        pausedCalendarDaysElapsed += daysBetweenInclusive(aElapsed, bElapsed);
+        pausedCalendarDaysElapsed += Math.max(
+          0,
+          daysBetweenInclusive(aElapsed, bElapsed) - 1,
+        );
       }
     }
 
@@ -2077,6 +2290,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
         const from = parseMaybe(ext?.fecha_desde ?? null);
         const to = parseMaybe(ext?.fecha_hasta ?? null);
         if (!from || !to) return null;
+        const pausedAtCreation = Number(ext?.paused_calendar_days_at_creation);
         return {
           id: ext?.id ?? `range-${index}`,
           tipo:
@@ -2086,6 +2300,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
           createdAt: ext?.created_at ?? null,
           start: toDayDate(from),
           end: toDayDate(to),
+          // null = legacy (sin snapshot): se sigue sumando todo el total de pausas
+          pausedAtCreation: Number.isFinite(pausedAtCreation)
+            ? pausedAtCreation
+            : null,
         };
       })
       .filter(Boolean) as Array<{
@@ -2096,6 +2314,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       createdAt: string | null;
       start: Date;
       end: Date;
+      pausedAtCreation: number | null;
     }>;
 
     const activeRangeExtensions = rangeExtensions.filter(
@@ -2120,6 +2339,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
         );
         const to = parseMaybe(m?.payload?.fecha_hasta ?? null);
         if (!from || !to) return null;
+        const pausedAtCreation = Number(
+          m?.payload?.paused_calendar_days_at_creation,
+        );
         return {
           id: String(m?.id ?? ""),
           number:
@@ -2128,6 +2350,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
               : null,
           start: toDayDate(from),
           end: toDayDate(to),
+          pausedAtCreation: Number.isFinite(pausedAtCreation)
+            ? pausedAtCreation
+            : null,
         };
       })
       .filter(Boolean) as Array<{
@@ -2135,6 +2360,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       number: number | null;
       start: Date;
       end: Date;
+      pausedAtCreation: number | null;
     }>;
     const activeMembershipEnd = activeMembershipPeriods.reduce<Date | null>(
       (acc, ext) => {
@@ -2158,16 +2384,23 @@ export default function StudentDetailContent({ code }: { code: string }) {
         ? baseForEnd
         : addDays(baseForEnd, extraDaysFromMonths);
 
-    // Las extensiones por rango y los períodos de membresía vienen con fechas
-    // FIJAS desde metadata: no traen incorporada la extensión por pausas.
-    // Debemos sumarles los días de pausa para que una pausa posterior a la
-    // creación de la extensión también corra la fecha final.
-    const explicitRangeEndAdjusted = explicitRangeEnd
-      ? addDays(explicitRangeEnd, pausedCalendarDaysTotal)
-      : null;
-    const activeMembershipEndAdjusted = activeMembershipEnd
-      ? addDays(activeMembershipEnd, pausedCalendarDaysTotal)
-      : null;
+    // Las extensiones por rango y los períodos de membresía son fechas
+    // ABSOLUTAS guardadas en metadata. NO se les suman pausas: las pausas ya
+    // están consideradas en `baseEnd`, y al crear una extensión su fecha se
+    // calcula a partir de `estimatedEnd` (que ya incluye pausas) o se elige
+    // explícitamente. Sumarlas aquí causaba doble conteo.
+    const explicitRangeEndAdjusted = activeRangeExtensions.reduce<Date | null>(
+      (acc, ext) => {
+        if (!acc || ext.end.getTime() > acc.getTime()) return ext.end;
+        return acc;
+      },
+      null,
+    );
+    const activeMembershipEndAdjusted =
+      activeMembershipPeriods.reduce<Date | null>((acc, m) => {
+        if (!acc || m.end.getTime() > acc.getTime()) return m.end;
+        return acc;
+      }, null);
 
     const estEndCandidates = [
       legacyComputedEnd,
@@ -3217,9 +3450,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
                               pausaContractualStats.pausaActiva.end,
                             );
                             if (!endD) return null;
-                            const diasRestantes = daysBetweenInclusive(
-                              toDayDate(new Date()),
-                              toDayDate(endD),
+                            const diasRestantes = Math.max(
+                              0,
+                              daysBetweenInclusive(
+                                toDayDate(new Date()),
+                                toDayDate(endD),
+                              ) - 1,
                             );
                             return (
                               <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
@@ -3332,9 +3568,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                   const startDate = s0 ? toDayDate(s0) : null;
                                   const endDate = e0 ? toDayDate(e0) : null;
                                   if (!startDate || !endDate) return null;
-                                  const days = daysBetweenInclusive(
-                                    startDate,
-                                    endDate,
+                                  const days = Math.max(
+                                    0,
+                                    daysBetweenInclusive(startDate, endDate) -
+                                      1,
                                   );
                                   const today = toDayDate(new Date());
                                   const isActive =
@@ -3859,6 +4096,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           ? "membresia"
                           : "contractual";
                     setTempVenceTipo(next);
+                    if (next !== "contractual") {
+                      setTempVenceMesCompleto(false);
+                    }
                     if (next === "membresia") {
                       setTempMesesExtra("1");
                       setTempVenceFechaDesde(isoDay(new Date()));
@@ -3894,6 +4134,72 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   : "Rango de extensión"}
               </Label>
               <div className="mt-1 space-y-2">
+                {tempVenceTipo === "contractual" ? (
+                  <div className="rounded-md border border-border bg-muted/30 p-3">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={tempVenceMesCompleto}
+                        onCheckedChange={(v) =>
+                          setTempVenceMesCompleto(Boolean(v))
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="text-sm">
+                        <div className="font-medium">
+                          Extender mes(es) contractual(es) completo(s)
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Suma 1 o 2 meses calendario al vencimiento actual
+                          (incluye pausas, membresías y extensiones previas).
+                        </div>
+                      </div>
+                    </label>
+                    {tempVenceMesCompleto ? (
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={
+                              tempVenceMesesCompletos === 1
+                                ? "default"
+                                : "outline"
+                            }
+                            onClick={() => setTempVenceMesesCompletos(1)}
+                          >
+                            1 mes
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={
+                              tempVenceMesesCompletos === 2
+                                ? "default"
+                                : "outline"
+                            }
+                            onClick={() => setTempVenceMesesCompletos(2)}
+                          >
+                            2 meses
+                          </Button>
+                        </div>
+                        {accessStats?.estimatedEnd ? (
+                          <div className="text-xs text-muted-foreground">
+                            {`Desde ${fmtES(accessStats.estimatedEnd.toISOString())} → hasta ${fmtES(
+                              addMonthsCalendar(
+                                accessStats.estimatedEnd,
+                                tempVenceMesesCompletos,
+                              ).toISOString(),
+                            )}`}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-rose-600">
+                            No se puede calcular: falta vencimiento actual.
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {tempVenceTipo === "membresia" ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div>
@@ -3952,6 +4258,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         value={tempVenceFechaDesde}
                         onChange={(e) => setTempVenceFechaDesde(e.target.value)}
                         className="mt-1"
+                        disabled={
+                          tempVenceTipo === "contractual" &&
+                          tempVenceMesCompleto
+                        }
                       />
                     </div>
                     <div>
@@ -3967,6 +4277,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         value={tempVenceFechaHasta}
                         onChange={(e) => setTempVenceFechaHasta(e.target.value)}
                         className="mt-1"
+                        disabled={
+                          tempVenceTipo === "contractual" &&
+                          tempVenceMesCompleto
+                        }
                       />
                     </div>
                   </div>
@@ -4022,8 +4336,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   savingVence ||
                   (tempVenceTipo === "extraordinaria" &&
                     !tempVenceMotivo.trim()) ||
-                  !tempVenceFechaDesde ||
-                  (tempVenceTipo !== "membresia" && !tempVenceFechaHasta)
+                  (tempVenceTipo === "contractual" && tempVenceMesCompleto
+                    ? !accessStats?.estimatedEnd
+                    : !tempVenceFechaDesde ||
+                      (tempVenceTipo !== "membresia" && !tempVenceFechaHasta))
                 }
               >
                 {savingVence ? (
@@ -4084,6 +4400,34 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           minute: "2-digit",
                         })
                       : "";
+                    // ¿La extensión asociada aún existe en el payload?
+                    const allExts: any[] = Array.isArray(
+                      venceMeta?.payload?.extensiones,
+                    )
+                      ? venceMeta.payload.extensiones
+                      : [];
+                    const associatedExt =
+                      (h?.extension_id &&
+                        allExts.find((e) => e?.id === h.extension_id)) ||
+                      allExts.find(
+                        (e) => e?.created_at && e.created_at === h?.changed_at,
+                      ) ||
+                      (() => {
+                        const fd = h?.to_fecha_desde ?? h?.fecha_desde ?? null;
+                        const fh = h?.to_fecha_hasta ?? h?.fecha_hasta ?? null;
+                        if (!fd || !fh) return null;
+                        return allExts.find(
+                          (e) =>
+                            e?.fecha_desde === fd &&
+                            e?.fecha_hasta === fh &&
+                            (!h?.tipo || e?.tipo === h.tipo),
+                        );
+                      })();
+                    const canRevert =
+                      h?.reason !== "revert" && Boolean(associatedExt);
+                    const isReverting =
+                      associatedExt &&
+                      revertingExtensionId === String(associatedExt.id);
                     return (
                       <div
                         key={`vence-h-${idx}-${String(h?.changed_at || "")}`}
@@ -4091,29 +4435,56 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="font-medium">{who}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {when}
+                          <div className="flex items-center gap-2">
+                            <div className="text-xs text-muted-foreground">
+                              {when}
+                            </div>
+                            {canRevert ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2"
+                                disabled={Boolean(revertingExtensionId)}
+                                onClick={() => handleRevertExtension(h)}
+                                title="Revertir esta extensión"
+                              >
+                                {isReverting ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Undo2 className="h-3.5 w-3.5" />
+                                )}
+                                <span className="ml-1 text-xs">Revertir</span>
+                              </Button>
+                            ) : h?.reason === "revert" ? (
+                              <span className="text-xs italic text-muted-foreground">
+                                revertida
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <div className="text-muted-foreground">Antes</div>
                             <div className="font-medium">
-                              {h?.fecha_desde || h?.fecha_hasta
-                                ? `${fmtES(h?.fecha_desde)} → ${fmtES(h?.fecha_hasta)}`
-                                : h?.from_meses_extra !== undefined
-                                  ? `${String(h.from_meses_extra ?? "—")} mes(es) extra`
+                              {h?.from_fecha_desde || h?.from_fecha_hasta
+                                ? `${fmtES(h?.from_fecha_desde)} → ${fmtES(h?.from_fecha_hasta)}`
+                                : h?.from_meses_extra !== undefined &&
+                                    h?.from_meses_extra !== null
+                                  ? `${String(h.from_meses_extra)} mes(es) extra`
                                   : (h?.from ?? "—")}
                             </div>
                           </div>
                           <div>
                             <div className="text-muted-foreground">Después</div>
                             <div className="font-medium">
-                              {h?.fecha_desde || h?.fecha_hasta
-                                ? `${fmtES(h?.fecha_desde)} → ${fmtES(h?.fecha_hasta)}`
-                                : h?.to_meses_extra !== undefined
-                                  ? `${String(h.to_meses_extra ?? "—")} mes(es) extra`
-                                  : (h?.to ?? "—")}
+                              {h?.to_fecha_desde || h?.to_fecha_hasta
+                                ? `${fmtES(h?.to_fecha_desde)} → ${fmtES(h?.to_fecha_hasta)}`
+                                : h?.fecha_desde || h?.fecha_hasta
+                                  ? `${fmtES(h?.fecha_desde)} → ${fmtES(h?.fecha_hasta)}`
+                                  : h?.to_meses_extra !== undefined &&
+                                      h?.to_meses_extra !== null
+                                    ? `${String(h.to_meses_extra)} mes(es) extra`
+                                    : (h?.to ?? "—")}
                             </div>
                           </div>
                         </div>

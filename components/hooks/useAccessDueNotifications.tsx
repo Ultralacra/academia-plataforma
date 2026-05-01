@@ -405,6 +405,38 @@ export function useAccessDueNotifications(opts: {
       dueItems.sort((a, b) => a.fechaVence.localeCompare(b.fechaVence));
       // Vencimiento de menor a mayor (fecha más antigua primero)
       overdue.sort((a, b) => a.fechaVence.localeCompare(b.fechaVence));
+
+      // Log: vencidos agrupados por mes (YYYY-MM), un console.log por mes
+      if (overdue.length > 0) {
+        const byMonth = new Map<string, AccessDueItem[]>();
+        for (const it of overdue) {
+          const ym = it.fechaVence.slice(0, 7); // YYYY-MM
+          const arr = byMonth.get(ym) ?? [];
+          arr.push(it);
+          byMonth.set(ym, arr);
+        }
+        const sortedMonths = Array.from(byMonth.keys()).sort();
+        // eslint-disable-next-line no-console
+        console.log(
+          `[AccessDue] Vencidos por mes — total: ${overdue.length} (${sortedMonths.length} meses)`,
+        );
+        for (const ym of sortedMonths) {
+          const list = byMonth.get(ym) ?? [];
+          const arr = list.map((it) => ({
+            codigo: it.alumnoCodigo ?? "-",
+            nombre: it.alumnoNombre,
+            estado: it.alumnoEstado ?? "-",
+            fechaVence: it.fechaVence,
+            diasVencido: Math.abs(it.daysLeft),
+          }));
+          // eslint-disable-next-line no-console
+          console.log(`[AccessDue] ${ym} (${list.length})`, arr);
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.log("[AccessDue] Vencidos por mes — total: 0", []);
+      }
+
       setItems(dueItems);
       setOverdueItems(overdue);
       lastFetchRef.current = Date.now();
