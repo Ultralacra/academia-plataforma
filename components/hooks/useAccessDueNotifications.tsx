@@ -229,9 +229,11 @@ async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
   worker: (item: T, idx: number) => Promise<R>,
+  onItemDone?: (result: R, completed: number, total: number) => void,
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let cursor = 0;
+  let completed = 0;
   const runners = Array.from(
     { length: Math.min(Math.max(1, limit), items.length) },
     async () => {
@@ -239,6 +241,8 @@ async function mapWithConcurrency<T, R>(
         const idx = cursor++;
         if (idx >= items.length) return;
         results[idx] = await worker(items[idx], idx);
+        completed++;
+        onItemDone?.(results[idx], completed, items.length);
       }
     },
   );
@@ -284,6 +288,7 @@ export function useAccessDueNotifications(opts: {
   const [items, setItems] = useState<AccessDueItem[]>([]);
   const [overdueItems, setOverdueItems] = useState<AccessDueItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0); // 0-100
   const [error, setError] = useState<string | null>(null);
 
   const inflightRef = useRef(false);
@@ -295,6 +300,7 @@ export function useAccessDueNotifications(opts: {
 
     inflightRef.current = true;
     setLoading(true);
+    setProgress(0);
     setError(null);
 
     try {
@@ -400,37 +406,64 @@ export function useAccessDueNotifications(opts: {
 
       // Segunda fase: por cada candidato, sumar días de pausa (cliente-estatus)
       // con concurrencia limitada para no saturar el backend.
-      const enriched = await mapWithConcurrency(candidates, 4, async (c) => {
-        const pausedDays = c.alumnoCodigo
-          ? await fetchPausedCalendarDays(c.alumnoCodigo)
-          : 0;
-        const adjustedEnd = addDays(c.baseEstimatedEnd, pausedDays);
-        const daysLeft = diffDays(today, adjustedEnd);
-        return { c, adjustedEnd, daysLeft };
-      });
+      // Se actualiza el estado de forma progresiva cada BATCH_UPDATE candidatos.
+      const BATCH_UPDATE = 5;
+      const partialDue: AccessDueItem[] = [];
+      const partialOverdue: AccessDueItem[] = [];
 
-      for (const e of enriched) {
-        const { c, adjustedEnd, daysLeft } = e;
-        const isDueSoon = daysLeft >= 0 && daysLeft <= daysWindow;
-        const isOverdue =
-          daysLeft < 0 && adjustedEnd.getTime() >= overdueLowerBound.getTime();
-        if (!isDueSoon && !isOverdue) continue;
-        const item: AccessDueItem = {
-          key: c.alumnoCodigo || `id:${c.alumnoId}`,
-          alumnoId: c.alumnoId,
-          alumnoCodigo: c.alumnoCodigo,
-          alumnoNombre: c.alumnoNombre,
-          alumnoEstado: c.alumnoEstado,
-          stage: c.stage,
-          fechaVence: toIsoDay(adjustedEnd),
-          daysLeft,
-          venceTipo: c.venceTipo,
-          hasMembresia: c.hasMembresia,
-          membresiaCount: c.membresiaCount,
-        };
-        if (isOverdue) overdue.push(item);
-        else dueItems.push(item);
-      }
+      const flushPartial = () => {
+        const sortedDue = [...partialDue].sort((a, b) =>
+          a.fechaVence.localeCompare(b.fechaVence),
+        );
+        const sortedOverdue = [...partialOverdue].sort((a, b) =>
+          a.fechaVence.localeCompare(b.fechaVence),
+        );
+        setItems(sortedDue);
+        setOverdueItems(sortedOverdue);
+      };
+
+      await mapWithConcurrency(
+        candidates,
+        4,
+        async (c) => {
+          const pausedDays = c.alumnoCodigo
+            ? await fetchPausedCalendarDays(c.alumnoCodigo)
+            : 0;
+          const adjustedEnd = addDays(c.baseEstimatedEnd, pausedDays);
+          const daysLeft = diffDays(today, adjustedEnd);
+          return { c, adjustedEnd, daysLeft };
+        },
+        (result, completed, total) => {
+          const { c, adjustedEnd, daysLeft } = result;
+          const isDueSoon = daysLeft >= 0 && daysLeft <= daysWindow;
+          const isOverdue =
+            daysLeft < 0 &&
+            adjustedEnd.getTime() >= overdueLowerBound.getTime();
+          if (isDueSoon || isOverdue) {
+            const item: AccessDueItem = {
+              key: c.alumnoCodigo || `id:${c.alumnoId}`,
+              alumnoId: c.alumnoId,
+              alumnoCodigo: c.alumnoCodigo,
+              alumnoNombre: c.alumnoNombre,
+              alumnoEstado: c.alumnoEstado,
+              stage: c.stage,
+              fechaVence: toIsoDay(adjustedEnd),
+              daysLeft,
+              venceTipo: c.venceTipo,
+              hasMembresia: c.hasMembresia,
+              membresiaCount: c.membresiaCount,
+            };
+            if (isOverdue) partialOverdue.push(item);
+            else partialDue.push(item);
+          }
+          setProgress(Math.round((completed / total) * 100));
+          if (completed % BATCH_UPDATE === 0) flushPartial();
+        },
+      );
+
+      // Flush final con orden definitivo
+      dueItems.push(...partialDue);
+      overdue.push(...partialOverdue);
 
       dueItems.sort((a, b) => a.fechaVence.localeCompare(b.fechaVence));
       // Vencimiento de menor a mayor (fecha más antigua primero)
@@ -469,10 +502,12 @@ export function useAccessDueNotifications(opts: {
 
       setItems(dueItems);
       setOverdueItems(overdue);
+      setProgress(100);
       lastFetchRef.current = Date.now();
     } catch (e: any) {
       setItems([]);
       setOverdueItems([]);
+      setProgress(0);
       setError(e?.message || "No se pudieron cargar accesos por vencer");
     } finally {
       inflightRef.current = false;
@@ -498,6 +533,7 @@ export function useAccessDueNotifications(opts: {
     overdueCount: overdueItems.length,
     totalCount: items.length + overdueItems.length,
     loading,
+    progress,
     error,
     refresh,
   };

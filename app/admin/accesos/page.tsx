@@ -153,6 +153,7 @@ export default function AccesosPage() {
     dueCount,
     overdueCount,
     loading,
+    progress,
     error,
     refresh,
   } = useAccessDueNotifications({ enabled, daysWindow: 90 });
@@ -264,18 +265,20 @@ export default function AccesosPage() {
     [overdueItems, search, monthFilter, tipoFilter, quickFilter],
   );
 
-  const membresiaCount = items.filter(
+  const membresiaCount = filteredDue.filter(
     (it) => it.alumnoEstado?.toLowerCase().includes("membres") ?? false,
   ).length;
-  const membresiasTotal = [...items, ...overdueItems].reduce(
+  const membresiasTotal = [...filteredDue, ...filteredOverdue].reduce(
     (acc, it) => acc + (it.membresiaCount ?? 0),
     0,
   );
-  const alumnosConMembresia = [...items, ...overdueItems].filter(
+  const alumnosConMembresia = [...filteredDue, ...filteredOverdue].filter(
     (it) => (it.membresiaCount ?? 0) > 0,
   ).length;
-  const urgentCount = items.filter((it) => it.daysLeft <= 7).length;
-  const contractualDueCount = items.filter((it) => !esMembresia(it)).length;
+  const urgentCount = filteredDue.filter((it) => it.daysLeft <= 7).length;
+  const contractualDueCount = filteredDue.filter(
+    (it) => !esMembresia(it),
+  ).length;
 
   if (!enabled) {
     return (
@@ -462,17 +465,41 @@ export default function AccesosPage() {
           </div>
         </div>
 
+        {/* Barra de progreso durante la carga */}
+        {loading && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Analizando accesos…{" "}
+                {progress > 0 && progress < 100 ? `${progress}%` : ""}
+              </span>
+              {(dueCount > 0 || overdueCount > 0) && (
+                <span>{dueCount + overdueCount} encontrados hasta ahora</span>
+              )}
+            </div>
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${Math.max(progress, 2)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Tarjetas de resumen */}
-        {!loading && (
+        {(dueCount > 0 || overdueCount > 0 || !loading) && (
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
             <div className="rounded-xl border bg-card p-4">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">
                 <Clock className="h-3.5 w-3.5" />
                 Por vencer
               </div>
-              <div className="text-3xl font-bold">{dueCount}</div>
+              <div className="text-3xl font-bold">{filteredDue.length}</div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                proximos 90 dias
+                {filteredDue.length !== dueCount
+                  ? `de ${dueCount} en 90 dias`
+                  : "proximos 90 dias"}
               </div>
             </div>
             <div className="rounded-xl border bg-card p-4">
@@ -481,10 +508,12 @@ export default function AccesosPage() {
                 Vencidos
               </div>
               <div className="text-3xl font-bold text-destructive">
-                {overdueCount}
+                {filteredOverdue.length}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                ultimos 12 meses
+                {filteredOverdue.length !== overdueCount
+                  ? `de ${overdueCount} en 12 meses`
+                  : "ultimos 12 meses"}
               </div>
             </div>
             <button
@@ -687,10 +716,10 @@ export default function AccesosPage() {
           </TabsList>
 
           <TabsContent value="due" className="mt-0">
-            {loading ? (
+            {loading && filteredDue.length === 0 ? (
               <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">Cargando accesos...</span>
+                <span className="text-sm">Analizando accesos...</span>
               </div>
             ) : filteredDue.length === 0 ? (
               <div className="py-24 text-center text-muted-foreground space-y-2">
@@ -719,17 +748,25 @@ export default function AccesosPage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-                {filteredDue.map((it) => renderItem(it, "due"))}
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                  {filteredDue.map((it) => renderItem(it, "due"))}
+                </div>
+                {loading && (
+                  <div className="flex items-center justify-center py-4 text-muted-foreground gap-2 text-xs">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Cargando más resultados…</span>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
 
           <TabsContent value="overdue" className="mt-0">
-            {loading ? (
+            {loading && filteredOverdue.length === 0 ? (
               <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">Cargando accesos...</span>
+                <span className="text-sm">Analizando accesos...</span>
               </div>
             ) : filteredOverdue.length === 0 ? (
               <div className="py-24 text-center text-muted-foreground space-y-2">
@@ -754,8 +791,16 @@ export default function AccesosPage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-                {filteredOverdue.map((it) => renderItem(it, "overdue"))}
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                  {filteredOverdue.map((it) => renderItem(it, "overdue"))}
+                </div>
+                {loading && (
+                  <div className="flex items-center justify-center py-4 text-muted-foreground gap-2 text-xs">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Cargando más resultados…</span>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
