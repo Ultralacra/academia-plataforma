@@ -147,6 +147,27 @@ export default function AccesosPage() {
   const router = useRouter();
   const enabled = canSeeAccesos(user);
 
+  // Ventana: hasta el último día del 3er mes calendario completo
+  const MONTHS_WINDOW = 3;
+  const daysWindow = useMemo(() => {
+    const now = new Date();
+    const endOfWindow = new Date(
+      now.getFullYear(),
+      now.getMonth() + MONTHS_WINDOW + 1,
+      0, // día 0 del mes siguiente = último día del mes actual + MONTHS_WINDOW
+    );
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    return Math.round(
+      (endOfWindow.getTime() - startOfToday.getTime()) / 86400000,
+    );
+  }, []);
+
+  const windowLabel = `próximos ${MONTHS_WINDOW} meses`;
+
   const {
     items,
     overdueItems,
@@ -156,7 +177,7 @@ export default function AccesosPage() {
     progress,
     error,
     refresh,
-  } = useAccessDueNotifications({ enabled, daysWindow: 90 });
+  } = useAccessDueNotifications({ enabled, daysWindow });
 
   const [tab, setTab] = useState<"due" | "overdue">("due");
   const [search, setSearch] = useState("");
@@ -539,8 +560,8 @@ export default function AccesosPage() {
               <div className="text-3xl font-bold">{filteredDue.length}</div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 {filteredDue.length !== dueCount
-                  ? `de ${dueCount} en 90 dias`
-                  : "proximos 90 dias"}
+                  ? `de ${dueCount} en ${windowLabel}`
+                  : windowLabel}
               </div>
             </div>
             <div className="rounded-xl border bg-card p-4">
@@ -642,7 +663,7 @@ export default function AccesosPage() {
                 {contractualDueCount}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                vencen en 90 dias
+                vencen en {windowLabel}
               </div>
             </button>
           </div>

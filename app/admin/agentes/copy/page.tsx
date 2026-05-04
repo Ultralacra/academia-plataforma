@@ -283,6 +283,7 @@ function CopyAgentWorkspace() {
   >(() => loadStoredMessages());
   const [draft, setDraft] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<
     Array<{ name: string; content: string }>
   >([]);
@@ -322,6 +323,8 @@ function CopyAgentWorkspace() {
   const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
+
+    setIsUploadingFile(true);
 
     const PARSEABLE_EXTS = /\.(docx|pdf)$/i;
     const UNSUPPORTED_EXTS = /\.(xlsx?|pptx?|doc)$/i;
@@ -389,6 +392,7 @@ function CopyAgentWorkspace() {
 
     setAttachedFiles((prev) => [...prev, ...results]);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    setIsUploadingFile(false);
   };
 
   const handleSend = useCallback(
@@ -431,6 +435,22 @@ function CopyAgentWorkspace() {
 
       const assistantId = makeId();
       let accumulated = "";
+      // rAF batching: actualizar React máximo a 60fps en lugar de por cada token
+      let rafHandle: ReturnType<typeof requestAnimationFrame> | null = null;
+
+      const flushStreaming = () => {
+        const snap = accumulated;
+        setMessagesByAgent((prev) => {
+          const current = prev[selectedAgentId] ?? [];
+          return {
+            ...prev,
+            [selectedAgentId]: current.map((m) =>
+              m.id === assistantId ? { ...m, content: snap } : m,
+            ),
+          };
+        });
+        rafHandle = null;
+      };
 
       setMessagesByAgent((prev) => ({
         ...prev,
@@ -481,22 +501,22 @@ function CopyAgentWorkspace() {
               if (parsed.error) throw new Error(parsed.error);
               if (parsed.text) {
                 accumulated += parsed.text;
-                const snap = accumulated;
-                setMessagesByAgent((prev) => {
-                  const current = prev[selectedAgentId] ?? [];
-                  return {
-                    ...prev,
-                    [selectedAgentId]: current.map((m) =>
-                      m.id === assistantId ? { ...m, content: snap } : m,
-                    ),
-                  };
-                });
+                // Programar flush solo si no hay uno pendiente
+                if (rafHandle === null) {
+                  rafHandle = requestAnimationFrame(flushStreaming);
+                }
               }
             } catch {
               // skip malformed lines
             }
           }
         }
+        // Cancelar rAF pendiente y hacer flush final con texto completo
+        if (rafHandle !== null) {
+          cancelAnimationFrame(rafHandle);
+          rafHandle = null;
+        }
+        flushStreaming();
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
         const errorMsg =
@@ -721,6 +741,31 @@ function CopyAgentWorkspace() {
               </div>
             )}
 
+            {isUploadingFile && (
+              <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+                <svg
+                  className="h-3.5 w-3.5 animate-spin text-slate-500"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
+                </svg>
+                Subiendo archivo...
+              </div>
+            )}
+
             {attachedFiles.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {attachedFiles.map((f, idx) => (
@@ -751,10 +796,32 @@ function CopyAgentWorkspace() {
                 type="button"
                 title="Adjuntar documento"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isStreaming}
+                disabled={isStreaming || isUploadingFile}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
               >
-                <Paperclip className="h-4 w-4" />
+                {isUploadingFile ? (
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                    />
+                  </svg>
+                ) : (
+                  <Paperclip className="h-4 w-4" />
+                )}
               </button>
               <input
                 ref={fileInputRef}

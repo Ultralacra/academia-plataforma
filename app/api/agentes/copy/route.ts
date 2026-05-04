@@ -725,7 +725,7 @@ export async function POST(request: NextRequest) {
         try {
           const response = await client.messages.stream({
             model: modelId,
-            max_tokens: 8192,
+            max_tokens: 16000,
             system: systemPrompt,
             messages: anthropicMessages,
           });
