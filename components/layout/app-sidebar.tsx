@@ -22,6 +22,7 @@ import {
   FileText,
   FileSignature,
   KeyRound,
+  Lock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -80,6 +81,11 @@ const adminItems: MenuItem[] = [
   { title: "Coachs", url: "/admin/teamsv2", icon: Users },
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
   { title: "Tickets", url: "/admin/tickets-board", icon: MessageSquare },
+  {
+    title: "Notas internas tickets",
+    url: "/admin/tickets-board/notas-internas",
+    icon: Lock,
+  },
   { title: "Bonos", url: "/admin/bonos", icon: Users },
   {
     title: "Solicitud de bonos",
@@ -452,6 +458,11 @@ export function AppSidebar() {
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
               },
+              {
+                title: "Notas internas tickets",
+                url: "/admin/tickets-board/notas-internas",
+                icon: Lock,
+              },
               { title: "Bonos", url: "/admin/bonos", icon: Users },
               {
                 title: "Solicitud de bonos",
@@ -525,6 +536,11 @@ export function AppSidebar() {
                 title: "Tickets",
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
+              },
+              {
+                title: "Notas internas tickets",
+                url: "/admin/tickets-board/notas-internas",
+                icon: Lock,
               },
               { title: "Bonos", url: "/admin/bonos", icon: Users },
               {

@@ -165,6 +165,7 @@ export default function AccesosPage() {
 
   const [monthFilter, setMonthFilter] = useState<string>("todos");
   const [dueMes, setDueMes] = useState<string>("todos");
+  const [tagFilter, setTagFilter] = useState<string>("todos");
 
   const dueMesOptions = useMemo(() => {
     const map = new Map<
@@ -200,6 +201,21 @@ export default function AccesosPage() {
     return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
   }, [overdueItems]);
 
+  const tagOptions = useMemo(() => {
+    const all = [...items, ...overdueItems];
+    const map = new Map<string, { label: string; count: number }>();
+    for (const it of all) {
+      const key = String(it.tag ?? "").trim();
+      if (!key) continue;
+      const prev = map.get(key);
+      if (prev) prev.count += 1;
+      else map.set(key, { label: key, count: 1 });
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b, "es", { sensitivity: "base" }))
+      .map(([key, v]) => ({ key, ...v }));
+  }, [items, overdueItems]);
+
   const normalize = (s: string) =>
     s
       .toLowerCase()
@@ -227,6 +243,12 @@ export default function AccesosPage() {
     return true;
   };
 
+  const matchesTag = (it: (typeof items)[number]) => {
+    if (tagFilter === "todos") return true;
+    if (tagFilter === "__sin_tag__") return !String(it.tag ?? "").trim();
+    return String(it.tag ?? "").trim() === tagFilter;
+  };
+
   const matchesQuick = (it: (typeof items)[number]) => {
     if (!quickFilter) return true;
     if (quickFilter === "urgentes") return it.daysLeft <= 7;
@@ -239,7 +261,12 @@ export default function AccesosPage() {
   const filteredDue = useMemo(
     () =>
       items.filter((it) => {
-        if (!matchesSearch(it) || !matchesTipo(it) || !matchesQuick(it))
+        if (
+          !matchesSearch(it) ||
+          !matchesTipo(it) ||
+          !matchesQuick(it) ||
+          !matchesTag(it)
+        )
           return false;
         if (dueMes !== "todos") {
           const m = /^(\d{4})-(\d{2})/.exec(it.fechaVence || "");
@@ -248,21 +275,26 @@ export default function AccesosPage() {
         }
         return true;
       }),
-    [items, search, tipoFilter, quickFilter, dueMes],
+    [items, search, tipoFilter, quickFilter, dueMes, tagFilter],
   );
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const filteredOverdue = useMemo(
     () =>
       overdueItems.filter((it) => {
-        if (!matchesSearch(it) || !matchesTipo(it) || !matchesQuick(it))
+        if (
+          !matchesSearch(it) ||
+          !matchesTipo(it) ||
+          !matchesQuick(it) ||
+          !matchesTag(it)
+        )
           return false;
         if (monthFilter === "todos") return true;
         const m = /^(\d{4})-(\d{2})/.exec(it.fechaVence || "");
         if (!m) return false;
         return `${m[1]}-${m[2]}` === monthFilter;
       }),
-    [overdueItems, search, monthFilter, tipoFilter, quickFilter],
+    [overdueItems, search, monthFilter, tipoFilter, quickFilter, tagFilter],
   );
 
   const membresiaCount = filteredDue.filter(
@@ -341,6 +373,15 @@ export default function AccesosPage() {
             )}
           </div>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {/* Tag / programa */}
+            {it.tag && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 h-4 shrink-0 border-emerald-300 text-emerald-700 dark:text-emerald-400"
+              >
+                {it.tag}
+              </Badge>
+            )}
             {/* Estado del alumno siempre visible */}
             {estado && (
               <Badge
@@ -682,6 +723,27 @@ export default function AccesosPage() {
               </SelectContent>
             </Select>
           )}
+          {tagOptions.length > 0 && (
+            <Select value={tagFilter} onValueChange={setTagFilter}>
+              <SelectTrigger className="w-full sm:w-52 gap-2">
+                <SelectValue placeholder="Todos los programas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los programas</SelectItem>
+                <SelectItem value="__sin_tag__">Sin programa</SelectItem>
+                {tagOptions.map((t) => (
+                  <SelectItem key={t.key} value={t.key}>
+                    <span className="flex items-center justify-between gap-4 w-full">
+                      <span>{t.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {t.count}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Tabs */}
@@ -732,6 +794,7 @@ export default function AccesosPage() {
                 {(search ||
                   tipoFilter !== "todos" ||
                   quickFilter ||
+                  tagFilter !== "todos" ||
                   dueMes !== "todos") && (
                   <Button
                     variant="ghost"
@@ -741,6 +804,7 @@ export default function AccesosPage() {
                       setTipoFilter("todos");
                       setQuickFilter(null);
                       setDueMes("todos");
+                      setTagFilter("todos");
                     }}
                   >
                     Limpiar filtros
@@ -776,7 +840,10 @@ export default function AccesosPage() {
                     ? "Sin resultados para los filtros aplicados"
                     : "No hay accesos vencidos en ese mes"}
                 </p>
-                {(search || tipoFilter !== "todos" || quickFilter) && (
+                {(search ||
+                  tipoFilter !== "todos" ||
+                  quickFilter ||
+                  tagFilter !== "todos") && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -784,6 +851,7 @@ export default function AccesosPage() {
                       setSearch("");
                       setTipoFilter("todos");
                       setQuickFilter(null);
+                      setTagFilter("todos");
                     }}
                   >
                     Limpiar filtros

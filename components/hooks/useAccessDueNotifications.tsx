@@ -15,6 +15,7 @@ export type AccessDueItem = {
   alumnoNombre: string;
   alumnoEstado: string | null;
   stage: string | null;
+  tag: string | null;
   fechaVence: string;
   daysLeft: number;
   venceTipo: string | null;
@@ -349,6 +350,7 @@ export function useAccessDueNotifications(opts: {
         alumnoNombre: string;
         alumnoEstado: string | null;
         stage: string | null;
+        tag: string | null;
         baseEstimatedEnd: Date;
         venceTipo: string | null;
         hasMembresia: boolean;
@@ -391,12 +393,17 @@ export function useAccessDueNotifications(opts: {
             ? String((student as any).stage).trim() || null
             : null;
         const membresiaCount = countActiveMembresias(membresia);
+        const tag =
+          (student as any)?.tag != null
+            ? String((student as any).tag).trim() || null
+            : null;
         candidates.push({
           alumnoId,
           alumnoCodigo,
           alumnoNombre,
           alumnoEstado,
           stage,
+          tag,
           baseEstimatedEnd: estimatedEnd,
           venceTipo: (venceMeta as any)?.payload?.vence_tipo ?? null,
           hasMembresia: membresiaCount > 0,
@@ -447,6 +454,7 @@ export function useAccessDueNotifications(opts: {
               alumnoNombre: c.alumnoNombre,
               alumnoEstado: c.alumnoEstado,
               stage: c.stage,
+              tag: c.tag,
               fechaVence: toIsoDay(adjustedEnd),
               daysLeft,
               venceTipo: c.venceTipo,
