@@ -46,6 +46,7 @@ export type ClientItem = {
   // metadatos opcionales para filtros
   state?: string | null;
   stage?: string | null;
+  tag?: string | null;
   joinDate?: string | null;      // YYYY-MM-DD o ISO
   lastActivity?: string | null;  // YYYY-MM-DD o ISO
   inactivityDays?: number | null;
@@ -338,6 +339,7 @@ export async function getClients(opts: {
 
       state: r.estado ?? r.state ?? null,
       stage: r.etapa ?? r.stage ?? null,
+      tag: r.tag ?? r.etiqueta ?? null,
       // puede venir ISO con tiempo; el UI ya lo formatea
       joinDate: r.ingreso ?? r.joinDate ?? null,
       lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
@@ -381,6 +383,7 @@ export async function getClients(opts: {
 
     state: r.state ?? r.estado ?? null,
     stage: r.stage ?? r.etapa ?? null,
+    tag: r.tag ?? r.etiqueta ?? null,
     joinDate: r.ingreso ?? r.joinDate ?? null,
     lastActivity: r.lastActivity ?? r.ultima_actividad ?? null,
     // compatibilidad con múltiples nombres de campo

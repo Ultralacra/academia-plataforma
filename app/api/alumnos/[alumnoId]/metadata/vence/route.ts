@@ -179,19 +179,46 @@ export async function GET(
   const id = String(alumnoId ?? "").trim();
   if (!id) {
     return NextResponse.json(
-      { venceMeta: null, membresiaExts: [] },
+      { venceMeta: null, membresiaExts: [], joinDate: null },
       { status: 200 },
     );
   }
 
-  const upstream = await fetch(buildUrl("/metadata"), {
-    method: "GET",
-    headers: {
-      Authorization: auth,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
+  // alumnoCode opcional (código del alumno) para poder buscar joinDate en paralelo
+  const alumnoCode = req.nextUrl.searchParams.get("alumnoCode")?.trim() || null;
+
+  // Fetch metadata y (si tenemos código) datos del alumno en paralelo
+  const clientSearchUrl = alumnoCode
+    ? buildUrl(`/client/get/clients?pageSize=10&search=${encodeURIComponent(alumnoCode)}`)
+    : null;
+
+  const [upstream, clientRes] = await Promise.all([
+    fetch(buildUrl("/metadata"), {
+      method: "GET",
+      headers: { Authorization: auth, Accept: "application/json" },
+      cache: "no-store",
+    }),
+    clientSearchUrl
+      ? fetch(clientSearchUrl, {
+          method: "GET",
+          headers: { Authorization: auth, Accept: "application/json" },
+          cache: "no-store",
+        })
+      : Promise.resolve(null),
+  ]);
+
+  // Extraer joinDate del resultado de clientes
+  let joinDate: string | null = null;
+  if (clientRes && clientRes.ok) {
+    const clientJson = await clientRes.json().catch(() => null);
+    const clientRows = coerceList(clientJson);
+    const found = clientRows.find(
+      (r: any) =>
+        String(r.codigo ?? r.id_alumno ?? r.code ?? "").trim() ===
+        alumnoCode,
+    ) as any;
+    joinDate = found?.ingreso ?? found?.fecha_ingreso ?? found?.joinDate ?? null;
+  }
 
   if (!upstream.ok) {
     const text = await upstream.text().catch(() => "");
@@ -251,10 +278,40 @@ export async function GET(
       payload: safePayloadForMembresia(m.payload),
     }));
 
+  // Si no teníamos alumnoCode en los query params, intentar obtenerlo del payload del venceMeta
+  if (!joinDate && venceMeta?.payload?.alumno_codigo) {
+    try {
+      const code = String(venceMeta.payload.alumno_codigo).trim();
+      const fallbackRes = await fetch(
+        buildUrl(
+          `/client/get/clients?pageSize=10&search=${encodeURIComponent(code)}`,
+        ),
+        {
+          method: "GET",
+          headers: { Authorization: auth, Accept: "application/json" },
+          cache: "no-store",
+        },
+      );
+      if (fallbackRes.ok) {
+        const fallbackJson = await fallbackRes.json().catch(() => null);
+        const fallbackRows = coerceList(fallbackJson);
+        const found = fallbackRows.find(
+          (r: any) =>
+            String(r.codigo ?? r.id_alumno ?? r.code ?? "").trim() === code,
+        ) as any;
+        joinDate =
+          found?.ingreso ?? found?.fecha_ingreso ?? found?.joinDate ?? null;
+      }
+    } catch {
+      // silencioso
+    }
+  }
+
   return NextResponse.json(
     {
       venceMeta,
       membresiaExts,
+      joinDate,
     },
     { status: 200 },
   );

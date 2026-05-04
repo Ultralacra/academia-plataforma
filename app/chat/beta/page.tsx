@@ -1,6 +1,7 @@
 "use client";
 
 import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
+import StudentChatDisclaimer from "@/components/chat/StudentChatDisclaimer";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/hooks/use-auth";
@@ -803,6 +804,36 @@ export default function AdminChatPage() {
     });
   }, [adminChats, conversationSearchText]);
 
+  // Mapa código alumno → StudentItem para lookup O(1) en conversaciones
+  const studentsMap = useMemo(() => {
+    const m = new Map<string, (typeof students)[0]>();
+    for (const s of students) {
+      const key = String(s.code ?? s.id ?? "")
+        .trim()
+        .toLowerCase();
+      if (key) m.set(key, s);
+    }
+    return m;
+  }, [students]);
+
+  // Extrae el código de alumno de un item de chat (null si no hay alumno)
+  function getStudentCodeFromChat(it: any): string | null {
+    const parts: any[] = it?.participants || it?.participantes || [];
+    const otros: any[] = Array.isArray(it?.otros_participantes)
+      ? it.otros_participantes
+      : [];
+    const all = [...parts, ...otros];
+    const cliente = all.find((p: any) =>
+      ["cliente", "alumno", "student"].includes(
+        String(p?.participante_tipo || "").toLowerCase(),
+      ),
+    );
+    if (!cliente) return null;
+    const code =
+      cliente?.id_cliente ?? cliente?.id_alumno ?? cliente?.client_id ?? null;
+    return code ? String(code).trim().toLowerCase() : null;
+  }
+
   const selectedCoachCode = useMemo(() => {
     if (targetKind !== "coach" || !targetId) return null;
     const t = teams.find(
@@ -819,6 +850,13 @@ export default function AdminChatPage() {
     const s = students.find((x) => String(x.code ?? x.id) === String(targetId));
     const code = String(s?.code ?? targetId).trim();
     return code || null;
+  }, [students, targetId, targetKind]);
+
+  const selectedStudentItem = useMemo(() => {
+    if (targetKind !== "alumno" || !targetId) return null;
+    return (
+      students.find((x) => String(x.code ?? x.id) === String(targetId)) ?? null
+    );
   }, [students, targetId, targetKind]);
 
   const duplicateCountByChatId = useMemo(() => {
@@ -1488,6 +1526,52 @@ export default function AdminChatPage() {
                                       </Badge>
                                     )}
                                   </div>
+                                  {(() => {
+                                    const lastActDate = s.lastActivity
+                                      ? new Date(s.lastActivity)
+                                      : null;
+                                    const days = lastActDate
+                                      ? Math.floor(
+                                          (Date.now() - lastActDate.getTime()) /
+                                            (1000 * 60 * 60 * 24),
+                                        )
+                                      : null;
+                                    const daysColor =
+                                      days === null
+                                        ? "text-gray-400"
+                                        : days >= 14
+                                          ? "text-red-500 font-semibold"
+                                          : days >= 7
+                                            ? "text-amber-500 font-medium"
+                                            : "text-emerald-600";
+                                    return (
+                                      <div className="flex items-center justify-between gap-1 mt-1">
+                                        <span className="text-[11px] text-gray-400 truncate">
+                                          {lastActDate
+                                            ? `Últ. act.: ${lastActDate.toLocaleDateString(
+                                                "es-ES",
+                                                {
+                                                  day: "2-digit",
+                                                  month: "short",
+                                                  year: "numeric",
+                                                },
+                                              )}`
+                                            : "Sin actividad"}
+                                        </span>
+                                        {days !== null && (
+                                          <span
+                                            className={`text-[11px] shrink-0 ${daysColor}`}
+                                          >
+                                            {days === 0
+                                              ? "Hoy"
+                                              : days === 1
+                                                ? "1 día"
+                                                : `${days} días`}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 {unread > 0 && (
                                   <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-[#25d366] text-white text-[10px] font-semibold grid place-items-center px-1">
@@ -1784,6 +1868,60 @@ export default function AdminChatPage() {
                                       )}
                                     </div>
                                   )}
+                                  {(() => {
+                                    const studentCode =
+                                      getStudentCodeFromChat(it);
+                                    const stu = studentCode
+                                      ? studentsMap.get(studentCode)
+                                      : null;
+                                    if (!stu) return null;
+                                    const lastActDate = stu.lastActivity
+                                      ? new Date(stu.lastActivity)
+                                      : null;
+                                    const days = lastActDate
+                                      ? Math.floor(
+                                          (Date.now() - lastActDate.getTime()) /
+                                            (1000 * 60 * 60 * 24),
+                                        )
+                                      : null;
+                                    if (!lastActDate && days === null)
+                                      return null;
+                                    const daysColor =
+                                      days === null
+                                        ? "text-gray-400"
+                                        : days >= 14
+                                          ? "text-red-500 font-semibold"
+                                          : days >= 7
+                                            ? "text-amber-500 font-medium"
+                                            : "text-emerald-600";
+                                    return (
+                                      <div className="flex items-center justify-between gap-1 mt-1">
+                                        <span className="text-[11px] text-gray-400 truncate">
+                                          {lastActDate
+                                            ? `Últ. act.: ${lastActDate.toLocaleDateString(
+                                                "es-ES",
+                                                {
+                                                  day: "2-digit",
+                                                  month: "short",
+                                                  year: "numeric",
+                                                },
+                                              )}`
+                                            : "Sin actividad"}
+                                        </span>
+                                        {days !== null && (
+                                          <span
+                                            className={`text-[11px] shrink-0 ${daysColor}`}
+                                          >
+                                            {days === 0
+                                              ? "Hoy"
+                                              : days === 1
+                                                ? "1 día"
+                                                : `${days} días`}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   {last && (
                                     <div
                                       className={`text-[13px] truncate mt-0.5 flex items-center gap-2 ${
@@ -1826,38 +1964,62 @@ export default function AdminChatPage() {
               <div className="absolute top-2 right-3 z-30 rounded-full bg-black/55 px-3 py-1 text-[11px] text-white">
                 Solo lectura
               </div>
-              {/* Vista global: listar TODAS las conversaciones sin filtrar por equipo del admin */}
-              <CoachChatInline
-                room={room}
-                role="coach"
-                title={targetTitle}
-                subtitle={targetSubtitle}
-                variant="card"
-                className="h-full min-h-0 shadow-none border-0"
-                socketio={{
-                  url: SOCKET_URL || undefined,
-                  idEquipo: selectedCoachCode ?? undefined,
-                  idCliente: selectedStudentCode ?? undefined,
-                  // Modo solo lectura: no crear chats nuevos desde beta.
-                  autoCreate: false,
-                  autoJoin: !!selectedChatId,
-                  chatId: selectedChatId ?? undefined,
-                }}
-                onConnectionChange={setConnected}
-                requestListSignal={listSignal}
-                // Igual al flujo de coach: filtrar por participante seleccionado.
-                listParams={chatListParams}
-                onChatInfo={(info) => {
-                  setCurrentOpenChatId(info?.chatId ?? null);
-                  if (info?.chatId != null) {
-                    try {
-                      const k = `chatUnreadById:coach:${String(info.chatId)}`;
-                      localStorage.setItem(k, "0");
-                    } catch {}
-                    setReadsBump((n) => n + 1);
+              {/* Disclaimer de contrato del alumno */}
+              {targetKind === "alumno" && targetId && (
+                <StudentChatDisclaimer
+                  alumnoId={selectedStudentItem?.id ?? targetId}
+                  alumnoCode={selectedStudentItem?.code ?? targetId}
+                  studentInfo={
+                    selectedStudentItem
+                      ? {
+                          name: selectedStudentItem.name,
+                          state: selectedStudentItem.state ?? null,
+                          stage: selectedStudentItem.stage ?? null,
+                          tag: selectedStudentItem.tag ?? null,
+                          joinDate: selectedStudentItem.joinDate ?? null,
+                          inactivityDays:
+                            selectedStudentItem.inactivityDays ?? null,
+                          lastActivity:
+                            selectedStudentItem.lastActivity ?? null,
+                        }
+                      : null
                   }
-                }}
-              />
+                />
+              )}
+              {/* Vista global: listar TODAS las conversaciones sin filtrar por equipo del admin */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <CoachChatInline
+                  room={room}
+                  role="coach"
+                  title={targetTitle}
+                  subtitle={targetSubtitle}
+                  variant="card"
+                  className="h-full shadow-none border-0"
+                  socketio={{
+                    url: SOCKET_URL || undefined,
+                    idEquipo: selectedCoachCode ?? undefined,
+                    idCliente: selectedStudentCode ?? undefined,
+                    // Modo solo lectura: no crear chats nuevos desde beta.
+                    autoCreate: false,
+                    autoJoin: !!selectedChatId,
+                    chatId: selectedChatId ?? undefined,
+                  }}
+                  onConnectionChange={setConnected}
+                  requestListSignal={listSignal}
+                  // Igual al flujo de coach: filtrar por participante seleccionado.
+                  listParams={chatListParams}
+                  onChatInfo={(info) => {
+                    setCurrentOpenChatId(info?.chatId ?? null);
+                    if (info?.chatId != null) {
+                      try {
+                        const k = `chatUnreadById:coach:${String(info.chatId)}`;
+                        localStorage.setItem(k, "0");
+                      } catch {}
+                      setReadsBump((n) => n + 1);
+                    }
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>

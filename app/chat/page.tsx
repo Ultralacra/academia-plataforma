@@ -6,6 +6,7 @@ import { useChatNotifications } from "@/components/hooks/useChatNotifications";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import ChatRealtime from "@/components/chat/ChatRealtime";
+import StudentChatDisclaimer from "@/components/chat/StudentChatDisclaimer";
 import { dataService, type StudentItem } from "@/lib/data-service";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Search, CheckCircle } from "lucide-react";
@@ -680,6 +681,32 @@ function ChatHubPageContent() {
 
                   const isUnread = isUnreadPersistent || isUnreadLive;
 
+                  // Inactividad
+                  const lastActivityDate = s.lastActivity
+                    ? new Date(s.lastActivity)
+                    : null;
+                  const inactivityDays = lastActivityDate
+                    ? Math.floor(
+                        (Date.now() - lastActivityDate.getTime()) /
+                          (1000 * 60 * 60 * 24),
+                      )
+                    : null;
+                  const lastActivityLabel = lastActivityDate
+                    ? lastActivityDate.toLocaleDateString("es-ES", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : null;
+                  const inactivityColor =
+                    inactivityDays === null
+                      ? "text-muted-foreground"
+                      : inactivityDays >= 14
+                        ? "text-red-500 font-semibold"
+                        : inactivityDays >= 7
+                          ? "text-amber-500 font-medium"
+                          : "text-emerald-600";
+
                   return (
                     <button
                       key={s.id}
@@ -744,6 +771,26 @@ function ChatHubPageContent() {
                               ? `Código: ${s.code}`
                               : "Sin código asignado"}
                           </p>
+                          {hasCode && (
+                            <div className="flex items-center justify-between gap-1 mt-0.5">
+                              <span className="text-xs text-muted-foreground truncate">
+                                {lastActivityLabel
+                                  ? `Últ. act.: ${lastActivityLabel}`
+                                  : "Sin actividad registrada"}
+                              </span>
+                              {inactivityDays !== null && (
+                                <span
+                                  className={`text-xs shrink-0 ${inactivityColor}`}
+                                >
+                                  {inactivityDays === 0
+                                    ? "Hoy"
+                                    : inactivityDays === 1
+                                      ? "1 día"
+                                      : `${inactivityDays} días`}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -767,17 +814,34 @@ function ChatHubPageContent() {
                     </div>
                   </div>
                 ) : (
-                  <ChatRealtime
-                    room={(selected.code || String(selected.id)).toLowerCase()}
-                    role="admin"
-                    title={selected.name}
-                    subtitle={`${selected.code ?? ""}`}
-                    variant="fullscreen"
-                    className="h-full"
-                    transport={transport}
-                    showRoleSwitch={debug}
-                    onBack={isMobile ? () => setSelected(null) : undefined}
-                  />
+                  <>
+                    <StudentChatDisclaimer
+                      alumnoId={selected.id}
+                      alumnoCode={selected.code ?? null}
+                      studentInfo={{
+                        name: selected.name,
+                        state: selected.state ?? null,
+                        stage: selected.stage ?? null,
+                        tag: selected.tag ?? null,
+                        joinDate: selected.joinDate ?? null,
+                        inactivityDays: selected.inactivityDays ?? null,
+                        lastActivity: selected.lastActivity ?? null,
+                      }}
+                    />
+                    <ChatRealtime
+                      room={(
+                        selected.code || String(selected.id)
+                      ).toLowerCase()}
+                      role="admin"
+                      title={selected.name}
+                      subtitle={`${selected.code ?? ""}`}
+                      variant="fullscreen"
+                      className="h-full"
+                      transport={transport}
+                      showRoleSwitch={debug}
+                      onBack={isMobile ? () => setSelected(null) : undefined}
+                    />
+                  </>
                 )
               ) : (
                 <div className="flex items-center justify-center h-full p-12">

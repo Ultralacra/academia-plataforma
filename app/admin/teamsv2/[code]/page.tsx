@@ -70,6 +70,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CHAT_HOST } from "@/lib/api-config";
 import Spinner from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
+import StudentChatDisclaimer from "@/components/chat/StudentChatDisclaimer";
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -84,6 +85,9 @@ type StudentMini = {
   name: string;
   state?: string | null;
   stage?: string | null;
+  tag?: string | null;
+  joinDate?: string | null;
+  lastActivity?: string | null;
 };
 
 export default function CoachDetailPage({
@@ -329,6 +333,20 @@ export default function CoachDetailPage({
     }
     return m;
   }, [studentsList]);
+
+  const allStudentsMap = useMemo(() => {
+    const m = new Map<string, StudentMini>();
+    for (const s of allStudentsList) {
+      if (s.code) m.set(s.code.toLowerCase(), s);
+    }
+    return m;
+  }, [allStudentsList]);
+
+  const selectedStudentItem = useMemo(() => {
+    if (!targetStudentCode) return null;
+    const key = targetStudentCode.toLowerCase();
+    return allStudentsMap.get(key) ?? studentsMap.get(key) ?? null;
+  }, [targetStudentCode, allStudentsMap, studentsMap]);
 
   const targetTeamName = useMemo(() => {
     if (!targetTeamCode) return "";
@@ -1313,6 +1331,14 @@ export default function CoachDetailPage({
         return cid && typingByChatId[String(cid)];
       });
 
+      const studentLastActivity =
+        group.type === "student"
+          ? ((
+              allStudentsMap.get(group.code.toLowerCase()) ??
+              studentsMap.get(group.code.toLowerCase())
+            )?.lastActivity ?? null)
+          : null;
+
       return {
         ...group,
         topChatId,
@@ -1323,6 +1349,7 @@ export default function CoachDetailPage({
         hasUnread,
         unreadCount,
         isTyping,
+        lastActivity: group.lastActivity ?? studentLastActivity,
       };
     });
 
@@ -1376,6 +1403,7 @@ export default function CoachDetailPage({
             chats: [],
             avatarColor: "bg-emerald-500",
             isNew: true,
+            lastActivity: s.lastActivity ?? null,
           });
         }
       });
@@ -1406,6 +1434,7 @@ export default function CoachDetailPage({
     lastMsgBump,
     teamsMap,
     studentsMap,
+    allStudentsMap,
     code,
     typingByChatId,
   ]);
@@ -1600,6 +1629,9 @@ export default function CoachDetailPage({
             name: s.name,
             state: s.state,
             stage: s.stage,
+            tag: (s as any).tag ?? null,
+            joinDate: (s as any).joinDate ?? null,
+            lastActivity: s.lastActivity ?? null,
           })),
         );
       } catch {
@@ -2349,6 +2381,57 @@ export default function CoachDetailPage({
                                             </span>
                                           )}
                                         </div>
+                                        {item.type === "student" &&
+                                          (() => {
+                                            const lastActDate = (item as any)
+                                              .lastActivity
+                                              ? new Date(
+                                                  (item as any).lastActivity,
+                                                )
+                                              : null;
+                                            const days = lastActDate
+                                              ? Math.floor(
+                                                  (Date.now() -
+                                                    lastActDate.getTime()) /
+                                                    (1000 * 60 * 60 * 24),
+                                                )
+                                              : null;
+                                            const daysColor =
+                                              days === null
+                                                ? "text-slate-400"
+                                                : days >= 14
+                                                  ? "text-red-500 font-semibold"
+                                                  : days >= 7
+                                                    ? "text-amber-500 font-medium"
+                                                    : "text-emerald-600";
+                                            return (
+                                              <div className="flex items-center justify-between gap-1 mt-1">
+                                                <span className="text-[11px] text-slate-400 truncate">
+                                                  {lastActDate
+                                                    ? `Últ. act.: ${lastActDate.toLocaleDateString(
+                                                        "es-ES",
+                                                        {
+                                                          day: "2-digit",
+                                                          month: "short",
+                                                          year: "numeric",
+                                                        },
+                                                      )}`
+                                                    : "Sin actividad"}
+                                                </span>
+                                                {days !== null && (
+                                                  <span
+                                                    className={`text-[11px] shrink-0 ${daysColor}`}
+                                                  >
+                                                    {days === 0
+                                                      ? "Hoy"
+                                                      : days === 1
+                                                        ? "1 día"
+                                                        : `${days} días`}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
                                       </div>
                                     </button>
                                   </ContextMenuTrigger>
@@ -2593,6 +2676,35 @@ export default function CoachDetailPage({
                       </div>
                     )}
 
+                    {targetStudentCode && selectedStudentItem && (
+                      <StudentChatDisclaimer
+                        alumnoId={selectedStudentItem.id ?? targetStudentCode}
+                        alumnoCode={
+                          selectedStudentItem.code ?? targetStudentCode
+                        }
+                        studentInfo={{
+                          name: selectedStudentItem.name,
+                          state: selectedStudentItem.state ?? null,
+                          stage: selectedStudentItem.stage ?? null,
+                          tag: selectedStudentItem.tag ?? null,
+                          joinDate: selectedStudentItem.joinDate ?? null,
+                          inactivityDays: (() => {
+                            const la = selectedStudentItem.lastActivity;
+                            if (!la) return null;
+                            const d = new Date(la);
+                            if (isNaN(d.getTime())) return null;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            d.setHours(0, 0, 0, 0);
+                            return Math.round(
+                              (today.getTime() - d.getTime()) / 86400000,
+                            );
+                          })(),
+                          lastActivity:
+                            selectedStudentItem.lastActivity ?? null,
+                        }}
+                      />
+                    )}
                     <CoachChatInline
                       onBack={() => setMobileChatOpen(false)}
                       onTypingChange={handleTypingChange}
