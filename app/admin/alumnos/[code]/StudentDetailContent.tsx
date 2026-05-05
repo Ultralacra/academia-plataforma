@@ -467,6 +467,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [revertingExtensionId, setRevertingExtensionId] = useState<
     string | null
   >(null);
+  const [revertingPauseId, setRevertingPauseId] = useState<string | null>(null);
   const [showAllPauses, setShowAllPauses] = useState(false);
   const [showAllMembresias, setShowAllMembresias] = useState(false);
 
@@ -2194,6 +2195,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
       }));
   }, [statusHistory]);
 
+  const revertedPauseIds = useMemo(() => {
+    const arr: any[] = Array.isArray(
+      (venceMeta as any)?.payload?.pausas_revertidas,
+    )
+      ? (venceMeta as any).payload.pausas_revertidas
+      : [];
+    return new Set(arr.map(String));
+  }, [venceMeta]);
+
   async function updatePauseDatesById(
     id: string | number,
     body: { fecha_desde: string; fecha_hasta: string },
@@ -2207,11 +2217,82 @@ export default function StudentDetailContent({ code }: { code: string }) {
     });
   }
 
+  async function handleRevertPause(pause: (typeof pausesFromStatusHistory)[0]) {
+    if (!venceMeta?.id) {
+      toast({
+        title: "No se pudo revertir",
+        description: "Falta metadata del alumno.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const pauseIdStr = String(pause.id);
+    if (revertedPauseIds.has(pauseIdStr)) {
+      toast({
+        title: "Ya revertida",
+        description: "Esta pausa ya fue revertida.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setRevertingPauseId(pauseIdStr);
+    try {
+      const curr = venceMeta as any;
+      const prevPayload = curr?.payload ?? {};
+      const prevReverted: string[] = Array.isArray(
+        prevPayload?.pausas_revertidas,
+      )
+        ? prevPayload.pausas_revertidas
+        : [];
+      const mergedPayload = {
+        ...prevPayload,
+        pausas_revertidas: [...prevReverted, pauseIdStr],
+      };
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metadata/${encodeURIComponent(String(curr.id))}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            entity: curr.entity,
+            entity_id: curr.entity_id,
+            payload: mergedPayload,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      setVenceMeta((prev: any) =>
+        prev ? { ...prev, payload: mergedPayload } : prev,
+      );
+      toast({
+        title: "Pausa revertida",
+        description: "Los días se descontaron del vencimiento.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Error al revertir pausa",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+    } finally {
+      setRevertingPauseId(null);
+    }
+  }
+
   const mergedPauseIntervals = useMemo(() => {
     const allRanges: Array<{ start: Date; end: Date }> = [];
 
     // Usar pausas del endpoint de historial de estatus
-    for (const h of pausesFromStatusHistory || []) {
+    for (const h of (pausesFromStatusHistory || []).filter(
+      (p) => !revertedPauseIds.has(String(p.id)),
+    )) {
       const s = parseMaybe(asDateOnly(h.start));
       const e = parseMaybe(asDateOnly(h.end));
       if (!s || !e) continue;
@@ -2239,7 +2320,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       }
     }
     return merged;
-  }, [pausesFromStatusHistory]);
+  }, [pausesFromStatusHistory, revertedPauseIds]);
 
   // ── Cuota de pausa contractual (máx. 30 días calendario) ──────────────────
   const pausaContractualStats = useMemo(() => {
@@ -2250,7 +2331,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
     let pausaActiva: (typeof pausesFromStatusHistory)[0] | null = null;
     let pausaVencidaSinReactivar = false;
 
-    for (const p of pausesFromStatusHistory) {
+    for (const p of pausesFromStatusHistory.filter(
+      (p) => !revertedPauseIds.has(String(p.id)),
+    )) {
       // Solo contar pausas CONTRACTUALES para el límite
       const esContractual =
         !p.tipo || String(p.tipo).toUpperCase() === "CONTRACTUAL";
@@ -2294,7 +2377,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       pausaActiva,
       pausaVencidaSinReactivar,
     };
-  }, [pausesFromStatusHistory, student]);
+  }, [pausesFromStatusHistory, student, revertedPauseIds]);
 
   const accessStats = useMemo(() => {
     const ingresoIso = pIngreso || student?.ingreso || student?.raw?.ingreso;
@@ -3766,31 +3849,40 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                   const today = toDayDate(new Date());
                                   const isActive =
                                     today >= startDate && today <= endDate;
+                                  const isReverted = revertedPauseIds.has(
+                                    String(r.id),
+                                  );
+                                  const isReverting =
+                                    revertingPauseId === String(r.id);
                                   return (
                                     <div
                                       key={`pause-${String(r.id)}-${idx}`}
-                                      className="rounded-md border border-border bg-muted/30 p-2"
+                                      className={`rounded-md border p-2 ${isReverted ? "border-border/50 bg-muted/10 opacity-60" : "border-border bg-muted/30"}`}
                                     >
                                       <div className="flex items-center justify-between gap-2">
-                                        <div className="text-xs font-medium">
+                                        <div
+                                          className={`text-xs font-medium ${isReverted ? "line-through text-muted-foreground" : ""}`}
+                                        >
                                           {fmtES(r.start)} → {fmtES(r.end)}
                                         </div>
                                         <div className="flex items-center gap-2">
-                                          <button
-                                            type="button"
-                                            className="p-1 rounded hover:bg-muted transition-colors"
-                                            title="Editar pausa"
-                                            onClick={() => {
-                                              setEditingPause({
-                                                id: r.id,
-                                                start: r.start,
-                                                end: r.end,
-                                              });
-                                              setEditPauseOpen(true);
-                                            }}
-                                          >
-                                            <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                                          </button>
+                                          {!isReverted && (
+                                            <button
+                                              type="button"
+                                              className="p-1 rounded hover:bg-muted transition-colors"
+                                              title="Editar pausa"
+                                              onClick={() => {
+                                                setEditingPause({
+                                                  id: r.id,
+                                                  start: r.start,
+                                                  end: r.end,
+                                                });
+                                                setEditPauseOpen(true);
+                                              }}
+                                            >
+                                              <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                            </button>
+                                          )}
                                           {r.tipo ? (
                                             <Badge
                                               variant="outline"
@@ -3799,7 +3891,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                               {String(r.tipo).toUpperCase()}
                                             </Badge>
                                           ) : null}
-                                          {isActive ? (
+                                          {isReverted ? (
+                                            <Badge
+                                              variant="outline"
+                                              className="h-5 text-[10px] text-muted-foreground"
+                                            >
+                                              Revertida
+                                            </Badge>
+                                          ) : isActive ? (
                                             <Badge
                                               variant="secondary"
                                               className="h-5 text-[10px]"
@@ -3810,6 +3909,23 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                           <span className="text-[10px] text-muted-foreground">
                                             {days} días
                                           </span>
+                                          {!isReverted && venceMeta?.id && (
+                                            <button
+                                              type="button"
+                                              disabled={isReverting}
+                                              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50"
+                                              title="Revertir pausa (descuenta días del vencimiento)"
+                                              onClick={() =>
+                                                handleRevertPause(r)
+                                              }
+                                            >
+                                              {isReverting ? (
+                                                <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent" />
+                                              ) : (
+                                                <span>↩ Revertir</span>
+                                              )}
+                                            </button>
+                                          )}
                                         </div>
                                       </div>
                                       {r.motivo ? (
