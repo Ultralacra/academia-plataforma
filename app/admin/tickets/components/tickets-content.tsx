@@ -23,6 +23,13 @@ import {
   FileSpreadsheet,
   Check,
   ChevronsUpDown,
+  FileText,
+  History,
+  Pencil,
+  Users,
+  Paperclip,
+  ExternalLink,
+  Clock,
 } from "lucide-react";
 import {
   Popover,
@@ -47,6 +54,7 @@ import { exportTicketsDashboardExcel } from "./export-tickets-dashboard";
 import TicketsByPhase from "./tickets-by-phase";
 import TicketsResolutionMetrics from "./tickets-resolution-metrics";
 import TicketsStatusDuration from "./tickets-status-duration";
+import TicketsSLAHorarioMetrics from "./tickets-sla-horario-metrics";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -1280,6 +1288,24 @@ export default function TicketsContent() {
           }}
         />
 
+        {/* SLA · Horario Colombia · Tiempos por fase */}
+        <Card>
+          <CardHeader
+            title="SLA y horario de atención"
+            subtitle="Tiempos por fase · deadline 4h laborales · Colombia 8:00–17:00"
+          />
+          <CardBody>
+            <TicketsSLAHorarioMetrics
+              tickets={filtered}
+              onTicketClick={(t) => {
+                setSelectedTicket(t);
+                setDescEditing(false);
+                setTicketModalOpen(true);
+              }}
+            />
+          </CardBody>
+        </Card>
+
         {/* Métricas completas por coach (solo cuando se filtra un coach específico) */}
         {!isCoachAll && selectedCoach && (
           <Card>
@@ -1412,142 +1438,139 @@ export default function TicketsContent() {
           }
         }}
       >
-        <DialogContent className="max-w-6xl w-[96vw] max-h-[92vh] overflow-hidden p-0">
-          <DialogHeader className="border-b border-gray-200 bg-white px-6 py-5">
-            <DialogTitle>
-              {ticketDetail?.nombre ?? selectedTicket?.nombre ?? "Ticket"}
-              {selectedTicket?.id_externo ? (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  ({selectedTicket.id_externo})
+        <DialogContent className="max-w-6xl w-[96vw] max-h-[92vh] overflow-hidden p-0 gap-0">
+          {/* Header */}
+          <div className="flex items-start gap-3 border-b border-gray-100 bg-white px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
+                    ticketDetail?.estado ?? selectedTicket?.estado,
+                  )}`}
+                >
+                  {String(
+                    ticketDetail?.estado ?? selectedTicket?.estado ?? "—",
+                  ).toUpperCase()}
                 </span>
-              ) : null}
-            </DialogTitle>
-          </DialogHeader>
+                {selectedTicket?.id_externo && (
+                  <span className="font-mono text-xs text-gray-400">
+                    #{selectedTicket.id_externo}
+                  </span>
+                )}
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                  {String(
+                    ticketDetail?.tipo ?? selectedTicket?.tipo ?? "—",
+                  ).toUpperCase()}
+                </span>
+                {ticketDetail?.plazo_info?.estado_plazo && (
+                  <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                    {String(ticketDetail.plazo_info.estado_plazo).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <DialogTitle className="text-base font-semibold leading-snug text-gray-900">
+                {ticketDetail?.nombre ?? selectedTicket?.nombre ?? "Ticket"}
+              </DialogTitle>
+            </div>
+          </div>
 
           {!selectedTicket ? (
-            <div className="text-sm text-muted-foreground">Sin selección</div>
+            <div className="px-6 py-8 text-sm text-gray-400">Sin selección</div>
           ) : ticketLoading ? (
-            <div className="py-6 text-sm text-muted-foreground">
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-gray-400">
+              <div className="h-7 w-7 animate-spin rounded-full border-4 border-gray-200 border-t-sky-500" />
               Cargando detalle…
             </div>
           ) : (
-            <div className="max-h-[calc(92vh-88px)] overflow-y-auto px-6 py-5">
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-5 shadow-sm">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(
-                            ticketDetail?.estado ?? selectedTicket?.estado,
-                          )}`}
-                        >
-                          {String(
-                            ticketDetail?.estado ??
-                              selectedTicket?.estado ??
-                              "—",
-                          ).toUpperCase()}
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                          {String(
-                            ticketDetail?.tipo ?? selectedTicket?.tipo ?? "—",
-                          ).toUpperCase()}
-                        </span>
-                        {ticketDetail?.plazo_info?.estado_plazo ? (
-                          <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
-                            {String(
-                              ticketDetail.plazo_info.estado_plazo,
-                            ).toUpperCase()}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div>
-                        <div className="text-2xl font-semibold tracking-tight text-gray-900">
-                          {ticketDetail?.nombre ??
-                            selectedTicket?.nombre ??
-                            "—"}
-                        </div>
-                        <div className="mt-1 text-sm text-gray-500">
-                          Ticket #
-                          {ticketDetail?.id ?? selectedTicket?.id ?? "—"} ·
-                          Código{" "}
-                          {ticketDetail?.codigo ??
-                            selectedTicket?.id_externo ??
-                            "—"}
-                        </div>
-                      </div>
+            <div className="max-h-[calc(92vh-72px)] overflow-y-auto">
+              {/* Metadata strip */}
+              <div className="grid grid-cols-2 gap-px border-b border-gray-100 bg-gray-100 sm:grid-cols-3 lg:grid-cols-6">
+                {(
+                  [
+                    {
+                      label: "Alumno",
+                      value:
+                        ticketDetail?.alumno_nombre ??
+                        selectedTicket?.alumno_nombre ??
+                        "—",
+                    },
+                    {
+                      label: "Informante",
+                      value: ticketDetail?.informante_nombre ?? "—",
+                    },
+                    {
+                      label: "Creado",
+                      value: fmtDateTime(
+                        ticketDetail?.created_at ?? selectedTicket?.creacion,
+                      ),
+                    },
+                    {
+                      label: "Deadline",
+                      value: fmtDateTime(
+                        ticketDetail?.deadline ?? selectedTicket?.deadline,
+                      ),
+                    },
+                    {
+                      label: "Resuelto por",
+                      value: ticketDetail?.resuelto_por_nombre ?? "—",
+                    },
+                    {
+                      label: "Último cambio",
+                      value: fmtDateTime(ticketDetail?.ultimo_estado?.fecha),
+                    },
+                  ] as { label: string; value: string }[]
+                ).map(({ label, value }) => (
+                  <div key={label} className="bg-white px-4 py-3">
+                    <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                      {label}
                     </div>
-
-                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:w-[420px]">
-                      <DetailItem
-                        label="Alumno"
-                        value={
-                          ticketDetail?.alumno_nombre ??
-                          selectedTicket?.alumno_nombre ??
-                          "—"
-                        }
-                      />
-                      <DetailItem
-                        label="Informante"
-                        value={ticketDetail?.informante_nombre ?? "—"}
-                      />
-                      <DetailItem
-                        label="Creado"
-                        value={fmtDateTime(
-                          ticketDetail?.created_at ?? selectedTicket?.creacion,
-                        )}
-                      />
-                      <DetailItem
-                        label="Deadline"
-                        value={fmtDateTime(
-                          ticketDetail?.deadline ?? selectedTicket?.deadline,
-                        )}
-                      />
-                      <DetailItem
-                        label="Resuelto por"
-                        value={ticketDetail?.resuelto_por_nombre ?? "—"}
-                      />
-                      <DetailItem
-                        label="Último estado"
-                        value={fmtDateTime(ticketDetail?.ultimo_estado?.fecha)}
-                      />
+                    <div className="truncate text-sm font-medium text-gray-800">
+                      {value}
                     </div>
                   </div>
-                </div>
+                ))}
+              </div>
 
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold text-gray-900">
-                          Descripción completa
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {ticketDetail?.descripcion
-                            ? `${String(ticketDetail.descripcion).length} caracteres`
-                            : "Sin descripción"}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold">Contenido</div>
-                        {!descEditing && (
-                          <button
-                            className="text-xs rounded-lg border border-gray-200 bg-white px-3 py-1 hover:bg-gray-50"
-                            onClick={() => {
-                              setDescDraft(
-                                String(ticketDetail?.descripcion ?? ""),
-                              );
-                              setDescEditing(true);
-                            }}
-                          >
-                            Editar
-                          </button>
-                        )}
-                      </div>
+              {/* Main grid */}
+              <div className="grid grid-cols-1 gap-4 p-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]">
+                {/* Left column */}
+                <div className="space-y-4">
+                  {/* Descripción */}
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+                      <FileText className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-semibold text-gray-900">
+                        Descripción
+                      </span>
+                      {ticketDetail?.descripcion && (
+                        <span className="ml-1 text-[11px] text-gray-400">
+                          {String(ticketDetail.descripcion).length} car.
+                        </span>
+                      )}
+                      {!descEditing && (
+                        <button
+                          className="ml-auto flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                          onClick={() => {
+                            setDescDraft(
+                              String(ticketDetail?.descripcion ?? ""),
+                            );
+                            setDescEditing(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" /> Editar
+                        </button>
+                      )}
+                    </div>
+                    <div className="p-4">
                       {!descEditing ? (
-                        <div className="whitespace-pre-wrap rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-sm leading-7 text-gray-800">
-                          {String(ticketDetail?.descripcion ?? "—")}
+                        <div className="min-h-15 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
+                          {ticketDetail?.descripcion ? (
+                            String(ticketDetail.descripcion)
+                          ) : (
+                            <span className="italic text-gray-400">
+                              Sin descripción
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -1556,10 +1579,11 @@ export default function TicketsContent() {
                             value={descDraft}
                             onChange={(e) => setDescDraft(e.target.value)}
                             placeholder="Escribe la descripción del ticket…"
+                            className="resize-none"
                           />
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              className="text-xs rounded-lg px-3 py-1 hover:bg-gray-100"
+                              className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
                               onClick={() => {
                                 setDescEditing(false);
                                 setDescDraft("");
@@ -1569,7 +1593,7 @@ export default function TicketsContent() {
                               Cancelar
                             </button>
                             <button
-                              className="text-xs rounded-lg bg-sky-600 px-3 py-1 text-white hover:bg-sky-700 disabled:opacity-60"
+                              className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-700 disabled:opacity-60"
                               onClick={async () => {
                                 if (!selectedTicket?.id_externo) return;
                                 setSavingDesc(true);
@@ -1611,55 +1635,114 @@ export default function TicketsContent() {
                               }}
                               disabled={savingDesc}
                             >
-                              {savingDesc ? "Guardando…" : "Guardar"}
+                              {savingDesc ? "Guardando…" : "Guardar cambios"}
                             </button>
                           </div>
                         </div>
                       )}
                     </div>
+                  </div>
 
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                      <div className="mb-3 text-sm font-semibold text-gray-900">
+                  {/* Historial timeline */}
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+                      <History className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-semibold text-gray-900">
                         Historial de estados
-                      </div>
+                      </span>
+                      {Array.isArray(ticketDetail?.estados) &&
+                        ticketDetail.estados.length > 0 && (
+                          <span className="ml-auto text-xs text-gray-400">
+                            {ticketDetail.estados.length} cambios
+                          </span>
+                        )}
+                    </div>
+                    <div className="p-4">
                       {Array.isArray(ticketDetail?.estados) &&
                       ticketDetail.estados.length > 0 ? (
-                        <div className="space-y-2">
-                          {ticketDetail.estados.map((estadoItem: any) => (
-                            <div
-                              key={estadoItem.id}
-                              className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-3 sm:flex-row sm:items-center sm:justify-between"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(
-                                    estadoItem?.estatus_id,
-                                  )}`}
+                        <div className="relative pl-6">
+                          <div className="absolute left-1.75 top-3 h-[calc(100%-28px)] w-px bg-linear-to-b from-gray-200 to-transparent" />
+                          <div className="space-y-3.5">
+                            {ticketDetail.estados.map(
+                              (estadoItem: any, idx: number) => (
+                                <div
+                                  key={estadoItem.id ?? idx}
+                                  className="relative flex items-start gap-3"
                                 >
-                                  {String(
-                                    estadoItem?.estatus_id ?? "—",
-                                  ).replaceAll("_", " ")}
-                                </span>
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {fmtDateTime(estadoItem?.created_at)}
-                              </div>
-                            </div>
-                          ))}
+                                  <div
+                                    className={`absolute -left-5.5 top-1 h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm ring-2 ${
+                                      idx === 0
+                                        ? "ring-sky-400 bg-sky-400"
+                                        : "ring-gray-300 bg-white"
+                                    }`}
+                                  />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
+                                        estadoItem?.estatus_id,
+                                      )}`}
+                                    >
+                                      {String(
+                                        estadoItem?.estatus_id ?? "—",
+                                      ).replaceAll("_", " ")}
+                                    </span>
+                                    <span className="text-xs text-gray-400">
+                                      {fmtDateTime(estadoItem?.created_at)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ),
+                            )}
+                          </div>
                         </div>
                       ) : (
-                        <div className="text-sm text-gray-500">
+                        <p className="italic text-sm text-gray-400">
                           Sin historial de estados.
-                        </div>
+                        </p>
                       )}
                     </div>
                   </div>
+                </div>
 
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                      <div className="mb-3 text-sm font-semibold text-gray-900">
-                        Coaches relacionados
-                      </div>
+                {/* Right column */}
+                <div className="space-y-4">
+                  {/* SLA */}
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+                      <Clock className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-semibold text-gray-900">
+                        SLA
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 p-4">
+                      <DetailItem
+                        label="Horas restantes"
+                        value={ticketDetail?.plazo_info?.horas_restantes ?? "—"}
+                      />
+                      <DetailItem
+                        label="Respondido"
+                        value={
+                          ticketDetail?.plazo_info?.fue_respondido ? "Sí" : "No"
+                        }
+                      />
+                      <DetailItem
+                        label="Primera respuesta"
+                        value={fmtDateTime(
+                          ticketDetail?.plazo_info?.fecha_primera_respuesta,
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Coaches */}
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+                      <Users className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-semibold text-gray-900">
+                        Coaches
+                      </span>
+                    </div>
+                    <div className="p-3">
                       {Array.isArray(ticketDetail?.coaches) &&
                       ticketDetail.coaches.length > 0 ? (
                         <div className="space-y-2">
@@ -1670,39 +1753,47 @@ export default function TicketsContent() {
                                   coach?.nombre ??
                                   Math.random(),
                               )}
-                              className="rounded-xl border border-gray-100 bg-gray-50/70 p-3"
+                              className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3"
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {coach?.nombre ?? "Coach"}
-                                  </div>
-                                  <div className="text-xs text-gray-500">
-                                    {coach?.puesto ?? "—"}
-                                  </div>
-                                </div>
-                                <span
-                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${areaChipClass(
-                                    coach?.area,
-                                  )}`}
-                                >
-                                  {coach?.area ?? "Sin área"}
-                                </span>
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-sky-100 to-indigo-100 text-sm font-semibold text-sky-700">
+                                {String(coach?.nombre ?? "?")
+                                  .trim()
+                                  .slice(0, 1)
+                                  .toUpperCase()}
                               </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium text-gray-900">
+                                  {coach?.nombre ?? "Coach"}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {coach?.puesto ?? "—"}
+                                </div>
+                              </div>
+                              <span
+                                className={`shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${areaChipClass(coach?.area)}`}
+                              >
+                                {coach?.area ?? "—"}
+                              </span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-sm text-gray-500">
+                        <p className="px-1 italic text-sm text-gray-400">
                           Sin coaches asociados.
-                        </div>
+                        </p>
                       )}
                     </div>
+                  </div>
 
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                      <div className="mb-3 text-sm font-semibold text-gray-900">
+                  {/* Archivos */}
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
+                      <Paperclip className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-semibold text-gray-900">
                         Archivos adjuntos
-                      </div>
+                      </span>
+                    </div>
+                    <div className="p-3">
                       {Array.isArray(ticketDetail?.archivos) &&
                       ticketDetail.archivos.length > 0 ? (
                         <div className="space-y-2">
@@ -1712,58 +1803,31 @@ export default function TicketsContent() {
                               href={file?.url || "#"}
                               target="_blank"
                               rel="noreferrer"
-                              className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 transition hover:border-sky-200 hover:bg-sky-50"
+                              className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3 transition hover:border-sky-200 hover:bg-sky-50"
                             >
-                              <div className="min-w-0">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
+                                <Paperclip className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-medium text-gray-900">
                                   {file?.nombre_archivo ?? "Archivo"}
                                 </div>
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-gray-400">
                                   {file?.mime_type ?? "—"}
                                   {file?.tamano_bytes
                                     ? ` · ${Math.round(Number(file.tamano_bytes) / 1024)} KB`
                                     : ""}
                                 </div>
                               </div>
-                              <span className="text-xs font-medium text-sky-700">
-                                Abrir
-                              </span>
+                              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-sky-500" />
                             </a>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-sm text-gray-500">
+                        <p className="px-1 italic text-sm text-gray-400">
                           Sin archivos adjuntos.
-                        </div>
+                        </p>
                       )}
-                    </div>
-
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                      <div className="mb-3 text-sm font-semibold text-gray-900">
-                        Datos adicionales
-                      </div>
-                      <div className="grid grid-cols-1 gap-2">
-                        <DetailItem
-                          label="Horas restantes SLA"
-                          value={
-                            ticketDetail?.plazo_info?.horas_restantes ?? "—"
-                          }
-                        />
-                        <DetailItem
-                          label="Respondido"
-                          value={
-                            ticketDetail?.plazo_info?.fue_respondido
-                              ? "Sí"
-                              : "No"
-                          }
-                        />
-                        <DetailItem
-                          label="Primera respuesta"
-                          value={fmtDateTime(
-                            ticketDetail?.plazo_info?.fecha_primera_respuesta,
-                          )}
-                        />
-                      </div>
                     </div>
                   </div>
                 </div>

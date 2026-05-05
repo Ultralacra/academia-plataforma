@@ -14,6 +14,44 @@ function normEstado(v?: string | null) {
     .replace(/\s+/g, " ");
 }
 
+const HORARIO_INICIO = 8;
+const HORARIO_FIN = 17;
+
+function ajustarAlHorarioLaboral(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const mins = d.getHours() * 60 + d.getMinutes();
+  if (mins >= HORARIO_INICIO * 60 && mins < HORARIO_FIN * 60) return dateStr;
+  const adjusted = new Date(d);
+  if (mins < HORARIO_INICIO * 60) {
+    adjusted.setHours(HORARIO_INICIO, 0, 0, 0);
+  } else {
+    adjusted.setDate(adjusted.getDate() + 1);
+    adjusted.setHours(HORARIO_INICIO, 0, 0, 0);
+  }
+  return adjusted.toISOString();
+}
+
+function minutosLaboralesEntre(desdeStr: string, hastaStr: string): number {
+  const desde = new Date(desdeStr);
+  const hasta = new Date(hastaStr);
+  if (isNaN(desde.getTime()) || isNaN(hasta.getTime()) || hasta <= desde)
+    return 0;
+  const diffMs = hasta.getTime() - desde.getTime();
+  if (diffMs <= 72 * 3600 * 1000) {
+    let mins = 0;
+    let cur = desde.getTime();
+    while (cur < hasta.getTime()) {
+      const d = new Date(cur);
+      const mofday = d.getHours() * 60 + d.getMinutes();
+      if (mofday >= HORARIO_INICIO * 60 && mofday < HORARIO_FIN * 60) mins++;
+      cur += 60000;
+    }
+    return mins;
+  }
+  return Math.round((diffMs / 86400000) * (HORARIO_FIN - HORARIO_INICIO) * 60);
+}
+
 function minsToHms(minutes: number): string {
   const totalSec = Math.round(minutes * 60);
   const h = Math.floor(totalSec / 3600);
@@ -45,13 +83,10 @@ function computeForGroup(tickets: Ticket[]): Omit<AreaMetrics, "area"> {
 
   const diffs: number[] = [];
   for (const t of resolvedTickets) {
-    const created = new Date(t.creacion);
-    const lastDate = t.ultimo_estado?.fecha
-      ? new Date(t.ultimo_estado.fecha)
-      : null;
-    if (!lastDate || isNaN(lastDate.getTime()) || isNaN(created.getTime()))
-      continue;
-    const diffMin = (lastDate.getTime() - created.getTime()) / 60000;
+    const lastDate = t.ultimo_estado?.fecha ?? null;
+    if (!lastDate) continue;
+    const desdeAjustado = ajustarAlHorarioLaboral(t.creacion);
+    const diffMin = minutosLaboralesEntre(desdeAjustado, lastDate);
     if (diffMin > 0) diffs.push(diffMin);
   }
 
@@ -189,6 +224,9 @@ function GlobalCard({
           <div>
             <div className="text-sm font-semibold text-gray-900">
               Promedio resolución · General
+            </div>
+            <div className="text-[11px] text-gray-400 mb-1">
+              (horas laborales Colombia)
             </div>
             {avgMinutes !== null ? (
               <>

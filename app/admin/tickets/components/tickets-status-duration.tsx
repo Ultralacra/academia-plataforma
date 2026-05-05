@@ -14,6 +14,44 @@ function normEstado(v?: string | null) {
     .replace(/\s+/g, " ");
 }
 
+const HORARIO_INICIO = 8;
+const HORARIO_FIN = 17;
+
+function ajustarAlHorarioLaboral(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const mins = d.getHours() * 60 + d.getMinutes();
+  if (mins >= HORARIO_INICIO * 60 && mins < HORARIO_FIN * 60) return dateStr;
+  const adjusted = new Date(d);
+  if (mins < HORARIO_INICIO * 60) {
+    adjusted.setHours(HORARIO_INICIO, 0, 0, 0);
+  } else {
+    adjusted.setDate(adjusted.getDate() + 1);
+    adjusted.setHours(HORARIO_INICIO, 0, 0, 0);
+  }
+  return adjusted.toISOString();
+}
+
+function minutosLaboralesEntre(desdeStr: string, hastaStr: string): number {
+  const desde = new Date(desdeStr);
+  const hasta = new Date(hastaStr);
+  if (isNaN(desde.getTime()) || isNaN(hasta.getTime()) || hasta <= desde)
+    return 0;
+  const diffMs = hasta.getTime() - desde.getTime();
+  if (diffMs <= 72 * 3600 * 1000) {
+    let mins = 0;
+    let cur = desde.getTime();
+    while (cur < hasta.getTime()) {
+      const d = new Date(cur);
+      const mofday = d.getHours() * 60 + d.getMinutes();
+      if (mofday >= HORARIO_INICIO * 60 && mofday < HORARIO_FIN * 60) mins++;
+      cur += 60000;
+    }
+    return mins;
+  }
+  return Math.round((diffMs / 86400000) * (HORARIO_FIN - HORARIO_INICIO) * 60);
+}
+
 function minsToHuman(minutes: number): string {
   if (minutes < 60) return `${Math.round(minutes)} min`;
   if (minutes < 1440) {
@@ -158,7 +196,6 @@ function statusTheme(estado: string): StatusTheme {
 // ─── cómputo principal ────────────────────────────────────────────────────────
 
 function computeStatusDurations(tickets: Ticket[]): StatusDuration[] {
-  const now = Date.now();
   const map = new Map<
     string,
     { mins: number[]; oldest: Ticket | null; oldestMin: number }
@@ -166,12 +203,14 @@ function computeStatusDurations(tickets: Ticket[]): StatusDuration[] {
 
   for (const t of tickets) {
     const estado = normEstado(t.estado) || "SIN ESTADO";
-    const refDateStr = t.ultimo_estado?.fecha ?? t.creacion;
-    if (!refDateStr) continue;
-    const refDate = new Date(refDateStr);
-    if (isNaN(refDate.getTime())) continue;
-    const diffMin = (now - refDate.getTime()) / 60000;
-    if (diffMin < 0) continue;
+    // hasta = cuándo llegó a este estado (último cambio de estado)
+    const hastaStr = t.ultimo_estado?.fecha ?? null;
+    if (!hastaStr || isNaN(new Date(hastaStr).getTime())) continue;
+    if (!t.creacion || isNaN(new Date(t.creacion).getTime())) continue;
+    // desde = creación ajustada al horario laboral
+    const desdeAjustado = ajustarAlHorarioLaboral(t.creacion);
+    const diffMin = minutosLaboralesEntre(desdeAjustado, hastaStr);
+    if (diffMin <= 0) continue;
 
     if (!map.has(estado))
       map.set(estado, { mins: [], oldest: null, oldestMin: -1 });
@@ -237,7 +276,9 @@ function StatusCard({
         {/* Barra relativa */}
         <div className="mb-3">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-[11px] text-gray-400">Tiempo en estado</span>
+            <span className="text-[11px] text-gray-400">
+              Tiempo hasta este estado
+            </span>
             {isStale && <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />}
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
@@ -299,7 +340,7 @@ function StatusCard({
           <div className="flex items-start justify-between gap-1">
             <div className="min-w-0">
               <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                El más antiguo lleva{" "}
+                El más lento tardó{" "}
               </span>
               <span className="text-xs font-bold text-gray-800">
                 {minsToHuman(maxMinutes)}
@@ -372,19 +413,19 @@ export default function TicketsStatusDuration({
       <div className="flex items-center gap-2">
         <Timer className="h-4 w-4 text-gray-400" />
         <h3 className="text-sm font-semibold text-gray-700">
-          Tiempo en cada estado
+          Tiempo hasta cada estado
         </h3>
         <span className="text-xs text-gray-400">
-          — desde el último cambio de estado
+          — desde creación · horas laborales
         </span>
       </div>
 
       {/* Nota aclaratoria */}
       <p className="text-xs text-gray-500 leading-relaxed -mt-1">
-        Muestra cuánto tiempo llevan los tickets{" "}
-        <strong>en su estado actual</strong> (desde el último cambio de estado).
-        Útil para detectar estados donde los tickets se acumulan o quedan sin
-        atención.
+        Tiempo promedio que tardaron los tickets en{" "}
+        <strong>llegar a cada estado</strong> desde que fueron creados (horas
+        laborales Colombia 8–17h). Para RESUELTO equivale al tiempo de
+        resolución.
       </p>
 
       {/* Grid */}

@@ -82,6 +82,11 @@ export type Ticket = {
     estatus?: string | null;
     fecha?: string | null; // ISO
   } | null;
+  estados?: {
+    id?: number | null;
+    estatus_id?: string | null; // nombre del estado
+    created_at?: string | null; // ya en hora Colombia
+  }[];
 };
 
 /* =======================
@@ -545,6 +550,13 @@ export async function getTickets(opts: {
           fecha: r.ultimo_estado.fecha ?? r.ultimo_estado.created_at ?? null,
         }
       : null,
+    estados: Array.isArray(r.estados)
+      ? r.estados.map((e: any) => ({
+          id: e.id ?? null,
+          estatus_id: e.estatus_id ?? e.estatus ?? e.estado ?? null,
+          created_at: e.created_at ?? e.fecha ?? null,
+        }))
+      : [],
   }));
 
   return {
