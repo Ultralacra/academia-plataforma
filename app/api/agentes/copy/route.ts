@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 // ─── System prompts por tipo de agente ──────────────────────────────────────
 
@@ -725,7 +725,7 @@ export async function POST(request: NextRequest) {
         try {
           const response = await client.messages.stream({
             model: modelId,
-            max_tokens: 16000,
+            max_tokens: 32000,
             system: systemPrompt,
             messages: anthropicMessages,
           });

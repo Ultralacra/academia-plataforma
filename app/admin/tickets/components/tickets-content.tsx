@@ -45,6 +45,7 @@ import TicketsSummaryCard from "./tickets-summary-card";
 import PersonalMetrics from "@/app/admin/teamsv2/PersonalMetrics";
 import { exportTicketsDashboardExcel } from "./export-tickets-dashboard";
 import TicketsByPhase from "./tickets-by-phase";
+import TicketsResolutionMetrics from "./tickets-resolution-metrics";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -1263,6 +1264,9 @@ export default function TicketsContent() {
 
         {/* KPIs nuevas */}
         <KPIs metrics={metrics} loading={loading} />
+
+        {/* Métricas de resolución: general + por área */}
+        <TicketsResolutionMetrics tickets={filtered} loading={loading} />
 
         {/* Métricas completas por coach (solo cuando se filtra un coach específico) */}
         {!isCoachAll && selectedCoach && (
