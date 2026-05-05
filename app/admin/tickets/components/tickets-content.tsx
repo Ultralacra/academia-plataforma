@@ -46,6 +46,7 @@ import PersonalMetrics from "@/app/admin/teamsv2/PersonalMetrics";
 import { exportTicketsDashboardExcel } from "./export-tickets-dashboard";
 import TicketsByPhase from "./tickets-by-phase";
 import TicketsResolutionMetrics from "./tickets-resolution-metrics";
+import TicketsStatusDuration from "./tickets-status-duration";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -1267,6 +1268,17 @@ export default function TicketsContent() {
 
         {/* Métricas de resolución: general + por área */}
         <TicketsResolutionMetrics tickets={filtered} loading={loading} />
+
+        {/* Tiempo en cada estado */}
+        <TicketsStatusDuration
+          tickets={filtered}
+          loading={loading}
+          onTicketClick={(t) => {
+            setSelectedTicket(t);
+            setDescEditing(false);
+            setTicketModalOpen(true);
+          }}
+        />
 
         {/* Métricas completas por coach (solo cuando se filtra un coach específico) */}
         {!isCoachAll && selectedCoach && (
