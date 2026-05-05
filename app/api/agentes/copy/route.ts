@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
@@ -700,56 +700,90 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = SYSTEM_PROMPTS[agentType] ?? SYSTEM_HOTSYSTEM;
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    const modelId = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+    const apiKey = process.env.OPENAI_API_KEY;
+    const modelId = process.env.OPENAI_MODEL ?? "gpt-5";
+
+    console.log(
+      "[copy-agent] >>> POST recibido",
+      "| agentType:", agentType,
+      "| model:", modelId,
+      "| messages:", messages.length,
+      "| apiKey present:", !!apiKey,
+      "| apiKey prefix:", apiKey ? apiKey.slice(0, 12) + "..." : "none",
+    );
 
     if (!apiKey) {
+      console.error("[copy-agent] OPENAI_API_KEY no configurada");
       return new Response(
-        JSON.stringify({ error: "ANTHROPIC_API_KEY no configurada" }),
+        JSON.stringify({ error: "OPENAI_API_KEY no configurada en .env.local" }),
         { status: 500, headers: { "Content-Type": "application/json" } },
       );
     }
 
-    const client = new Anthropic({ apiKey });
+    const client = new OpenAI({ apiKey });
 
-    // Convert messages to Anthropic format
-    const anthropicMessages = messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: "system", content: systemPrompt },
+      ...messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+    ];
 
-    // Create streaming response
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const response = await client.messages.stream({
+          console.log("[copy-agent] Llamando a OpenAI con modelo:", modelId);
+          const completion = await client.chat.completions.create({
             model: modelId,
-            max_tokens: 32000,
-            system: systemPrompt,
-            messages: anthropicMessages,
+            messages: openaiMessages,
+            stream: true,
+            max_completion_tokens: 16000,
           });
 
-          for await (const event of response) {
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
+          let chunkCount = 0;
+          for await (const chunk of completion) {
+            const text = chunk.choices[0]?.delta?.content ?? "";
+            if (text) {
+              chunkCount++;
               controller.enqueue(
                 encoder.encode(
-                  `data: ${JSON.stringify({ text: event.delta.text })}\n\n`,
+                  `data: ${JSON.stringify({ text })}\n\n`,
                 ),
               );
             }
           }
+          console.log("[copy-agent] Stream completado. Chunks:", chunkCount);
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Error desconocido";
+        } catch (err: any) {
+          const status = err?.status ?? err?.response?.status ?? "?";
+          const code = err?.code ?? err?.error?.code ?? "?";
+          const type = err?.type ?? err?.error?.type ?? "?";
+          const msg = err?.message ?? "Error desconocido";
+          const fullError = err?.error ?? err?.response?.data ?? null;
+
+          console.error("\n========== [copy-agent] ERROR DE OPENAI ==========");
+          console.error("Status HTTP:", status);
+          console.error("Código:", code);
+          console.error("Tipo:", type);
+          console.error("Mensaje:", msg);
+          if (fullError) console.error("Error completo:", JSON.stringify(fullError, null, 2));
+          console.error("Stack:", err?.stack);
+          console.error("==================================================\n");
+
+          let userMsg = msg;
+          if (status === 401) userMsg = "API key inválida o expirada (401). Revisa OPENAI_API_KEY en .env.local";
+          else if (status === 429) userMsg = "Sin créditos / rate limit (429). Revisa el saldo en https://platform.openai.com/usage";
+          else if (status === 404 || code === "model_not_found") userMsg = `Modelo "${modelId}" no disponible para tu cuenta. Prueba con gpt-4o o gpt-4o-mini.`;
+          else if (status === 400) userMsg = `Petición inválida (400): ${msg}`;
+          else if (status === 500 || status === 503) userMsg = "OpenAI tiene problemas en este momento. Intenta de nuevo.";
+
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ error: msg })}\n\n`,
+              `data: ${JSON.stringify({ error: userMsg })}\n\n`,
             ),
           );
           controller.close();
@@ -766,6 +800,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error interno";
+    console.error("[copy-agent] Error general en POST:", err);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
