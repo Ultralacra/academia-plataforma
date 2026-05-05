@@ -121,6 +121,7 @@ function safePayloadForVence(p: any) {
           fecha_desde: ext?.fecha_desde ?? null,
           fecha_hasta: ext?.fecha_hasta ?? null,
           motivo: ext?.motivo ?? null,
+          paused_calendar_days_at_creation: ext?.paused_calendar_days_at_creation ?? null,
           created_at: ext?.created_at ?? null,
           changed_by: ext?.changed_by ?? null,
         }))
@@ -141,6 +142,7 @@ function safePayloadForMembresia(p: any) {
     meses: payload.meses ?? payload.meses_extra ?? null,
     fecha_desde: payload.fecha_desde ?? null,
     fecha_hasta: payload.fecha_hasta ?? null,
+    paused_calendar_days_at_creation: payload.paused_calendar_days_at_creation ?? null,
     motivo: payload.motivo ?? null,
     created_at: payload.created_at ?? null,
     changed_by: payload.changed_by ?? null,

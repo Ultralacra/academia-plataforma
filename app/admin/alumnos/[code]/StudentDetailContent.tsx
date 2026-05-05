@@ -2648,20 +2648,32 @@ export default function StudentDetailContent({ code }: { code: string }) {
         : addDays(baseForEnd, extraDaysFromMonths);
 
     // Las extensiones por rango y los períodos de membresía son fechas
-    // ABSOLUTAS guardadas en metadata. NO se les suman pausas: las pausas ya
-    // están consideradas en `baseEnd`, y al crear una extensión su fecha se
-    // calcula a partir de `estimatedEnd` (que ya incluye pausas) o se elige
-    // explícitamente. Sumarlas aquí causaba doble conteo.
+    // ABSOLUTAS guardadas en metadata. Usamos el snapshot `pausedAtCreation`
+    // para sumar SOLO las pausas añadidas DESPUÉS de crear la extensión/membresía
+    // (pausas incrementales). Esto extiende correctamente el acceso sin
+    // doblar el conteo de las pausas ya incluidas en `baseEnd` al momento de creación.
     const explicitRangeEndAdjusted = activeRangeExtensions.reduce<Date | null>(
       (acc, ext) => {
-        if (!acc || ext.end.getTime() > acc.getTime()) return ext.end;
+        const pauseDelta =
+          ext.pausedAtCreation !== null
+            ? Math.max(0, pausedCalendarDaysTotal - ext.pausedAtCreation)
+            : 0;
+        const effectiveEnd =
+          pauseDelta > 0 ? addDays(ext.end, pauseDelta) : ext.end;
+        if (!acc || effectiveEnd.getTime() > acc.getTime()) return effectiveEnd;
         return acc;
       },
       null,
     );
     const activeMembershipEndAdjusted =
       activeMembershipPeriods.reduce<Date | null>((acc, m) => {
-        if (!acc || m.end.getTime() > acc.getTime()) return m.end;
+        const pauseDelta =
+          m.pausedAtCreation !== null
+            ? Math.max(0, pausedCalendarDaysTotal - m.pausedAtCreation)
+            : 0;
+        const effectiveEnd =
+          pauseDelta > 0 ? addDays(m.end, pauseDelta) : m.end;
+        if (!acc || effectiveEnd.getTime() > acc.getTime()) return effectiveEnd;
         return acc;
       }, null);
 
@@ -4266,7 +4278,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
             // como una extensión de +1 mes (30 días) y suma los días de
             // acceso igual que el flujo existente.
             setTempVenceTipo("membresia");
-            setTempVenceFechaDesde(isoDay(new Date()));
+            // Si el alumno tiene acceso activo, la membresía arranca desde el
+            // vencimiento actual (empalme). Si está vencido, arranca hoy.
+            const memDesde =
+              accessStats && !accessStats.isExpired
+                ? isoDay(accessStats.estimatedEnd)
+                : isoDay(new Date());
+            setTempVenceFechaDesde(memDesde);
             setTempVenceFechaHasta("");
             setTempMesesExtra("1");
             setTempVenceMotivo("");
@@ -4420,7 +4438,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 variant="outline"
                 onClick={() => {
                   setTempVenceTipo("membresia");
-                  setTempVenceFechaDesde(isoDay(new Date()));
+                  // Empalmar desde el vencimiento actual si el alumno está activo
+                  const memDesde =
+                    accessStats && !accessStats.isExpired
+                      ? isoDay(accessStats.estimatedEnd)
+                      : isoDay(new Date());
+                  setTempVenceFechaDesde(memDesde);
                   setTempVenceFechaHasta("");
                   // Membresía: cada solicitud agrega +1 mes (delta fijo)
                   setTempMesesExtra("1");
@@ -4446,7 +4469,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
                     setTempVenceTipo(next);
                     if (next === "membresia") {
                       setTempMesesExtra("1");
-                      setTempVenceFechaDesde(isoDay(new Date()));
+                      // Empalmar desde el vencimiento actual si el alumno está activo
+                      const memDesde =
+                        accessStats && !accessStats.isExpired
+                          ? isoDay(accessStats.estimatedEnd)
+                          : isoDay(new Date());
+                      setTempVenceFechaDesde(memDesde);
                       setTempVenceFechaHasta("");
                     } else {
                       setTempMesesExtra("0");
