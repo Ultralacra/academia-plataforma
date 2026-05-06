@@ -470,6 +470,7 @@ function CopyAgentWorkspace() {
           body: JSON.stringify({
             messages: history,
             agentType: selectedAgentId,
+            provider: localStorage.getItem("agents-ai-provider") ?? "openai",
           }),
           signal: controller.signal,
         });
@@ -493,21 +494,19 @@ function CopyAgentWorkspace() {
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6).trim();
             if (data === "[DONE]") break;
+            let parsed: { text?: string; error?: string };
             try {
-              const parsed = JSON.parse(data) as {
-                text?: string;
-                error?: string;
-              };
-              if (parsed.error) throw new Error(parsed.error);
-              if (parsed.text) {
-                accumulated += parsed.text;
-                // Programar flush solo si no hay uno pendiente
-                if (rafHandle === null) {
-                  rafHandle = requestAnimationFrame(flushStreaming);
-                }
-              }
+              parsed = JSON.parse(data) as { text?: string; error?: string };
             } catch {
-              // skip malformed lines
+              continue; // línea malformada, ignorar
+            }
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.text) {
+              accumulated += parsed.text;
+              // Programar flush solo si no hay uno pendiente
+              if (rafHandle === null) {
+                rafHandle = requestAnimationFrame(flushStreaming);
+              }
             }
           }
         }

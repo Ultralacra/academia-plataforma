@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,18 +36,11 @@ Para otras preguntas, responde con tablas y bullets en español, usando SIEMPRE 
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY no configurada en el servidor." },
-        { status: 500 },
-      );
-    }
-
     const body = (await req.json().catch(() => ({}))) as {
       messages?: InMessage[];
       analysis?: unknown;
       top_informantes?: unknown;
+      provider?: string;
       // compat con versión anterior
       coaches?: unknown;
     };
@@ -87,6 +81,47 @@ export async function POST(req: NextRequest) {
     }
 
     const systemWithContext = contextParts.join("\n");
+
+    // Determinar proveedor
+    const provider = body.provider === "openai" ? "openai" : "anthropic";
+
+    if (provider === "openai") {
+      // ── OpenAI ────────────────────────────────────────────────────────────
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return NextResponse.json(
+          { error: "OPENAI_API_KEY no configurada en el servidor." },
+          { status: 500 },
+        );
+      }
+      const modelId = process.env.OPENAI_MODEL ?? "gpt-4o";
+      const client = new OpenAI({ apiKey });
+
+      const completion = await client.chat.completions.create({
+        model: modelId,
+        max_tokens: 2000,
+        messages: [
+          { role: "system", content: systemWithContext },
+          ...messages.map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: String(m.content ?? ""),
+          })),
+        ],
+      });
+
+      const text = completion.choices[0]?.message?.content?.trim() ?? "";
+      return NextResponse.json({ text });
+    }
+
+    // ── Anthropic (default) ───────────────────────────────────────────────
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "ANTHROPIC_API_KEY no configurada en el servidor." },
+        { status: 500 },
+      );
+    }
+
     const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-5";
 
     const apiRes = await fetch("https://api.anthropic.com/v1/messages", {

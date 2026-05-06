@@ -624,6 +624,7 @@ function AtcAgentWorkspace() {
           messages: payloadMessages,
           analysis,
           top_informantes: topInformantes,
+          provider: localStorage.getItem("agents-ai-provider") ?? "anthropic",
         }),
       });
 
