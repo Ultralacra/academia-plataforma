@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -33,9 +33,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
+import { getAuthToken } from "@/lib/auth";
 import {
   BUSINESS_FORMULAS,
-  BUSINESS_METRICS_STORAGE_KEY,
   buildBusinessSeedState,
   calculateBusinessKpis,
   calculateBusinessSummary,
@@ -51,14 +51,17 @@ import {
   Activity,
   BarChart2,
   Calculator,
-  Database,
+  Check,
   DollarSign,
   LineChart,
   Lock,
   Pencil,
   Plus,
+  Receipt,
+  TrendingDown,
   TrendingUp,
   Trash2,
+  Zap,
 } from "lucide-react";
 
 const EMPTY_MONTH_FORM: BusinessMonthRecord = {
@@ -124,17 +127,26 @@ function BusinessMetricsContent() {
   const [state, setState] = useState<BusinessMetricsState>(
     buildBusinessSeedState,
   );
-  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [metaId, setMetaId] = useState<string | null>(null);
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [fromMonth, setFromMonth] = useState("");
+  const [toMonth, setToMonth] = useState("");
   const [monthForm, setMonthForm] =
     useState<BusinessMonthRecord>(EMPTY_MONTH_FORM);
   const [expenseForm, setExpenseForm] =
     useState<BusinessExpenseEntry>(EMPTY_EXPENSE_FORM);
   const [editingMonthId, setEditingMonthId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
   const [secondaryAuthed, setSecondaryAuthed] = useState(false);
   const [pwInput, setPwInput] = useState("");
   const [pwError, setPwError] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipSaveRef = useRef(false);
+  const [importingSnapshot, setImportingSnapshot] = useState(false);
+  const [importedFields, setImportedFields] = useState<string[]>([]);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStorage.getItem(BM_SESSION_KEY) === "1") {
@@ -152,51 +164,132 @@ function BusinessMetricsContent() {
     }
   };
 
+  // Carga desde backend al autenticarse
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(BUSINESS_METRICS_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<BusinessMetricsState>;
-        setState({
-          records: Array.isArray(parsed.records)
-            ? sortBusinessRecords(parsed.records as BusinessMonthRecord[])
-            : buildBusinessSeedState().records,
-          expenses: Array.isArray(parsed.expenses)
-            ? sortBusinessExpenses(parsed.expenses as BusinessExpenseEntry[])
-            : buildBusinessSeedState().expenses,
+    if (!user?.id) return;
+    let cancelled = false;
+    async function load() {
+      setLoadingMeta(true);
+      try {
+        const token = getAuthToken();
+        const res = await fetch("/api/metadata-v2", {
+          headers: { Authorization: `Bearer ${token ?? ""}` },
+          cache: "no-store",
         });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json().catch(() => null);
+        const items: any[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.data)
+            ? json.data
+            : Array.isArray(json?.items)
+              ? json.items
+              : [];
+        const found = items.find(
+          (m: any) =>
+            m?.entity === "business_metrics_state" &&
+            String(m?.entity_id ?? "") === "global",
+        );
+        if (cancelled) return;
+        if (found) {
+          const pl = found.payload ?? {};
+          const next: BusinessMetricsState = {
+            records: Array.isArray(pl.records)
+              ? sortBusinessRecords(pl.records as BusinessMonthRecord[])
+              : buildBusinessSeedState().records,
+            expenses: Array.isArray(pl.expenses)
+              ? sortBusinessExpenses(pl.expenses as BusinessExpenseEntry[])
+              : buildBusinessSeedState().expenses,
+          };
+          skipSaveRef.current = true;
+          setState(next);
+          setMetaId(String(found.id));
+        } else {
+          // Primera vez: guardar seed en backend
+          const seed = buildBusinessSeedState();
+          const postRes = await fetch("/api/metadata-v2", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token ?? ""}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              entity: "business_metrics_state",
+              entity_id: "global",
+              payload: seed,
+            }),
+          });
+          if (cancelled) return;
+          if (postRes.ok) {
+            const postJson = await postRes.json().catch(() => null);
+            const newId = postJson?.id ?? null;
+            if (newId) {
+              skipSaveRef.current = true;
+              setMetaId(String(newId));
+            }
+          }
+        }
+      } catch {
+        // fallback silencioso — state ya tiene seed
+      } finally {
+        if (!cancelled) setLoadingMeta(false);
       }
-    } catch {
-      setState(buildBusinessSeedState());
-    } finally {
-      setHydrated(true);
     }
-  }, []);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
+  // Guardado automático con debounce de 1.5s
   useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(
-      BUSINESS_METRICS_STORAGE_KEY,
-      JSON.stringify(state),
-    );
-  }, [hydrated, state]);
-
-  const monthOptions = useMemo(
-    () => sortBusinessRecords(state.records).map((record) => record.month),
-    [state.records],
-  );
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
+    if (!metaId) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSavingMeta(true);
+    const id = metaId;
+    const snapshot = state;
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const token = getAuthToken();
+        await fetch(`/api/metadata-v2/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token ?? ""}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            entity: "business_metrics_state",
+            entity_id: "global",
+            payload: snapshot,
+          }),
+        });
+      } finally {
+        setSavingMeta(false);
+      }
+    }, 1500);
+  }, [state, metaId]);
 
   const visibleRecords = useMemo(() => {
     const sorted = sortBusinessRecords(state.records);
-    if (selectedMonth === "all") return sorted;
-    return sorted.filter((record) => record.month === selectedMonth);
-  }, [selectedMonth, state.records]);
+    return sorted.filter((record) => {
+      if (fromMonth && record.month < fromMonth) return false;
+      if (toMonth && record.month > toMonth) return false;
+      return true;
+    });
+  }, [fromMonth, toMonth, state.records]);
 
   const visibleExpenses = useMemo(() => {
     const sorted = sortBusinessExpenses(state.expenses);
-    if (selectedMonth === "all") return sorted;
-    return sorted.filter((expense) => expense.month === selectedMonth);
-  }, [selectedMonth, state.expenses]);
+    return sorted.filter((expense) => {
+      if (fromMonth && expense.month < fromMonth) return false;
+      if (toMonth && expense.month > toMonth) return false;
+      return true;
+    });
+  }, [fromMonth, toMonth, state.expenses]);
 
   const derivedRows = useMemo(
     () =>
@@ -229,6 +322,130 @@ function BusinessMetricsContent() {
     }
     return map;
   }, [state.records]);
+
+  // ── Fase 2: totales auto-derivados desde partidas ─────────────────────────
+  // Si hay partidas cargadas para un mes, los totales se calculan solos.
+  // El maestro mensual sigue siendo el "override" si no hay partidas.
+  const expenseAutoTotals = useMemo(() => {
+    const map = new Map<string, { operativo: number; ventas: number }>();
+    for (const expense of state.expenses) {
+      const cur = map.get(expense.month) ?? { operativo: 0, ventas: 0 };
+      cur[expense.scope] += expense.amount;
+      map.set(expense.month, cur);
+    }
+    return map;
+  }, [state.expenses]);
+
+  // ── Fase 3: datos de cohorte ──────────────────────────────────────────────
+  // Agrupa alumnos (desde los registros mensuales) por mes de ingreso y
+  // calcula retención relativa usando newClients de cada mes.
+  const cohortData = useMemo(() => {
+    const sorted = sortBusinessRecords(state.records);
+    if (sorted.length === 0) return [];
+
+    // Mapa de activos por mes para calcular retención
+    const activeMap = new Map<string, number>();
+    for (const r of sorted) {
+      activeMap.set(r.month, r.activeStudents);
+    }
+
+    return sorted.map((record) => {
+      const kpis = calculateBusinessKpis(record);
+      // Retención implícita: alumnos activos del mes / total acumulado hasta ese mes
+      const totalAcumulated = sorted
+        .filter((r) => r.month <= record.month)
+        .reduce((acc, r) => acc + r.newClients, 0);
+      const retentionRate =
+        totalAcumulated > 0
+          ? Math.round((record.activeStudents / totalAcumulated) * 1000) / 1000
+          : null;
+
+      // LTV real: suma de revenue en los meses posteriores al ingreso de esta cohorte
+      // (aproximación: revenue del mes / highTicketClients)
+      const revenuePerClient =
+        record.highTicketClients > 0
+          ? record.highTicketRevenue / record.highTicketClients
+          : 0;
+
+      return {
+        month: record.month,
+        newClients: record.newClients,
+        highTicketClients: record.highTicketClients,
+        activeStudents: record.activeStudents,
+        revenue: record.highTicketRevenue,
+        revenuePerClient,
+        retentionRate,
+        ltgpExcel: kpis.ltgpExcel,
+        ltgpProjected: kpis.ltgpProjected,
+        cac: kpis.cac,
+        benefitPerClient: kpis.benefitPerClient,
+        roic: kpis.roic,
+        paybackMonths: kpis.paybackMonths,
+        // Ratio contado vs cuotas: no disponible desde este estado, placeholder
+        modalidadRatio: null as null,
+        expensesOperativo: expenseAutoTotals.get(record.month)?.operativo ?? 0,
+        expensesVentas: expenseAutoTotals.get(record.month)?.ventas ?? 0,
+      };
+    });
+  }, [state.records, expenseAutoTotals]);
+
+  const importSnapshot = async (month: string) => {
+    if (!month) return;
+    setImportingSnapshot(true);
+    setSnapshotError(null);
+    setImportedFields([]);
+    try {
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metrics/monthly-snapshot?month=${encodeURIComponent(month)}`,
+        {
+          headers: { Authorization: `Bearer ${token ?? ""}` },
+          cache: "no-store",
+        },
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        setSnapshotError(text || `Error HTTP ${res.status}`);
+        return;
+      }
+      const json = await res.json().catch(() => null);
+      const calc = json?.calculated ?? {};
+      const filled: string[] = [];
+      setMonthForm((prev) => {
+        const next = { ...prev };
+        if (calc.newClients != null) {
+          next.newClients = calc.newClients;
+          filled.push("Nuevos clientes");
+        }
+        if (calc.highTicketClients != null) {
+          next.highTicketClients = calc.highTicketClients;
+          filled.push("Clientes HT");
+        }
+        if (calc.activeStudents != null) {
+          next.activeStudents = calc.activeStudents;
+          filled.push("Alumnos activos");
+        }
+        if (calc.highTicketRevenue != null) {
+          next.highTicketRevenue = calc.highTicketRevenue;
+          filled.push("Revenue HT");
+        }
+        if (calc.delinquencyRate != null) {
+          next.delinquencyRate = calc.delinquencyRate;
+          filled.push("Morosidad");
+        }
+        if (calc.durationMonths != null) {
+          next.durationMonths = calc.durationMonths;
+          filled.push("Duración media");
+        }
+        return next;
+      });
+      setImportedFields(filled);
+    } catch (e: any) {
+      setSnapshotError(e?.message ?? "Error inesperado");
+    } finally {
+      setImportingSnapshot(false);
+    }
+  };
 
   const resetMonthForm = () => {
     setMonthForm(EMPTY_MONTH_FORM);
@@ -286,7 +503,7 @@ function BusinessMetricsContent() {
     resetExpenseForm();
   };
 
-  if (isLoading || !hydrated) {
+  if (isLoading || loadingMeta) {
     return null;
   }
 
@@ -369,140 +586,239 @@ function BusinessMetricsContent() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Inteligencia de negocio</h1>
+            <h1 className="text-2xl font-bold bg-linear-to-r from-violet-600 via-blue-600 to-emerald-500 bg-clip-text text-transparent">
+              Inteligencia de negocio
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Módulo confidencial con base inicial del Excel, CRUD operativo y
-              KPIs recalculados en tiempo real.
+              Módulo confidencial — KPIs recalculados en tiempo real.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Badge variant="secondary" className="justify-center">
-              Confidencial
-            </Badge>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-55">
-                <SelectValue placeholder="Filtrar mes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los meses</SelectItem>
-                {monthOptions.map((month) => (
-                  <SelectItem key={month} value={month}>
-                    {formatMonthLabel(month)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">Confidencial</Badge>
+            {savingMeta && (
+              <Badge variant="outline" className="text-muted-foreground">
+                Guardando…
+              </Badge>
+            )}
+            {!savingMeta && metaId && (
+              <Badge
+                variant="outline"
+                className="text-green-600 dark:text-green-400"
+              >
+                <Check className="mr-1 h-3 w-3" />
+                Sincronizado
+              </Badge>
+            )}
+            <div className="flex items-center gap-1">
+              <Label className="text-xs text-muted-foreground shrink-0">
+                Desde
+              </Label>
+              <Input
+                type="month"
+                value={fromMonth}
+                onChange={(e) => setFromMonth(e.target.value)}
+                className="w-36 h-8 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <Label className="text-xs text-muted-foreground shrink-0">
+                Hasta
+              </Label>
+              <Input
+                type="month"
+                value={toMonth}
+                onChange={(e) => setToMonth(e.target.value)}
+                className="w-36 h-8 text-sm"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const now = new Date();
+                const m3 = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                setFromMonth(
+                  `${m3.getFullYear()}-${String(m3.getMonth() + 1).padStart(2, "0")}`,
+                );
+                setToMonth(
+                  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+                );
+              }}
+            >
+              Últ. 3m
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const now = new Date();
+                const m6 = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+                setFromMonth(
+                  `${m6.getFullYear()}-${String(m6.getMonth() + 1).padStart(2, "0")}`,
+                );
+                setToMonth(
+                  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+                );
+              }}
+            >
+              Últ. 6m
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFromMonth("");
+                setToMonth("");
+              }}
+            >
+              Todo
+            </Button>
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <Card>
-            <CardHeader>
-              <CardDescription>CAC ponderado</CardDescription>
-              <CardTitle>{formatCurrency(summary.weightedCac)}</CardTitle>
+          <Card className="border-l-4 border-l-orange-400 dark:border-l-orange-500">
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
+                <DollarSign className="h-3 w-3" />
+                CAC ponderado
+              </CardDescription>
+              <CardTitle className="text-orange-700 dark:text-orange-300">
+                {formatCurrency(summary.weightedCac)}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Coste de adquisición medio ponderado sobre{" "}
-              {summary.totalNewClients} altas.
+            <CardContent className="text-xs text-muted-foreground">
+              {summary.totalNewClients} nuevas altas en el periodo.
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>Ingreso medio por cliente</CardDescription>
-              <CardTitle>
+          <Card className="border-l-4 border-l-green-500 dark:border-l-green-400">
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1 text-green-700 dark:text-green-400">
+                <TrendingUp className="h-3 w-3" />
+                Ingreso / cliente
+              </CardDescription>
+              <CardTitle className="text-green-700 dark:text-green-300">
                 {formatCurrency(summary.weightedIncomePerClient)}
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Ingreso neto tras morosidad sobre {summary.totalHighTicketClients}{" "}
-              clientes HT.
+            <CardContent className="text-xs text-muted-foreground">
+              {summary.totalHighTicketClients} clientes HT.
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>3. Costo operativo por cliente</CardDescription>
-              <CardTitle>
+          <Card className="border-l-4 border-l-blue-500 dark:border-l-blue-400">
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1 text-blue-700 dark:text-blue-400">
+                <Receipt className="h-3 w-3" />
+                Costo op. / cliente
+              </CardDescription>
+              <CardTitle className="text-blue-700 dark:text-blue-300">
                 {formatCurrency(summary.weightedCostPerClient)}
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Costo operativo mensual medio por alumno activo en el periodo
-              filtrado.
+            <CardContent className="text-xs text-muted-foreground">
+              Mensual. {summary.totalActiveStudents} alumnos activos.
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>
-                Costo operativo por cliente (4 meses)
+          <Card className="border-l-4 border-l-indigo-500 dark:border-l-indigo-400">
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1 text-indigo-700 dark:text-indigo-400">
+                <Calculator className="h-3 w-3" />
+                Costo total / cliente
               </CardDescription>
-              <CardTitle>
+              <CardTitle className="text-indigo-700 dark:text-indigo-300">
                 {formatCurrency(summary.weightedTotalCostPerClient)}
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Replica la hoja del Excel a duración media del cliente.
+            <CardContent className="text-xs text-muted-foreground">
+              A duración media del cliente (4 m).
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>ROIC medio</CardDescription>
-              <CardTitle>{formatPercent(summary.weightedRoic)}</CardTitle>
+          <Card
+            className={`border-l-4 ${summary.weightedRoic >= 0 ? "border-l-purple-500 dark:border-l-purple-400" : "border-l-red-500 dark:border-l-red-400"}`}
+          >
+            <CardHeader className="pb-2">
+              <CardDescription
+                className={`flex items-center gap-1 ${summary.weightedRoic >= 0 ? "text-purple-700 dark:text-purple-400" : "text-red-600 dark:text-red-400"}`}
+              >
+                <Zap className="h-3 w-3" />
+                ROIC medio
+              </CardDescription>
+              <CardTitle
+                className={
+                  summary.weightedRoic >= 0
+                    ? "text-purple-700 dark:text-purple-300"
+                    : "text-red-600 dark:text-red-400"
+                }
+              >
+                {formatPercent(summary.weightedRoic)}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Calculado con gastos ROIC y ventas/marketing del periodo filtrado.
+            <CardContent className="text-xs text-muted-foreground">
+              Retorno sobre inversión operativa.
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>Valor bruto generado</CardDescription>
-              <CardTitle>
+          <Card className="border-l-4 border-l-emerald-500 dark:border-l-emerald-400">
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                <BarChart2 className="h-3 w-3" />
+                Valor bruto generado
+              </CardDescription>
+              <CardTitle className="text-emerald-700 dark:text-emerald-300">
                 {formatCurrency(summary.totalGrossValueGenerated)}
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Suma de clientes HT multiplicada por LTGP réplica Excel.
+            <CardContent className="text-xs text-muted-foreground">
+              Clientes HT × LTGP en el periodo.
             </CardContent>
           </Card>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
+          <Card className="border-l-4 border-l-sky-500">
+            <CardHeader className="bg-sky-50/50 dark:bg-sky-950/30 rounded-t-lg pb-2">
+              <CardTitle className="flex items-center gap-2 text-base text-sky-700 dark:text-sky-300">
                 <Calculator className="h-4 w-4" />
                 Resumen ejecutivo
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="space-y-2 text-sm pt-4">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Facturación HT</span>
-                <span>{formatCurrency(summary.totalRevenue)}</span>
+                <span className="font-medium text-green-700 dark:text-green-400">
+                  {formatCurrency(summary.totalRevenue)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">
                   Inversión adquisición
                 </span>
-                <span>{formatCurrency(summary.totalAcquisitionCost)}</span>
+                <span className="text-orange-600 dark:text-orange-400">
+                  {formatCurrency(summary.totalAcquisitionCost)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Costo operativo</span>
-                <span>{formatCurrency(summary.totalOperatingCost)}</span>
+                <span className="text-blue-600 dark:text-blue-400">
+                  {formatCurrency(summary.totalOperatingCost)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">
                   Ventas + marketing
                 </span>
-                <span>{formatCurrency(summary.totalMarketingSalesCost)}</span>
+                <span className="text-violet-600 dark:text-violet-400">
+                  {formatCurrency(summary.totalMarketingSalesCost)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">
-                  3. Costo operativo por cliente
+                  Costo op. / cliente
                 </span>
                 <span>{formatCurrency(summary.weightedCostPerClient)}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">
-                  Costo operativo por cliente (4 meses)
+                  Costo total / cliente
                 </span>
                 <span>
                   {formatCurrency(summary.weightedTotalCostPerClient)}
@@ -516,32 +832,54 @@ function BusinessMetricsContent() {
                 <span className="text-muted-foreground">
                   Entrada vs salida media
                 </span>
-                <span>{summary.avgEntryVsExit.toFixed(2)}x</span>
+                <span
+                  className={
+                    summary.avgEntryVsExit >= 1.2
+                      ? "font-semibold text-green-600 dark:text-green-400"
+                      : summary.avgEntryVsExit >= 1
+                        ? "text-yellow-600 dark:text-yellow-400"
+                        : "font-semibold text-red-600 dark:text-red-400"
+                  }
+                >
+                  {summary.avgEntryVsExit.toFixed(2)}x
+                </span>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
+          <Card className="border-l-4 border-l-violet-500">
+            <CardHeader className="bg-violet-50/50 dark:bg-violet-950/30 rounded-t-lg pb-2">
+              <CardTitle className="flex items-center gap-2 text-base text-violet-700 dark:text-violet-300">
                 <LineChart className="h-4 w-4" />
                 KPI avanzado
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="space-y-2 text-sm pt-4">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">
                   Margen medio / cliente
                 </span>
-                <span>{formatCurrency(summary.weightedMarginPerClient)}</span>
+                <span
+                  className={
+                    summary.weightedMarginPerClient >= 0
+                      ? "font-medium text-green-600 dark:text-green-400"
+                      : "font-medium text-red-600 dark:text-red-400"
+                  }
+                >
+                  {formatCurrency(summary.weightedMarginPerClient)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">LTGP Excel</span>
-                <span>{formatCurrency(summary.weightedLtgpExcel)}</span>
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(summary.weightedLtgpExcel)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">LTGP proyectado</span>
-                <span>{formatCurrency(summary.weightedLtgpProjected)}</span>
+                <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                  {formatCurrency(summary.weightedLtgpProjected)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">
@@ -551,50 +889,83 @@ function BusinessMetricsContent() {
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Alumnos activos</span>
-                <span>{summary.totalActiveStudents}</span>
+                <span className="font-semibold">
+                  {summary.totalActiveStudents}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Clientes HT</span>
-                <span>{summary.totalHighTicketClients}</span>
+                <span className="font-semibold">
+                  {summary.totalHighTicketClients}
+                </span>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Database className="h-4 w-4" />
-                Persistencia actual
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                Los cambios de este módulo quedan guardados en el navegador
-                actual para iterar rápido sobre la base del Excel.
-              </p>
-              <p>Registros mensuales: {state.records.length}</p>
-              <p>Partidas de gasto: {state.expenses.length}</p>
-              <Button
-                variant="outline"
-                onClick={() => setState(buildBusinessSeedState())}
-              >
-                Restaurar base inicial
-              </Button>
             </CardContent>
           </Card>
         </div>
 
-        <Tabs defaultValue="overview">
-          <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="overview">Vista general</TabsTrigger>
-            <TabsTrigger value="adquisicion">1-2. CAC e Ingresos</TabsTrigger>
-            <TabsTrigger value="costos-op">3. Costo operativo</TabsTrigger>
-            <TabsTrigger value="rentabilidad">4-8. Rentabilidad</TabsTrigger>
-            <TabsTrigger value="roic-detail">9. ROIC detalle</TabsTrigger>
-            <TabsTrigger value="dinamica">10-13. Dinámica</TabsTrigger>
-            <TabsTrigger value="months">CRUD mensual</TabsTrigger>
-            <TabsTrigger value="expenses">Partidas</TabsTrigger>
-            <TabsTrigger value="formulas">Fórmulas</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="flex-wrap h-auto bg-muted/70 gap-1 p-1">
+            <TabsTrigger
+              value="overview"
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+            >
+              Vista general
+            </TabsTrigger>
+            <TabsTrigger
+              value="adquisicion"
+              className="data-[state=active]:bg-orange-500 data-[state=active]:text-white"
+            >
+              1-2. CAC e Ingresos
+            </TabsTrigger>
+            <TabsTrigger
+              value="costos-op"
+              className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+            >
+              3. Costo operativo
+            </TabsTrigger>
+            <TabsTrigger
+              value="rentabilidad"
+              className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
+            >
+              4-8. Rentabilidad
+            </TabsTrigger>
+            <TabsTrigger
+              value="roic-detail"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
+            >
+              9. ROIC detalle
+            </TabsTrigger>
+            <TabsTrigger
+              value="dinamica"
+              className="data-[state=active]:bg-teal-600 data-[state=active]:text-white"
+            >
+              10-13. Dinámica
+            </TabsTrigger>
+            <TabsTrigger
+              value="months"
+              className="data-[state=active]:bg-slate-700 data-[state=active]:text-white"
+            >
+              CRUD mensual
+            </TabsTrigger>
+            <TabsTrigger
+              value="expenses"
+              className="data-[state=active]:bg-rose-600 data-[state=active]:text-white"
+            >
+              <Receipt className="mr-1 h-3 w-3" />
+              Partidas / costos
+            </TabsTrigger>
+            <TabsTrigger
+              value="academia"
+              className="data-[state=active]:bg-violet-600 data-[state=active]:text-white"
+            >
+              Academia
+            </TabsTrigger>
+            <TabsTrigger
+              value="formulas"
+              className="data-[state=active]:bg-gray-700 data-[state=active]:text-white"
+            >
+              Fórmulas
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -647,8 +1018,18 @@ function BusinessMetricsContent() {
                           {formatCurrency(kpis.ltgpProjected)}
                         </TableCell>
                         <TableCell>{kpis.paybackMonths.toFixed(2)} m</TableCell>
-                        <TableCell>{formatPercent(kpis.roic)}</TableCell>
-                        <TableCell>
+                        <TableCell
+                          className={`font-bold ${
+                            kpis.roic >= 0.3
+                              ? "text-green-600 dark:text-green-400"
+                              : kpis.roic >= 0
+                                ? "text-yellow-600 dark:text-yellow-500"
+                                : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
+                          {formatPercent(kpis.roic)}
+                        </TableCell>
+                        <TableCell className="font-bold text-emerald-700 dark:text-emerald-300">
                           {formatCurrency(kpis.grossValueGenerated)}
                         </TableCell>
                       </TableRow>
@@ -708,215 +1089,335 @@ function BusinessMetricsContent() {
           </TabsContent>
 
           <TabsContent value="months" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {editingMonthId ? "Editar mes" : "Nuevo mes"}
-                </CardTitle>
-                <CardDescription>
-                  Este maestro alimenta todos los KPIs: adquisición, ingresos,
-                  churn, costos y ROIC.
-                </CardDescription>
+            <Card className="border-slate-200 dark:border-slate-700">
+              <CardHeader className="bg-slate-50/50 dark:bg-slate-900/30 rounded-t-lg">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-slate-800 dark:text-slate-200">
+                      {editingMonthId ? "Editar mes" : "Nuevo mes"}
+                    </CardTitle>
+                    <CardDescription>
+                      Ingresa el mes y los costos externos. Los demás campos se
+                      pueden importar automáticamente.
+                    </CardDescription>
+                  </div>
+                  {monthForm.month && (
+                    <div className="flex flex-col items-end gap-1">
+                      <Button
+                        size="sm"
+                        className="bg-sky-600 hover:bg-sky-700 text-white shrink-0"
+                        disabled={importingSnapshot || !monthForm.month}
+                        onClick={() => importSnapshot(monthForm.month)}
+                      >
+                        {importingSnapshot ? (
+                          <>
+                            <span className="mr-2 h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            Cargando…
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="mr-1 h-4 w-4" />
+                            Importar desde sistema
+                          </>
+                        )}
+                      </Button>
+                      {importedFields.length > 0 && (
+                        <p className="text-xs text-sky-600 dark:text-sky-400">
+                          Auto-rellenado: {importedFields.join(", ")}
+                        </p>
+                      )}
+                      {snapshotError && (
+                        <p className="text-xs text-red-500">{snapshotError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="space-y-2">
-                  <Label>Mes</Label>
-                  <Input
-                    type="month"
-                    value={monthForm.month}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        month: e.target.value,
-                      }))
-                    }
-                  />
+              <CardContent className="space-y-6">
+                {/* Sección: Mes */}
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="space-y-2 xl:col-span-4">
+                    <Label className="text-sm font-semibold">Mes</Label>
+                    <div className="flex gap-3 items-end">
+                      <Input
+                        type="month"
+                        value={monthForm.month}
+                        className="w-52"
+                        onChange={(e) => {
+                          setImportedFields([]);
+                          setSnapshotError(null);
+                          setMonthForm((current) => ({
+                            ...current,
+                            month: e.target.value,
+                          }));
+                        }}
+                      />
+                      {!monthForm.month && (
+                        <p className="text-xs text-muted-foreground">
+                          Elige un mes y luego usa “Importar desde sistema” para
+                          auto-rellenar los campos calculables.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>ADS</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.ads}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        ads: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
+
+                {/* Sección: Costos externos (SIEMPRE manuales) */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-400 mb-3">
+                    Costos externos — ingreso manual
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="space-y-2">
+                      <Label>ADS</Label>
+                      <Input
+                        type="number"
+                        value={monthForm.ads}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            ads: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Comisiones closer</Label>
+                      <Input
+                        type="number"
+                        value={monthForm.closerCommissions}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            closerCommissions: parseNumericInput(
+                              e.target.value,
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Carla + bonos</Label>
+                      <Input
+                        type="number"
+                        value={monthForm.carlaBonus}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            carlaBonus: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Ventas + marketing
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          = ADS + Comisiones + Carla
+                        </Badge>
+                      </Label>
+                      <Input
+                        type="number"
+                        value={
+                          monthForm.marketingSalesCost !== 0
+                            ? monthForm.marketingSalesCost
+                            : monthForm.ads +
+                              monthForm.closerCommissions +
+                              monthForm.carlaBonus
+                        }
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            marketingSalesCost: parseNumericInput(
+                              e.target.value,
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Costo operativo mensual</Label>
+                      <Input
+                        type="number"
+                        value={monthForm.operatingCostMonthly}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            operatingCostMonthly: parseNumericInput(
+                              e.target.value,
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Gasto operativo ROIC</Label>
+                      <Input
+                        type="number"
+                        value={monthForm.roicOperationalCost}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            roicOperationalCost: parseNumericInput(
+                              e.target.value,
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Comisiones closer</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.closerCommissions}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        closerCommissions: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
+
+                {/* Sección: Campos calculables desde el sistema */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-400 mb-3">
+                    Datos del sistema — auto-importables
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Nuevos clientes
+                        {importedFields.includes("Nuevos clientes") && (
+                          <Check className="h-3 w-3 text-sky-500" />
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        value={monthForm.newClients}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            newClients: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Ingresos high ticket
+                        {importedFields.includes("Revenue HT") && (
+                          <Check className="h-3 w-3 text-sky-500" />
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        value={monthForm.highTicketRevenue}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            highTicketRevenue: parseNumericInput(
+                              e.target.value,
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Morosidad
+                        {importedFields.includes("Morosidad") && (
+                          <Check className="h-3 w-3 text-sky-500" />
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={monthForm.delinquencyRate}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            delinquencyRate: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Clientes HT
+                        {importedFields.includes("Clientes HT") && (
+                          <Check className="h-3 w-3 text-sky-500" />
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        value={monthForm.highTicketClients}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            highTicketClients: parseNumericInput(
+                              e.target.value,
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Alumnos activos
+                        {importedFields.includes("Alumnos activos") && (
+                          <Check className="h-3 w-3 text-sky-500" />
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        value={monthForm.activeStudents}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            activeStudents: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Duración media
+                        {importedFields.includes("Duración media") && (
+                          <Check className="h-3 w-3 text-sky-500" />
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={monthForm.durationMonths}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            durationMonths: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Churn estructural</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={monthForm.churnRate}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            churnRate: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Notas</Label>
+                      <Textarea
+                        value={monthForm.notes ?? ""}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            notes: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Carla + bonos</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.carlaBonus}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        carlaBonus: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nuevos clientes</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.newClients}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        newClients: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Ingresos high ticket</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.highTicketRevenue}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        highTicketRevenue: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Morosidad</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={monthForm.delinquencyRate}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        delinquencyRate: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Clientes HT</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.highTicketClients}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        highTicketClients: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Alumnos activos</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.activeStudents}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        activeStudents: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Duración media</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={monthForm.durationMonths}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        durationMonths: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Churn estructural</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={monthForm.churnRate}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        churnRate: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Costo operativo mensual</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.operatingCostMonthly}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        operatingCostMonthly: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Gasto operativo ROIC</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.roicOperationalCost}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        roicOperationalCost: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Ventas + marketing</Label>
-                  <Input
-                    type="number"
-                    value={monthForm.marketingSalesCost}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        marketingSalesCost: parseNumericInput(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2 xl:col-span-2">
-                  <Label>Notas</Label>
-                  <Textarea
-                    value={monthForm.notes ?? ""}
-                    onChange={(e) =>
-                      setMonthForm((current) => ({
-                        ...current,
-                        notes: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
+
+                <div className="flex items-center gap-2">
                   <Button onClick={upsertMonth}>
                     {editingMonthId ? "Guardar cambios" : "Agregar mes"}
                   </Button>
@@ -1009,10 +1510,13 @@ function BusinessMetricsContent() {
           </TabsContent>
 
           <TabsContent value="expenses" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {editingExpenseId ? "Editar partida" : "Nueva partida"}
+            <Card className="border-rose-200 dark:border-rose-800">
+              <CardHeader className="bg-rose-50/50 dark:bg-rose-950/30 rounded-t-lg">
+                <CardTitle className="text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                  <Receipt className="h-4 w-4" />
+                  {editingExpenseId
+                    ? "Editar partida"
+                    : "Nueva partida de costo"}
                 </CardTitle>
                 <CardDescription>
                   Desglose manual para enriquecer el análisis. Sirve para
@@ -1128,11 +1632,12 @@ function BusinessMetricsContent() {
                         <TableCell>{formatMonthLabel(expense.month)}</TableCell>
                         <TableCell>
                           <Badge
-                            variant={
+                            className={
                               expense.scope === "operativo"
-                                ? "secondary"
-                                : "outline"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-700"
+                                : "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-700"
                             }
+                            variant="outline"
                           >
                             {expense.scope}
                           </Badge>
@@ -1277,6 +1782,23 @@ function BusinessMetricsContent() {
           </TabsContent>
 
           <TabsContent value="costos-op" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Costos por alumno activo y desglose de partidas operativas.
+              </p>
+              <Button
+                className="bg-rose-600 hover:bg-rose-700 text-white"
+                size="sm"
+                onClick={() => {
+                  resetExpenseForm();
+                  setExpenseForm((f) => ({ ...f, scope: "operativo" }));
+                  setActiveTab("expenses");
+                }}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Nueva partida operativa
+              </Button>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1358,11 +1880,12 @@ function BusinessMetricsContent() {
                           </TableCell>
                           <TableCell>
                             <Badge
-                              variant={
+                              className={
                                 expense.scope === "operativo"
-                                  ? "secondary"
-                                  : "outline"
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-700"
+                                  : "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-700"
                               }
+                              variant="outline"
                             >
                               {expense.scope}
                             </Badge>
@@ -1468,18 +1991,27 @@ function BusinessMetricsContent() {
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
                         <TableCell>{formatCurrency(kpis.ltgpExcel)}</TableCell>
                         <TableCell>{formatCurrency(kpis.cac)}</TableCell>
-                        <TableCell className="font-bold">
+                        <TableCell
+                          className={`font-bold ${
+                            kpis.cacRatio >= 3
+                              ? "text-green-600 dark:text-green-400"
+                              : kpis.cacRatio >= 1
+                                ? "text-yellow-600 dark:text-yellow-500"
+                                : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
                           {kpis.cacRatio.toFixed(2)}x
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={
+                            className={
                               kpis.cacRatio >= 3
-                                ? "default"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-green-300"
                                 : kpis.cacRatio >= 1
-                                  ? "secondary"
-                                  : "destructive"
+                                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border-yellow-300"
+                                  : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-300"
                             }
+                            variant="outline"
                           >
                             {kpis.cacRatio >= 3
                               ? "Saludable"
@@ -1794,13 +2326,14 @@ function BusinessMetricsContent() {
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={
+                            className={
                               kpis.entryVsExit >= 1.2
-                                ? "default"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-green-300"
                                 : kpis.entryVsExit >= 1
-                                  ? "secondary"
-                                  : "destructive"
+                                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border-yellow-300"
+                                  : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-300"
                             }
+                            variant="outline"
                           >
                             {kpis.entryVsExit >= 1.2
                               ? "Crecimiento"
@@ -1853,6 +2386,233 @@ function BusinessMetricsContent() {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── Fase 3: Tab Academia ────────────────────────────────────────── */}
+          <TabsContent value="academia" className="space-y-4">
+            <Card>
+              <CardHeader className="bg-violet-50/60 dark:bg-violet-950/30 rounded-t-lg">
+                <CardTitle className="text-violet-800 dark:text-violet-300">
+                  Análisis de academia
+                </CardTitle>
+                <CardDescription>
+                  Cohortes, retención, LTV real vs proyectado y métricas de
+                  calidad por mes.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {cohortData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No hay datos. Agrega registros mensuales en la pestaña Base
+                    Mensual.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mes</TableHead>
+                          <TableHead className="text-right">Nuevos</TableHead>
+                          <TableHead className="text-right">HT</TableHead>
+                          <TableHead className="text-right">Activos</TableHead>
+                          <TableHead className="text-right">
+                            Retención
+                          </TableHead>
+                          <TableHead className="text-right">Revenue</TableHead>
+                          <TableHead className="text-right">
+                            Rev/cliente
+                          </TableHead>
+                          <TableHead className="text-right">CAC</TableHead>
+                          <TableHead className="text-right">
+                            LTGP real
+                          </TableHead>
+                          <TableHead className="text-right">
+                            LTGP proy.
+                          </TableHead>
+                          <TableHead className="text-right">Payback</TableHead>
+                          <TableHead className="text-right">ROIC</TableHead>
+                          <TableHead className="text-right">Op. (€)</TableHead>
+                          <TableHead className="text-right">
+                            Ventas (€)
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cohortData.map((row) => {
+                          const roicColor =
+                            row.roic == null
+                              ? ""
+                              : row.roic >= 0.3
+                                ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                                : row.roic >= 0
+                                  ? "text-yellow-600 dark:text-yellow-400"
+                                  : "text-red-600 dark:text-red-400 font-bold";
+                          const retColor =
+                            row.retentionRate == null
+                              ? ""
+                              : row.retentionRate >= 0.7
+                                ? "text-emerald-600"
+                                : row.retentionRate >= 0.4
+                                  ? "text-yellow-600"
+                                  : "text-red-500";
+                          return (
+                            <TableRow key={row.month}>
+                              <TableCell className="font-medium">
+                                {formatMonthLabel(row.month)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.newClients}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.highTicketClients}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.activeStudents}
+                              </TableCell>
+                              <TableCell className={`text-right ${retColor}`}>
+                                {row.retentionRate != null
+                                  ? `${(row.retentionRate * 100).toFixed(1)}%`
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatCurrency(row.revenue)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.revenuePerClient > 0
+                                  ? formatCurrency(row.revenuePerClient)
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.cac != null
+                                  ? formatCurrency(row.cac)
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.ltgpExcel != null
+                                  ? formatCurrency(row.ltgpExcel)
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.ltgpProjected != null
+                                  ? formatCurrency(row.ltgpProjected)
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.paybackMonths != null
+                                  ? `${row.paybackMonths.toFixed(1)} m`
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className={`text-right ${roicColor}`}>
+                                {row.roic != null
+                                  ? `${(row.roic * 100).toFixed(1)}%`
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.expensesOperativo > 0
+                                  ? formatCurrency(row.expensesOperativo)
+                                  : "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.expensesVentas > 0
+                                  ? formatCurrency(row.expensesVentas)
+                                  : "—"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Promedios generales */}
+            {cohortData.length > 0 &&
+              (() => {
+                const withRet = cohortData.filter(
+                  (r) => r.retentionRate != null,
+                );
+                const withRoic = cohortData.filter((r) => r.roic != null);
+                const withPayback = cohortData.filter(
+                  (r) => r.paybackMonths != null && r.paybackMonths > 0,
+                );
+                const avgRet =
+                  withRet.length > 0
+                    ? withRet.reduce((a, b) => a + (b.retentionRate ?? 0), 0) /
+                      withRet.length
+                    : null;
+                const avgRoic =
+                  withRoic.length > 0
+                    ? withRoic.reduce((a, b) => a + (b.roic ?? 0), 0) /
+                      withRoic.length
+                    : null;
+                const avgPayback =
+                  withPayback.length > 0
+                    ? withPayback.reduce(
+                        (a, b) => a + (b.paybackMonths ?? 0),
+                        0,
+                      ) / withPayback.length
+                    : null;
+                const totalRevenue = cohortData.reduce(
+                  (a, b) => a + b.revenue,
+                  0,
+                );
+                return (
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Card className="border-violet-200 dark:border-violet-800">
+                      <CardContent className="pt-5 text-center">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                          Retención media
+                        </p>
+                        <p
+                          className={`text-2xl font-bold ${avgRet != null && avgRet >= 0.7 ? "text-emerald-600" : avgRet != null && avgRet >= 0.4 ? "text-yellow-600" : "text-red-500"}`}
+                        >
+                          {avgRet != null
+                            ? `${(avgRet * 100).toFixed(1)}%`
+                            : "—"}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-violet-200 dark:border-violet-800">
+                      <CardContent className="pt-5 text-center">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                          ROIC medio
+                        </p>
+                        <p
+                          className={`text-2xl font-bold ${avgRoic != null && avgRoic >= 0.3 ? "text-emerald-600" : avgRoic != null && avgRoic >= 0 ? "text-yellow-600" : "text-red-500"}`}
+                        >
+                          {avgRoic != null
+                            ? `${(avgRoic * 100).toFixed(1)}%`
+                            : "—"}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-violet-200 dark:border-violet-800">
+                      <CardContent className="pt-5 text-center">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                          Payback medio
+                        </p>
+                        <p className="text-2xl font-bold text-violet-700 dark:text-violet-300">
+                          {avgPayback != null
+                            ? `${avgPayback.toFixed(1)} m`
+                            : "—"}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-violet-200 dark:border-violet-800">
+                      <CardContent className="pt-5 text-center">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                          Revenue total
+                        </p>
+                        <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                          {formatCurrency(totalRevenue)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
           </TabsContent>
 
           <TabsContent value="formulas" className="space-y-4">
