@@ -2581,7 +2581,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
     }>;
 
     const activeRangeExtensions = rangeExtensions.filter(
-      (ext) => ext.end.getTime() > today.getTime(),
+      // Incluir extensiones cuyo último día es HOY (siguen vigentes hasta
+      // fin del día). Antes se usaba `>` lo que excluía la extensión el
+      // mismo día de su vencimiento, provocando que `estimatedEnd` cayera
+      // al cálculo legacy y mostrara una fecha anterior incorrecta.
+      (ext) => ext.end.getTime() >= today.getTime(),
     );
     const explicitRangeEnd = activeRangeExtensions.reduce<Date | null>(
       (acc, ext) => {
@@ -2688,7 +2692,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
     const extensionDaysFromMetadata = Math.max(0, diffDays(baseEnd, estEnd));
     const remaining = diffDays(today, estEnd);
-    const isExpired = remaining <= 0;
+    // Si el vencimiento es HOY (remaining === 0) el acceso aún es válido
+    // durante el día. Solo se considera vencido cuando remaining < 0.
+    const isExpired = remaining < 0;
     return {
       startDay,
       today,
