@@ -601,11 +601,11 @@ function CopyAlumnoWorkspace() {
           <Lock className="h-7 w-7 text-slate-400" />
         </div>
         <h2 className="mb-2 text-lg font-semibold text-slate-800 dark:text-slate-100">
-          Acceso exclusivo HotSelling Pro
+          Acceso exclusivo HotSelling Starter
         </h2>
         <p className="mb-6 max-w-sm text-sm text-slate-500 dark:text-slate-400">
           Este agente está disponible solo para alumnos con el tag HotSelling
-          Pro. Contacta a soporte si crees que esto es un error.
+          Starter. Contacta a soporte si crees que esto es un error.
         </p>
         <Link
           href="/alumno/agentes"
@@ -689,7 +689,7 @@ function CopyAlumnoWorkspace() {
 
         <div className="border-t border-white/10 px-4 py-3">
           <div className="text-center text-[10px] text-white/30">
-            HotSelling Pro
+            HotSelling Starter
           </div>
         </div>
       </div>

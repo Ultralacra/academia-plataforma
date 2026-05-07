@@ -18,8 +18,8 @@ function normalizeRole(rawRole?: unknown, rawTipo?: unknown) {
 
 /**
  * Normaliza el tag quitando acentos, espacios extra y pasando a lowercase.
- * "Hotselling Pro" → "hotselling pro"
- * "HotSelling pro" → "hotselling pro"
+ * "Hotselling Starter" → "hotselling starter"
+ * "HotSelling starter" → "hotselling starter"
  */
 function normalizeTag(tag?: string | null): string {
   return String(tag ?? "")
@@ -30,7 +30,7 @@ function normalizeTag(tag?: string | null): string {
     .replace(/\s+/g, " ");
 }
 
-const ALLOWED_TAG = "hotselling pro";
+const ALLOWED_TAG = "hotselling starter";
 
 async function fetchMe(authorization: string) {
   const res = await fetch(buildUrl("/auth/me"), {
@@ -90,7 +90,7 @@ async function fetchStudentTag(
  * GET /api/agentes/copy-alumno/check-access
  *
  * Verifica si el alumno autenticado tiene acceso al agente HotSelling.
- * Requisito: role = student AND tag normalizado = "hotselling pro"
+ * Requisito: role = student AND tag normalizado = "hotselling starter"
  *
  * Response: { allowed: boolean, tag: string | null, reason?: string }
  */
@@ -137,6 +137,6 @@ export async function GET(req: NextRequest) {
     tag: rawTag,
     reason: allowed
       ? undefined
-      : "Acceso exclusivo para alumnos HotSelling Pro",
+      : "Acceso exclusivo para alumnos HotSelling Starter",
   });
 }

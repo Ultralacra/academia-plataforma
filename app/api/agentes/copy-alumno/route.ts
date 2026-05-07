@@ -31,7 +31,7 @@ function normalizeTag(tag?: string | null): string {
     .replace(/\s+/g, " ");
 }
 
-const ALLOWED_TAG = "hotselling pro";
+const ALLOWED_TAG = "hotselling starter";
 
 async function fetchMe(authorization: string) {
   const res = await fetch(buildUrl("/auth/me"), {
@@ -556,7 +556,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. Verificar tag "Hotselling Pro"
+  // 3. Verificar tag "Hotselling Starter"
   const codigo = String(me.codigo ?? me.id ?? "");
   if (!codigo) {
     return new Response(
@@ -569,7 +569,7 @@ export async function POST(request: NextRequest) {
   if (normalizeTag(rawTag) !== ALLOWED_TAG) {
     return new Response(
       JSON.stringify({
-        error: "Acceso exclusivo para alumnos HotSelling Pro",
+        error: "Acceso exclusivo para alumnos HotSelling Starter",
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
