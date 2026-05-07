@@ -21,6 +21,7 @@ export type AccessDueItem = {
   venceTipo: string | null;
   hasMembresia: boolean;
   membresiaCount: number;
+  inactivityDays: number | null;
 };
 
 function toDayDate(d: Date) {
@@ -412,6 +413,7 @@ export function useAccessDueNotifications(opts: {
         venceTipo: string | null;
         hasMembresia: boolean;
         membresiaCount: number;
+        inactivityDays: number | null;
       };
       const candidates: Candidate[] = [];
 
@@ -458,6 +460,13 @@ export function useAccessDueNotifications(opts: {
           (student as any)?.tag != null
             ? String((student as any).tag).trim() || null
             : null;
+        const inactivityRaw = (student as any)?.inactivityDays;
+        const inactivityDays =
+          inactivityRaw === null || inactivityRaw === undefined
+            ? null
+            : Number.isFinite(Number(inactivityRaw))
+              ? Number(inactivityRaw)
+              : null;
         candidates.push({
           alumnoId,
           alumnoCodigo,
@@ -472,6 +481,7 @@ export function useAccessDueNotifications(opts: {
           venceTipo: (venceMeta as any)?.payload?.vence_tipo ?? null,
           hasMembresia: membresiaCount > 0,
           membresiaCount,
+          inactivityDays,
         });
       }
 
@@ -531,6 +541,7 @@ export function useAccessDueNotifications(opts: {
               venceTipo: c.venceTipo,
               hasMembresia: c.hasMembresia,
               membresiaCount: c.membresiaCount,
+              inactivityDays: c.inactivityDays,
             };
             if (isOverdue) partialOverdue.push(item);
             else partialDue.push(item);

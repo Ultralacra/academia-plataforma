@@ -61,6 +61,7 @@ const MONTH_NAMES = [
 
 type TipoFilter = "todos" | "membresia" | "contractual";
 type QuickFilter = null | "urgentes" | "membresia" | "contractual";
+type InactivityPreset = "todos" | "7" | "14" | "21" | "30" | "custom";
 
 function urgencyColor(daysLeft: number) {
   if (daysLeft < 0) return "text-destructive";
@@ -91,6 +92,8 @@ async function exportToExcel(
       Fase: it.stage ?? "",
       "Fecha vence": it.fechaVence,
       "Dias restantes": it.daysLeft,
+      "Dias inactividad":
+        typeof it.inactivityDays === "number" ? it.inactivityDays : "",
       "Tipo vence": it.venceTipo ?? "",
       "Tiene membresia": it.hasMembresia ? "Si" : "No",
       "Cantidad membresias": it.membresiaCount ?? 0,
@@ -115,6 +118,7 @@ async function exportToExcel(
     { wch: 12 }, // Fase
     { wch: 14 }, // Fecha vence
     { wch: 14 }, // Dias restantes
+    { wch: 16 }, // Dias inactividad
     { wch: 14 }, // Tipo vence
     { wch: 16 }, // Tiene membresia
     { wch: 20 }, // Cantidad membresias
@@ -187,6 +191,9 @@ export default function AccesosPage() {
   const [monthFilter, setMonthFilter] = useState<string>("todos");
   const [dueMes, setDueMes] = useState<string>("todos");
   const [tagFilter, setTagFilter] = useState<string>("todos");
+  const [inactivityPreset, setInactivityPreset] =
+    useState<InactivityPreset>("todos");
+  const [inactivityCustomDays, setInactivityCustomDays] = useState<string>("");
 
   const dueMesOptions = useMemo(() => {
     const map = new Map<
@@ -270,6 +277,24 @@ export default function AccesosPage() {
     return String(it.tag ?? "").trim() === tagFilter;
   };
 
+  // Umbral de días de inactividad activo (null = sin filtro).
+  const inactivityThreshold = useMemo<number | null>(() => {
+    if (inactivityPreset === "todos") return null;
+    if (inactivityPreset === "custom") {
+      const n = Number(inactivityCustomDays);
+      return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+    }
+    const n = Number(inactivityPreset);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [inactivityPreset, inactivityCustomDays]);
+
+  const matchesInactivity = (it: (typeof items)[number]) => {
+    if (inactivityThreshold === null) return true;
+    const v = it.inactivityDays;
+    if (typeof v !== "number" || !Number.isFinite(v)) return false;
+    return v >= inactivityThreshold;
+  };
+
   const matchesQuick = (it: (typeof items)[number]) => {
     if (!quickFilter) return true;
     if (quickFilter === "urgentes") return it.daysLeft <= 7;
@@ -286,7 +311,8 @@ export default function AccesosPage() {
           !matchesSearch(it) ||
           !matchesTipo(it) ||
           !matchesQuick(it) ||
-          !matchesTag(it)
+          !matchesTag(it) ||
+          !matchesInactivity(it)
         )
           return false;
         if (dueMes !== "todos") {
@@ -296,7 +322,15 @@ export default function AccesosPage() {
         }
         return true;
       }),
-    [items, search, tipoFilter, quickFilter, dueMes, tagFilter],
+    [
+      items,
+      search,
+      tipoFilter,
+      quickFilter,
+      dueMes,
+      tagFilter,
+      inactivityThreshold,
+    ],
   );
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -307,7 +341,8 @@ export default function AccesosPage() {
           !matchesSearch(it) ||
           !matchesTipo(it) ||
           !matchesQuick(it) ||
-          !matchesTag(it)
+          !matchesTag(it) ||
+          !matchesInactivity(it)
         )
           return false;
         if (monthFilter === "todos") return true;
@@ -315,7 +350,15 @@ export default function AccesosPage() {
         if (!m) return false;
         return `${m[1]}-${m[2]}` === monthFilter;
       }),
-    [overdueItems, search, monthFilter, tipoFilter, quickFilter, tagFilter],
+    [
+      overdueItems,
+      search,
+      monthFilter,
+      tipoFilter,
+      quickFilter,
+      tagFilter,
+      inactivityThreshold,
+    ],
   );
 
   const membresiaCount = filteredDue.filter(
@@ -433,6 +476,21 @@ export default function AccesosPage() {
                 className="text-[10px] px-1.5 h-4 shrink-0 border-purple-300 text-purple-600 dark:text-purple-400"
               >
                 Membresias: {it.membresiaCount}
+              </Badge>
+            )}
+            {/* Badge de inactividad: avisa visualmente cuando es alta */}
+            {typeof it.inactivityDays === "number" && it.inactivityDays > 0 && (
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 h-4 shrink-0 ${
+                  it.inactivityDays >= 14
+                    ? "border-rose-300 text-rose-600 dark:text-rose-400"
+                    : it.inactivityDays >= 7
+                      ? "border-amber-300 text-amber-600 dark:text-amber-400"
+                      : ""
+                }`}
+              >
+                Inactivo: {it.inactivityDays}d
               </Badge>
             )}
             {/* Alerta de accion requerida solo para contratos */}
@@ -765,6 +823,41 @@ export default function AccesosPage() {
               </SelectContent>
             </Select>
           )}
+          {/* Filtro por días de inactividad */}
+          <Select
+            value={inactivityPreset}
+            onValueChange={(v) => {
+              const next = v as InactivityPreset;
+              setInactivityPreset(next);
+              if (next !== "custom") setInactivityCustomDays("");
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-52 gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Inactividad" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Cualquier inactividad</SelectItem>
+              <SelectItem value="7">+ 1 semana (7 dias)</SelectItem>
+              <SelectItem value="14">+ 2 semanas (14 dias)</SelectItem>
+              <SelectItem value="21">+ 3 semanas (21 dias)</SelectItem>
+              <SelectItem value="30">+ 1 mes (30 dias)</SelectItem>
+              <SelectItem value="custom">Personalizado…</SelectItem>
+            </SelectContent>
+          </Select>
+          {inactivityPreset === "custom" && (
+            <Input
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={inactivityCustomDays}
+              onChange={(e) =>
+                setInactivityCustomDays(e.target.value.replace(/[^0-9]/g, ""))
+              }
+              placeholder="Dias"
+              className="w-full sm:w-28"
+            />
+          )}
         </div>
 
         {/* Tabs */}
@@ -816,6 +909,7 @@ export default function AccesosPage() {
                   tipoFilter !== "todos" ||
                   quickFilter ||
                   tagFilter !== "todos" ||
+                  inactivityPreset !== "todos" ||
                   dueMes !== "todos") && (
                   <Button
                     variant="ghost"
@@ -826,6 +920,8 @@ export default function AccesosPage() {
                       setQuickFilter(null);
                       setDueMes("todos");
                       setTagFilter("todos");
+                      setInactivityPreset("todos");
+                      setInactivityCustomDays("");
                     }}
                   >
                     Limpiar filtros
@@ -864,7 +960,8 @@ export default function AccesosPage() {
                 {(search ||
                   tipoFilter !== "todos" ||
                   quickFilter ||
-                  tagFilter !== "todos") && (
+                  tagFilter !== "todos" ||
+                  inactivityPreset !== "todos") && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -873,6 +970,8 @@ export default function AccesosPage() {
                       setTipoFilter("todos");
                       setQuickFilter(null);
                       setTagFilter("todos");
+                      setInactivityPreset("todos");
+                      setInactivityCustomDays("");
                     }}
                   >
                     Limpiar filtros
