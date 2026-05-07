@@ -171,10 +171,13 @@ function computeEstimatedEnd(args: {
     const d = parseMaybeDate(ext?.fecha_hasta ?? null);
     if (!d) continue;
     const day = toDayDate(d);
-    const pausedAtCreationRaw = Number(ext?.paused_calendar_days_at_creation);
-    const pausedAtCreation = Number.isFinite(pausedAtCreationRaw)
-      ? pausedAtCreationRaw
-      : null;
+    const rawPausedExtN = ext?.paused_calendar_days_at_creation;
+    const pausedAtCreation =
+      rawPausedExtN != null && rawPausedExtN !== ""
+        ? Number.isFinite(Number(rawPausedExtN))
+          ? Number(rawPausedExtN)
+          : null
+        : null;
     const pauseDelta =
       pausedAtCreation !== null
         ? Math.max(0, pausedCalendarDaysTotal - pausedAtCreation)
@@ -197,12 +200,13 @@ function computeEstimatedEnd(args: {
     const d = parseMaybeDate(recPayload?.fecha_hasta ?? null);
     if (!d) continue;
     const day = toDayDate(d);
-    const pausedAtCreationRaw = Number(
-      recPayload?.paused_calendar_days_at_creation,
-    );
-    const pausedAtCreation = Number.isFinite(pausedAtCreationRaw)
-      ? pausedAtCreationRaw
-      : null;
+    const rawPausedMemN = recPayload?.paused_calendar_days_at_creation;
+    const pausedAtCreation =
+      rawPausedMemN != null && rawPausedMemN !== ""
+        ? Number.isFinite(Number(rawPausedMemN))
+          ? Number(rawPausedMemN)
+          : null
+        : null;
     const pauseDelta =
       pausedAtCreation !== null
         ? Math.max(0, pausedCalendarDaysTotal - pausedAtCreation)

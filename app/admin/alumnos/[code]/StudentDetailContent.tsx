@@ -1690,6 +1690,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
         ...prevPayload,
         meses,
         motivo: motivo || null,
+        // Actualizar snapshot de pausas para que el delta se calcule correctamente.
+        // Sobrescribe un 0 incorrecto (race condition al crear) con el valor actual.
+        paused_calendar_days_at_creation:
+          accessStats?.pausedCalendarDaysTotal ??
+          prevPayload?.paused_calendar_days_at_creation ??
+          null,
         updated_at: now,
         updated_by: changedBy,
       };
@@ -2553,7 +2559,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
         const from = parseMaybe(ext?.fecha_desde ?? null);
         const to = parseMaybe(ext?.fecha_hasta ?? null);
         if (!from || !to) return null;
-        const pausedAtCreation = Number(ext?.paused_calendar_days_at_creation);
+        const rawPausedExt = ext?.paused_calendar_days_at_creation;
+        const pausedAtCreation =
+          rawPausedExt != null && rawPausedExt !== ""
+            ? Number.isFinite(Number(rawPausedExt))
+              ? Number(rawPausedExt)
+              : null
+            : null;
         return {
           id: ext?.id ?? `range-${index}`,
           tipo:
@@ -2563,10 +2575,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
           createdAt: ext?.created_at ?? null,
           start: toDayDate(from),
           end: toDayDate(to),
-          // null = legacy (sin snapshot): se sigue sumando todo el total de pausas
-          pausedAtCreation: Number.isFinite(pausedAtCreation)
-            ? pausedAtCreation
-            : null,
+          // null = legacy (sin snapshot): no se suma delta de pausas
+          pausedAtCreation,
         };
       })
       .filter(Boolean) as Array<{
@@ -2606,9 +2616,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
         );
         const to = parseMaybe(m?.payload?.fecha_hasta ?? null);
         if (!from || !to) return null;
-        const pausedAtCreation = Number(
-          m?.payload?.paused_calendar_days_at_creation,
-        );
+        const rawPausedMem = m?.payload?.paused_calendar_days_at_creation;
+        const pausedAtCreation =
+          rawPausedMem != null && rawPausedMem !== ""
+            ? Number.isFinite(Number(rawPausedMem))
+              ? Number(rawPausedMem)
+              : null
+            : null;
         return {
           id: String(m?.id ?? ""),
           number:
@@ -2617,9 +2631,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               : null,
           start: toDayDate(from),
           end: toDayDate(to),
-          pausedAtCreation: Number.isFinite(pausedAtCreation)
-            ? pausedAtCreation
-            : null,
+          pausedAtCreation,
         };
       })
       .filter(Boolean) as Array<{
