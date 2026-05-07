@@ -338,7 +338,7 @@ LA EMPRESA asignara un trafficker interno para realizar exclusivamente el montaj
 
 El trafficker no sera responsable de la gestion, optimizacion o monitoreo posterior de las campanas, ni del diseno grafico, copywriting, creacion de contenido o cualquier otro elemento creativo necesario, cuya responsabilidad exclusiva recae sobre el CLIENTE.
 
-El presente servicio no comprende, bajo ningun supuesto, asesoria o soporte personalizado en temas relacionados con Meta Ads. Cualquier inquietud o requerimiento adicional sobre pauta digital debera canalizarse unicamente a traves de los medios y canales oficiales dispuestos por LA EMPRESA dentro del programa HOTSELLING PRO (sesiones, Skool y WhatsApp).
+El presente servicio no comprende, bajo ningun supuesto, asesoria o soporte personalizado en temas relacionados con Meta Ads. Cualquier inquietud o requerimiento adicional sobre pauta digital debera canalizarse unicamente a traves de los medios y canales oficiales dispuestos por LA EMPRESA dentro del programa {{PROGRAMA}} (sesiones, Skool y WhatsApp).
 
 13.2 Acceso a Plataformas y Cuentas:
 
@@ -507,7 +507,7 @@ Paragrafo Tercero - Plazos estrictos y caducidad: Una vez LA EMPRESA remita el f
 
 Paragrafo Cuarto - Pausa automatica por auditoria: A partir de la solicitud formal de garantia, el tiempo restante del contrato se pausara automaticamente hasta el cierre definitivo del proceso de auditoria. La reactivacion no sera automatica y requerira, si aplica, un acuerdo escrito (Otrosi) y el cumplimiento de las obligaciones del CLIENTE. LA EMPRESA podra negar la reactivacion cuando la garantia sea improcedente o cuando el vinculo contractual se encuentre deteriorado por incumplimientos o mala fe.
 
-Para efectos de verificacion, LA EMPRESA podra solicitar los accesos necesarios, incluyendo, de manera enunciativa mas no limitativa, acceso como administrador o colaborador al Administrador de Anuncios y/o Business Manager, asi como a otras plataformas utilizadas durante la implementacion del programa HOTSELLING PRO.
+Para efectos de verificacion, LA EMPRESA podra solicitar los accesos necesarios, incluyendo, de manera enunciativa mas no limitativa, acceso como administrador o colaborador al Administrador de Anuncios y/o Business Manager, asi como a otras plataformas utilizadas durante la implementacion del programa {{PROGRAMA}}.
 
 Dichos accesos seran utilizados exclusivamente con fines de auditoria, preferiblemente en modo lector, sin intervencion operativa sobre las cuentas del CLIENTE. Una vez finalizada la auditoria, EL CLIENTE podra revocar los accesos otorgados y/o modificar las credenciales correspondientes.
 
