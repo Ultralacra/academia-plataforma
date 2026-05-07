@@ -682,6 +682,11 @@ export function AppSidebar() {
             url: `/admin/alumnos/${code}/bonos`,
             icon: Users,
           },
+          {
+            title: "Agentes IA",
+            url: "/alumno/agentes",
+            icon: Sparkles,
+          },
         ] as MenuItem[];
       }
       default:

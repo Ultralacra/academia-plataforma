@@ -220,6 +220,17 @@ function AgentsHome() {
         </div>
       </div>
 
+      {/* Acciones secundarias */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/admin/agentes/uso"
+          className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100"
+        >
+          <TrendingUp className="h-4 w-4" />
+          Ver uso del agente HotSelling (alumnos)
+        </Link>
+      </div>
+
       {/* Grid de agentes */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {agents.map((agent) => {

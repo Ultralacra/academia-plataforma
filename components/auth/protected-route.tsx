@@ -90,8 +90,13 @@ function ProtectedRouteContent({
       segments.length >= 3;
     const codeFromPath = isAlumnoDetail ? segments[2] : null;
     const myCode = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
+    // Rutas específicas para alumnos fuera de /admin/alumnos/[code] (p.ej. agentes IA)
+    const isAlumnoArea = segments[0] === "alumno";
 
-    if (!isAlumnoDetail || !codeFromPath || codeFromPath !== myCode) {
+    if (
+      !isAlumnoArea &&
+      (!isAlumnoDetail || !codeFromPath || codeFromPath !== myCode)
+    ) {
       if (pathname !== `/admin/alumnos/${myCode}`) {
         router.replace(`/admin/alumnos/${myCode}`);
       }
