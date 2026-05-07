@@ -93,6 +93,7 @@ Conforme a la modalidad de pago anteriormente discriminada que regirá el presen
 
 [[ENDIF]]
 
+[[IF:MODO!=pago_total]]
 4.2 Moneda y variación cambiaria: Todas las sumas se expresan en USD; el CLIENTE asume cualquier variación cambiaria.
 
 4.3 El retraso en los pagos generará suspensión automática de acceso.
@@ -106,6 +107,7 @@ a. Pago único (pago completo): Cuando EL CLIENTE haya realizado el pago total d
 b. Pago en cuotas: El acceso al programa se liberará únicamente tras la verificación del primer pago y la firma del contrato. Los pagos subsiguientes deberán realizarse en las fechas establecidas. En caso de retraso o incumplimiento, LA EMPRESA podrá suspender de forma automática el acceso del CLIENTE al programa, sin derecho a reembolso de la suma abonada.
 
 c. No se considerará como pago válido el abono parcial o el pago en calidad de reserva. Solo se entenderá cumplido el pago cuando el monto pactado (ya sea total o la primera cuota según el plan elegido) se haya recibido y verificado por LA EMPRESA.
+[[ENDIF]]
 
 QUINTA. OBLIGACIONES
 
@@ -303,5 +305,7 @@ FIRMAN:
 [[FIRMAS]]
 
 FECHA DEL ACUERDO: {{FECHA_CONTRATO}}
-FECHA DE LIBERACIÓN DE ACCESOS:
+
+FECHA DE LIBERACIÓN DE ACCESOS: {{FECHA_INICIO}}
+
 Tras validación de la firma, sujeta a horario laboral.

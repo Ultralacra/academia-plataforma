@@ -884,6 +884,26 @@ function parseContractTextToParagraphs(
       continue;
     }
 
+    // Línea con prefijo en mayúsculas seguido de ":" (p. ej. "FECHA DEL ACUERDO: 7 de mayo...").
+    // Renderizamos el prefijo en negrita y el resto como texto normal, en su propio párrafo.
+    const labelValueMatch = /^([A-ZÁÉÍÓÚÜÑ0-9 ]{3,}:)\s*(.*)$/.exec(trimmed);
+    if (labelValueMatch && labelValueMatch[1] === labelValueMatch[1].toUpperCase()) {
+      flushBuffer();
+      const label = labelValueMatch[1];
+      const rest = labelValueMatch[2].trim();
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            run(label, { bold: true }),
+            ...(rest ? [run(` ${rest}`)] : []),
+          ],
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 140 },
+        }),
+      );
+      continue;
+    }
+
     // Texto normal: lo agregamos al buffer para unir líneas
     buffer.push(trimmed);
   }
@@ -1094,26 +1114,35 @@ export function applyConditionalBlocks(text: string, data: Partial<ContractData>
     (_, content: string) => (hasReserve ? content : ""),
   );
 
+  // Helper: evalúa si `mode` coincide con la condición dada
+  const modeMatches = (cond: string): boolean => {
+    const isCuotasMode = mode === "cuotas" || /^\d+_cuotas$/.test(mode);
+    const isExceptionMode =
+      mode === "excepcion_2_cuotas" ||
+      mode === "2_cuotas" ||
+      mode.startsWith("excepcion_");
+    return (
+      (cond === "pago_total" && (mode === "pago_total" || mode.includes("contado"))) ||
+      (cond === "3_cuotas" && isCuotasMode && !isExceptionMode) ||
+      (cond === "cuotas" && isCuotasMode && !isExceptionMode) ||
+      (cond === "excepcion_2_cuotas" && isExceptionMode) ||
+      (cond === "reserva" && mode.includes("reserva"))
+    );
+  };
+
   // Bloques [[IF:MODO==valor]] ... [[ENDIF]]
   text = text.replace(
     /\[\[IF:MODO==([^\]]+)\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
     (_, condition: string, content: string) => {
-      const cond = condition.trim().toLowerCase();
-      const isCuotasMode =
-        mode === "cuotas" || /^\d+_cuotas$/.test(mode);
-      const isExceptionMode =
-        mode === "excepcion_2_cuotas" ||
-        mode === "2_cuotas" ||
-        mode.startsWith("excepcion_");
-      const matches =
-        (cond === "pago_total" && (mode === "pago_total" || mode.includes("contado"))) ||
-        // Bloque "estándar de cuotas": acepta 3_cuotas histórico,
-        // pero también cualquier N_cuotas o "cuotas" sin sufijo
-        (cond === "3_cuotas" && isCuotasMode && !isExceptionMode) ||
-        (cond === "cuotas" && isCuotasMode && !isExceptionMode) ||
-        (cond === "excepcion_2_cuotas" && isExceptionMode) ||
-        (cond === "reserva" && mode.includes("reserva"));
-      return matches ? content : "";
+      return modeMatches(condition.trim().toLowerCase()) ? content : "";
+    },
+  );
+
+  // Bloques [[IF:MODO!=valor]] ... [[ENDIF]]  (negación)
+  text = text.replace(
+    /\[\[IF:MODO!=([^\]]+)\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, condition: string, content: string) => {
+      return modeMatches(condition.trim().toLowerCase()) ? "" : content;
     },
   );
 
@@ -1391,7 +1420,13 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
       primaryPlan?.type ||
       "",
     paymentAmount:
-      d.paymentAmount || lead?.payment_amount || payment?.amount || primaryPlan?.total || "",
+      d.paymentAmount ||
+      lead?.payment_amount ||
+      payment?.total ||
+      (sale?.montoTotal != null ? String(sale.montoTotal) : undefined) ||
+      payment?.amount ||
+      primaryPlan?.total ||
+      "",
     paymentPaidAmount:
       d.paymentPaidAmount || payment?.paid_amount || primaryPlan?.paid_amount || "",
     paymentPlatform: d.paymentPlatform || lead?.payment_platform || payment?.platform || "",

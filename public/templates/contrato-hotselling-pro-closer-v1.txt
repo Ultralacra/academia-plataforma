@@ -89,6 +89,9 @@ PAGO AL CONTADO (PAGO UNICO)
 ● Fecha de pago: {{FECHA_PAGO_CONTADO}}
 ● Fecha de inicio del programa: {{FECHA_INICIO}}
 
+a. Pago unico (pago completo):
+Cuando EL CLIENTE haya realizado el pago total del valor del programa y este haya sido verificado por LA EMPRESA, se liberara de forma inmediata el acceso completo al programa, conforme a lo descrito en la Clausula Segunda del presente contrato.
+
 [[ENDIF]]
 [[IF:MODO==3_cuotas]]
 PAGO EN TRES (3) CUOTAS
@@ -149,6 +152,7 @@ Conforme a la modalidad de pago anteriormente discriminada que regira el present
 
 [[ENDIF]]
 
+[[IF:MODO!=pago_total]]
 4.2 Moneda y variacion cambiaria: Todas las sumas se expresan en USD; el CLIENTE asume cualquier variacion cambiaria.
 
 4.3 Mora e intereses: En caso de mora, se aplicaran los intereses moratorios y el orden de abonos previsto en la clausula [[REF_LOW:MORA]].
@@ -159,8 +163,12 @@ Conforme a la modalidad de pago anteriormente discriminada que regira el present
 
 El CLIENTE contara con un plazo maximo de treinta (30) dias calendario para ponerse al dia. Transcurrido dicho termino sin que se haya efectuado el pago, no habra lugar a reembolso ni a reactivacion del servicio, y se entendera que el CLIENTE ha desistido unilateralmente de la continuacion del mismo.
 
+[[ENDIF]]
+[[IF:MODO!=pago_total]]
 4.6 El CLIENTE debera pagar la totalidad del valor para acceder a la ultima fase del programa.
 
+[[ENDIF]]
+[[IF:MODO!=pago_total]]
 4.7 EL CLIENTE declara conocer y aceptar que el acceso al Programa "{{PROGRAMA}}" sera habilitado unica y exclusivamente una vez cumplida alguna de las siguientes condiciones de pago:
 
 ● Cancelacion total del valor del programa bajo la modalidad de Pago Unico, o
@@ -169,6 +177,7 @@ El CLIENTE contara con un plazo maximo de treinta (30) dias calendario para pone
 El pago de una reserva no habilita por si solo el acceso al contenido, beneficios ni servicios del programa, ya que dicha reserva tiene como unico fin asegurar la plaza y el descuento correspondiente. En este sentido, mientras no se haya completado el pago inicial segun una de las dos modalidades antes mencionadas, EL CLIENTE no tendra derecho a ingreso, activacion de usuario, ni participacion alguna dentro del programa.
 
 Asimismo, EL CLIENTE entiende que la adquisicion del Programa esta sujeta al cumplimiento de una estructura de pago valida, siendo la reserva un compromiso de compra, no una activacion de servicio.
+[[ENDIF]]
 
 QUINTA. OBLIGACIONES.
 
@@ -519,5 +528,7 @@ FIRMAN:
 [[FIRMAS]]
 
 FECHA DEL ACUERDO: {{FECHA_CONTRATO}}
-FECHA DE LIBERACION DE ACCESOS:
+
+FECHA DE LIBERACION DE ACCESOS: {{FECHA_INICIO}}
+
 Tras validacion de la firma, sujeta a horario laboral.

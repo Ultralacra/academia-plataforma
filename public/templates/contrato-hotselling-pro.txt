@@ -444,6 +444,6 @@ FECHA DEL ACUERDO:
 
 {{FECHA_CONTRATO}}
 
-FECHA DE LIBERACIÓN DE ACCESOS:
+FECHA DE LIBERACIÓN DE ACCESOS: {{FECHA_INICIO}}
 
 Tras validación de la firma, sujeta a horario laboral.
