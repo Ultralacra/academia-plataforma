@@ -100,6 +100,99 @@ function pickLatest(list: any[]) {
   return sorted[0] ?? null;
 }
 
+// ── Helpers para calcular días pausados (mismos que el perfil del alumno) ───
+function parseMaybeDate(raw?: string | null): Date | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const dateOnly = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    const v = new Date(Number(y), Number(m) - 1, Number(d));
+    return Number.isNaN(v.getTime()) ? null : v;
+  }
+  const isoStart = s.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (isoStart) {
+    const [, y, m, d] = isoStart;
+    const v = new Date(Number(y), Number(m) - 1, Number(d));
+    return Number.isNaN(v.getTime()) ? null : v;
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+function toDayDate(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function daysBetweenInclusive(a: Date, b: Date) {
+  const start = toDayDate(a);
+  const end = toDayDate(b);
+  if (end.getTime() < start.getTime()) return 0;
+  return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
+// Convención: la fecha "Hasta" de la pausa es el día de regreso → exclusive end.
+async function fetchPausedCalendarDaysTotal(
+  alumnoCode: string,
+  authorization: string,
+): Promise<number> {
+  try {
+    const res = await fetch(
+      buildUrl(`/client/get/cliente-estatus/${encodeURIComponent(alumnoCode)}`),
+      {
+        method: "GET",
+        headers: { Authorization: authorization, Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) return 0;
+    const json = await res.json().catch(() => null);
+    const rows: any[] = Array.isArray(json?.data)
+      ? json.data
+      : Array.isArray(json?.data?.data)
+        ? json.data.data
+        : Array.isArray(json?.rows)
+          ? json.rows
+          : Array.isArray(json)
+            ? json
+            : [];
+    const ranges: Array<{ start: Date; end: Date }> = [];
+    for (const r of rows) {
+      const estado = String(r?.estatus_id ?? r?.estado_id ?? r?.estado ?? "")
+        .toUpperCase();
+      const isPaused = estado.includes("PAUSADO") || estado.includes("PAUSA");
+      if (!isPaused) continue;
+      const s = parseMaybeDate(r?.fecha_desde ?? null);
+      const e = parseMaybeDate(r?.fecha_hasta ?? null);
+      if (!s || !e) continue;
+      ranges.push({ start: toDayDate(s), end: toDayDate(e) });
+    }
+    if (ranges.length === 0) return 0;
+    ranges.sort((a, b) => a.start.getTime() - b.start.getTime());
+    const merged: Array<{ start: Date; end: Date }> = [];
+    const oneDay = 86400000;
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (!last) {
+        merged.push({ start: r.start, end: r.end });
+        continue;
+      }
+      if (r.start.getTime() <= last.end.getTime() + oneDay) {
+        if (r.end.getTime() > last.end.getTime()) last.end = r.end;
+      } else {
+        merged.push({ start: r.start, end: r.end });
+      }
+    }
+    let total = 0;
+    for (const r of merged) {
+      if (r.end.getTime() > r.start.getTime()) {
+        total += Math.max(0, daysBetweenInclusive(r.start, r.end) - 1);
+      }
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
 function safePayloadForVence(p: any) {
   const payload = p && typeof p === "object" ? p : {};
   return {
@@ -181,7 +274,12 @@ export async function GET(
   const id = String(alumnoId ?? "").trim();
   if (!id) {
     return NextResponse.json(
-      { venceMeta: null, membresiaExts: [], joinDate: null },
+      {
+        venceMeta: null,
+        membresiaExts: [],
+        joinDate: null,
+        pausedCalendarDaysTotal: 0,
+      },
       { status: 200 },
     );
   }
@@ -309,11 +407,22 @@ export async function GET(
     }
   }
 
+  // Calcular días totales de pausa (idéntico al perfil del alumno).
+  const effectiveCode =
+    alumnoCode ||
+    (venceMeta?.payload?.alumno_codigo
+      ? String(venceMeta.payload.alumno_codigo).trim()
+      : null);
+  const pausedCalendarDaysTotal = effectiveCode
+    ? await fetchPausedCalendarDaysTotal(effectiveCode, auth)
+    : 0;
+
   return NextResponse.json(
     {
       venceMeta,
       membresiaExts,
       joinDate,
+      pausedCalendarDaysTotal,
     },
     { status: 200 },
   );

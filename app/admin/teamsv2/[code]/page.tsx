@@ -2676,7 +2676,35 @@ export default function CoachDetailPage({
                       </div>
                     )}
 
-                    {/* StudentChatDisclaimer oculto para coachs */}
+                    {targetStudentCode && selectedStudentItem && (
+                      <StudentChatDisclaimer
+                        alumnoId={selectedStudentItem.id ?? targetStudentCode}
+                        alumnoCode={
+                          selectedStudentItem.code ?? targetStudentCode
+                        }
+                        studentInfo={{
+                          name: selectedStudentItem.name,
+                          state: selectedStudentItem.state ?? null,
+                          stage: selectedStudentItem.stage ?? null,
+                          tag: selectedStudentItem.tag ?? null,
+                          joinDate: selectedStudentItem.joinDate ?? null,
+                          inactivityDays: (() => {
+                            const la = selectedStudentItem.lastActivity;
+                            if (!la) return null;
+                            const d = new Date(la);
+                            if (isNaN(d.getTime())) return null;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            d.setHours(0, 0, 0, 0);
+                            return Math.round(
+                              (today.getTime() - d.getTime()) / 86400000,
+                            );
+                          })(),
+                          lastActivity:
+                            selectedStudentItem.lastActivity ?? null,
+                        }}
+                      />
+                    )}
                     <CoachChatInline
                       onBack={() => setMobileChatOpen(false)}
                       onTypingChange={handleTypingChange}

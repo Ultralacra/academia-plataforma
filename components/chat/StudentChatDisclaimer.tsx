@@ -20,13 +20,17 @@ type VenceMeta = {
   programa_meses?: number | null;
   meses_extra?: number | null;
   /** Extensiones por rango explícito (array del payload) */
-  extensiones?: Array<{ fecha_hasta?: string | null }> | null;
+  extensiones?: Array<{
+    fecha_hasta?: string | null;
+    paused_calendar_days_at_creation?: number | null;
+  }> | null;
 };
 
 type MembresiaMeta = {
   meses?: number | null;
   anulado?: boolean;
   fecha_hasta?: string | null;
+  paused_calendar_days_at_creation?: number | null;
 };
 
 type StudentInfo = {
@@ -45,6 +49,8 @@ type DisclaimerData = {
   studentInfo: StudentInfo | null;
   /** joinDate devuelto por la API (más fiable que el del padre) */
   apiJoinDate: string | null;
+  /** Días de pausa totales (mismos que el perfil del alumno). */
+  pausedCalendarDaysTotal: number;
 };
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -61,8 +67,25 @@ function toDayDate(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function addMs(d: Date, ms: number): Date {
-  return new Date(d.getTime() + ms);
+function addDays(d: Date, n: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+// Suma N meses calendario a una fecha (idéntico al perfil del alumno).
+function addMonthsCalendar(date: Date, months: number): Date {
+  const d = new Date(date.getTime());
+  const targetDay = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDayOfTarget = new Date(
+    d.getFullYear(),
+    d.getMonth() + 1,
+    0,
+  ).getDate();
+  d.setDate(Math.min(targetDay, lastDayOfTarget));
+  return d;
 }
 
 function diffDays(a: Date, b: Date) {
@@ -79,73 +102,96 @@ function fmtDate(d: Date) {
 }
 
 /**
- * Replica la lógica de computeEstimatedEnd de useAccessDueNotifications:
- * toma el máximo entre vence_estimado+membresía, extensiones explícitas y
- * membresías con fecha_hasta. Misma lógica que /admin/accesos.
+ * Replica EXACTAMENTE la lógica del perfil del alumno
+ * (`/admin/alumnos/[code]/perfil`) y de `/admin/accesos`:
+ * - programa en meses CALENDARIO (default 4)
+ * - suma de pausas TOTAL (días calendario, exclusive end)
+ * - extensiones y membresías con `paused_calendar_days_at_creation`
+ *   para no doblar el conteo de pausas
  */
 function computeEstimatedEnd(
   venceMeta: VenceMeta | null,
   membresiaExts: MembresiaMeta[],
-  joinDate?: string | null,
+  joinDate: string | null | undefined,
+  pausedCalendarDaysTotal: number,
 ): Date | null {
-  const PROGRAM_DAYS = 120;
-  const metaVenceDay = parseDateOnly(venceMeta?.vence_estimado ?? null);
+  const startDay = parseDateOnly(joinDate ?? null);
+
+  const programaMesesRaw = venceMeta?.programa_meses;
+  const programaMesesParsed = Number(programaMesesRaw);
+  const programaMeses =
+    Number.isFinite(programaMesesParsed) && programaMesesParsed >= 1
+      ? Math.round(programaMesesParsed)
+      : 4;
+
   const metaExtraRaw = venceMeta?.meses_extra;
   const metaExtraParsed =
     metaExtraRaw === undefined || metaExtraRaw === null
       ? null
       : Number(metaExtraRaw);
-
   const extraMonths =
     metaExtraParsed !== null && Number.isFinite(metaExtraParsed)
       ? Math.max(0, Math.round(metaExtraParsed))
       : 0;
 
-  // Suma meses de membresía activas
-  const membresiaMonths = membresiaExts.reduce((acc, m) => {
-    if (m.anulado) return acc;
-    const n = Number(m.meses ?? 0);
-    return acc + (Number.isFinite(n) && n > 0 ? Math.max(0, Math.round(n)) : 0);
-  }, 0);
-  const membresiaMs = membresiaMonths * 30 * 86400000;
+  const metaVenceDay = parseDateOnly(venceMeta?.vence_estimado ?? null);
+  const isLegacy = Boolean(metaVenceDay) && metaExtraParsed === null;
 
-  // Modo legado: vence_estimado está seteado y meses_extra es null
-  const legacyMode = Boolean(metaVenceDay) && metaExtraParsed === null;
+  // Candidato base
   let baseCandidate: Date | null = null;
-
-  if (legacyMode && metaVenceDay) {
-    baseCandidate = addMs(metaVenceDay, membresiaMs);
-  } else {
-    const startDay = parseDateOnly(joinDate ?? null);
-    if (startDay) {
-      const baseEnd = addMs(toDayDate(startDay), PROGRAM_DAYS * 86400000);
-      baseCandidate = addMs(baseEnd, extraMonths * 30 * 86400000 + membresiaMs);
-    } else if (metaVenceDay) {
-      // Fallback sin joinDate: usar vence_estimado + membresía
-      baseCandidate = addMs(metaVenceDay, membresiaMs);
+  if (startDay) {
+    const programEndCalendar = addMonthsCalendar(
+      toDayDate(startDay),
+      programaMeses,
+    );
+    const baseEnd = addDays(programEndCalendar, pausedCalendarDaysTotal);
+    if (isLegacy && metaVenceDay) {
+      baseCandidate = addDays(toDayDate(metaVenceDay), pausedCalendarDaysTotal);
+    } else {
+      baseCandidate = addDays(baseEnd, extraMonths * 30);
     }
+  } else if (metaVenceDay) {
+    // Fallback sin joinDate
+    baseCandidate = addDays(toDayDate(metaVenceDay), pausedCalendarDaysTotal);
   }
 
-  // Candidato 2: extensiones por rango explícito
+  // Candidato 2: extensiones por rango explícito (con snapshot de pausas)
   let rangeEndCandidate: Date | null = null;
   for (const ext of venceMeta?.extensiones ?? []) {
     const d = parseDateOnly(ext?.fecha_hasta ?? null);
     if (!d) continue;
-    if (!rangeEndCandidate || d.getTime() > rangeEndCandidate.getTime())
-      rangeEndCandidate = d;
+    const day = toDayDate(d);
+    const snapRaw = Number(ext?.paused_calendar_days_at_creation);
+    const snap = Number.isFinite(snapRaw) ? snapRaw : null;
+    const pauseDelta =
+      snap !== null ? Math.max(0, pausedCalendarDaysTotal - snap) : 0;
+    const effectiveEnd = pauseDelta > 0 ? addDays(day, pauseDelta) : day;
+    if (
+      !rangeEndCandidate ||
+      effectiveEnd.getTime() > rangeEndCandidate.getTime()
+    ) {
+      rangeEndCandidate = effectiveEnd;
+    }
   }
 
-  // Candidato 3: membresías con fecha_hasta explícita (no anuladas)
+  // Candidato 3: membresías con fecha_hasta absoluta (con snapshot)
   let membershipEndCandidate: Date | null = null;
   for (const m of membresiaExts) {
     if (m.anulado) continue;
     const d = parseDateOnly(m.fecha_hasta ?? null);
     if (!d) continue;
+    const day = toDayDate(d);
+    const snapRaw = Number(m?.paused_calendar_days_at_creation);
+    const snap = Number.isFinite(snapRaw) ? snapRaw : null;
+    const pauseDelta =
+      snap !== null ? Math.max(0, pausedCalendarDaysTotal - snap) : 0;
+    const effectiveEnd = pauseDelta > 0 ? addDays(day, pauseDelta) : day;
     if (
       !membershipEndCandidate ||
-      d.getTime() > membershipEndCandidate.getTime()
-    )
-      membershipEndCandidate = d;
+      effectiveEnd.getTime() > membershipEndCandidate.getTime()
+    ) {
+      membershipEndCandidate = effectiveEnd;
+    }
   }
 
   const candidates = [
@@ -270,7 +316,11 @@ export default function StudentChatDisclaimer({
               programa_meses: rawPayload.programa_meses ?? null,
               meses_extra: rawPayload.meses_extra ?? null,
               extensiones: Array.isArray(rawPayload.extensiones)
-                ? rawPayload.extensiones
+                ? rawPayload.extensiones.map((e: any) => ({
+                    fecha_hasta: e?.fecha_hasta ?? null,
+                    paused_calendar_days_at_creation:
+                      e?.paused_calendar_days_at_creation ?? null,
+                  }))
                 : [],
             }
           : null;
@@ -282,6 +332,8 @@ export default function StudentChatDisclaimer({
                 meses: p.meses ?? p.meses_extra ?? null,
                 anulado: Boolean(p.anulado),
                 fecha_hasta: p.fecha_hasta ?? null,
+                paused_calendar_days_at_creation:
+                  p.paused_calendar_days_at_creation ?? null,
               };
             })
           : [];
@@ -291,11 +343,18 @@ export default function StudentChatDisclaimer({
             ? json.joinDate.trim()
             : null;
 
+        const pausedRaw = Number(json.pausedCalendarDaysTotal);
+        const pausedCalendarDaysTotal =
+          Number.isFinite(pausedRaw) && pausedRaw > 0
+            ? Math.round(pausedRaw)
+            : 0;
+
         setData({
           venceMeta,
           membresiaExts,
           studentInfo: studentInfo ?? null,
           apiJoinDate,
+          pausedCalendarDaysTotal,
         });
       } catch {
         // silencioso
@@ -330,11 +389,12 @@ export default function StudentChatDisclaimer({
   const info = data.studentInfo ?? studentInfo ?? null;
   const resolvedJoinDate = data.apiJoinDate ?? info?.joinDate ?? null;
 
-  // Calcular fecha igual que computeEstimatedEnd en useAccessDueNotifications
+  // Calcular fecha igual que el perfil del alumno (con pausas y snapshots).
   const venceDate = computeEstimatedEnd(
     venceMeta,
     membresiaExts,
     resolvedJoinDate,
+    data.pausedCalendarDaysTotal,
   );
   const today = toDayDate(new Date());
   const daysLeft = venceDate ? diffDays(today, venceDate) : null;

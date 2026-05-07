@@ -1965,7 +1965,27 @@ export default function AdminChatPage() {
                 Solo lectura
               </div>
               {/* Disclaimer de contrato del alumno */}
-              {/* StudentChatDisclaimer oculto para coachs */}
+              {targetKind === "alumno" && targetId && (
+                <StudentChatDisclaimer
+                  alumnoId={selectedStudentItem?.id ?? targetId}
+                  alumnoCode={selectedStudentItem?.code ?? targetId}
+                  studentInfo={
+                    selectedStudentItem
+                      ? {
+                          name: selectedStudentItem.name,
+                          state: selectedStudentItem.state ?? null,
+                          stage: selectedStudentItem.stage ?? null,
+                          tag: selectedStudentItem.tag ?? null,
+                          joinDate: selectedStudentItem.joinDate ?? null,
+                          inactivityDays:
+                            selectedStudentItem.inactivityDays ?? null,
+                          lastActivity:
+                            selectedStudentItem.lastActivity ?? null,
+                        }
+                      : null
+                  }
+                />
+              )}
               {/* Vista global: listar TODAS las conversaciones sin filtrar por equipo del admin */}
               <div className="flex-1 min-h-0 overflow-hidden">
                 <CoachChatInline
