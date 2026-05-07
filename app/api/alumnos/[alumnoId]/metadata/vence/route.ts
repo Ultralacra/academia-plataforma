@@ -220,6 +220,11 @@ function safePayloadForVence(p: any) {
         }))
       : [],
     historial: Array.isArray(payload.historial) ? payload.historial : [],
+    // IDs de pausas marcadas como revertidas. Sin este campo se perdían
+    // al recargar ya que safePayloadForVence no las incluía.
+    pausas_revertidas: Array.isArray(payload.pausas_revertidas)
+      ? payload.pausas_revertidas.map(String)
+      : [],
     ultimo_cambio_at: payload.ultimo_cambio_at ?? null,
     ultimo_cambio_por: payload.ultimo_cambio_por ?? null,
   };
