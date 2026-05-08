@@ -355,6 +355,10 @@ function TasksNotificationsBadge() {
   );
 
   const loadTaskNotifications = useCallback(async () => {
+    // Esperar a que el usuario cargue antes de hacer cualquier llamada.
+    // Sin este guard, en el primer render user=null → isStudent=false → se llama
+    // apiFetch directamente al API externo y devuelve datos de todos los alumnos.
+    if (!user) return;
     setTasksLoading(true);
     setTasksError(null);
     try {

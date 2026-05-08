@@ -30,7 +30,7 @@ function normalizeTag(tag?: string | null): string {
     .replace(/\s+/g, " ");
 }
 
-const ALLOWED_TAG = "hotselling starter";
+const ALLOWED_TAG = "hotselling foundation";
 
 async function fetchMe(authorization: string) {
   const res = await fetch(buildUrl("/auth/me"), {
@@ -137,6 +137,6 @@ export async function GET(req: NextRequest) {
     tag: rawTag,
     reason: allowed
       ? undefined
-      : "Acceso exclusivo para alumnos HotSelling Starter",
+      : "Acceso exclusivo para alumnos HotSelling Foundation",
   });
 }

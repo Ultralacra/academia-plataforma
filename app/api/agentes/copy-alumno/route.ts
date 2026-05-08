@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
@@ -31,7 +31,7 @@ function normalizeTag(tag?: string | null): string {
     .replace(/\s+/g, " ");
 }
 
-const ALLOWED_TAG = "hotselling starter";
+const ALLOWED_TAG = "hotselling foundation";
 
 async function fetchMe(authorization: string) {
   const res = await fetch(buildUrl("/auth/me"), {
@@ -569,7 +569,7 @@ export async function POST(request: NextRequest) {
   if (normalizeTag(rawTag) !== ALLOWED_TAG) {
     return new Response(
       JSON.stringify({
-        error: "Acceso exclusivo para alumnos HotSelling Starter",
+        error: "Acceso exclusivo para alumnos HotSelling Foundation",
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
@@ -598,14 +598,14 @@ export async function POST(request: NextRequest) {
 
   const systemPrompt = SYSTEM_PROMPTS[agentType] ?? SYSTEM_HOTSYSTEM;
 
-  // 5. Anthropic streaming (proveedor único para el módulo de alumnos)
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const modelId = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+  // 5. OpenAI streaming (modelo gpt-4.5 dedicado para alumnos starter)
+  const apiKey = process.env.OPENAI_API_KEY_STARTER;
+  const modelId = process.env.OPENAI_MODEL_STARTER ?? "gpt-4.5";
 
   if (!apiKey) {
     return new Response(
       JSON.stringify({
-        error: "ANTHROPIC_API_KEY no configurada en el servidor",
+        error: "OPENAI_API_KEY_STARTER no configurada en el servidor",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
@@ -618,42 +618,36 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        const anthropic = new Anthropic({ apiKey });
+        const client = new OpenAI({ apiKey });
 
-        const sdkStream = await anthropic.messages.create({
-          model: modelId,
-          max_tokens: 16000,
-          stream: true,
-          system: systemPrompt,
-          messages: (messages as Array<{ role: string; content: string }>).map(
+        const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+          { role: "system", content: systemPrompt },
+          ...(messages as Array<{ role: string; content: string }>).map(
             (m) => ({
               role: m.role as "user" | "assistant",
               content: String(m.content ?? ""),
             }),
           ),
+        ];
+
+        const completion = await client.chat.completions.create({
+          model: modelId,
+          messages: openaiMessages,
+          stream: true,
+          stream_options: { include_usage: true },
+          max_completion_tokens: 16000,
         });
 
-        for await (const event of sdkStream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            const text = event.delta.text;
-            if (text) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
-              );
-            }
-          } else if (event.type === "message_start") {
-            const u: any = (event as any).message?.usage;
-            if (u) {
-              inputTokens = Number(u.input_tokens ?? 0) || inputTokens;
-            }
-          } else if (event.type === "message_delta") {
-            const u: any = (event as any).usage;
-            if (u) {
-              outputTokens = Number(u.output_tokens ?? 0) || outputTokens;
-            }
+        for await (const chunk of completion) {
+          const text = chunk.choices[0]?.delta?.content ?? "";
+          if (text) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
+            );
+          }
+          if (chunk.usage) {
+            inputTokens = chunk.usage.prompt_tokens ?? inputTokens;
+            outputTokens = chunk.usage.completion_tokens ?? outputTokens;
           }
         }
 
@@ -684,12 +678,13 @@ export async function POST(request: NextRequest) {
         });
       } catch (err: any) {
         const status = err?.status ?? "?";
+        const code = err?.code ?? err?.error?.code ?? "?";
         let msg = err?.message ?? "Error desconocido";
-        if (status === 401) msg = "API key de Anthropic inválida o expirada.";
-        else if (status === 429)
-          msg = "Sin créditos o rate limit en Anthropic.";
-        else if (status === 404)
-          msg = `Modelo "${modelId}" no encontrado en Anthropic.`;
+        if (status === 401) msg = "API key de OpenAI inválida o expirada.";
+        else if (status === 429) msg = "Sin créditos o rate limit en OpenAI.";
+        else if (status === 404 || code === "model_not_found")
+          msg = `Modelo "${modelId}" no disponible para esta cuenta.`;
+        else if (status === 400) msg = `Petición inválida (400): ${msg}`;
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`),
         );
