@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
+  BarChart3,
   Bot,
   BrainCircuit,
   ClipboardCheck,
@@ -228,6 +229,13 @@ function AgentsHome() {
         >
           <TrendingUp className="h-4 w-4" />
           Ver uso del agente HotSelling (alumnos)
+        </Link>
+        <Link
+          href="/admin/agentes/uso-coach"
+          className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
+        >
+          <BarChart3 className="h-4 w-4" />
+          Ver uso del agente Copy (coachs)
         </Link>
       </div>
 

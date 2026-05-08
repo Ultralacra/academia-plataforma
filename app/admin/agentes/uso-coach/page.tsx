@@ -23,24 +23,25 @@ import {
 } from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api-config";
 
-type AgenteUsoPayload = {
-  alumno_id: number | string | null;
-  alumno_codigo: string;
-  alumno_nombre: string | null;
-  alumno_email: string | null;
-  agent_type: string;
-  model: string;
-  input_tokens: number;
-  output_tokens: number;
-  user_message_chars: number;
-  created_at: string;
+type AgenteUsoCoachPayload = {
+  coach_id?: number | string | null;
+  coach_codigo?: string;
+  coach_nombre?: string;
+  alumno_codigo?: string;
+  alumno_nombre?: string;
+  agent_type?: string;
+  model?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  user_message_chars?: number;
+  created_at?: string;
 };
 
 type UsageRecord = {
   id: number | string;
   entity: string;
   entity_id: string;
-  payload: AgenteUsoPayload;
+  payload: AgenteUsoCoachPayload;
   created_at?: string;
   updated_at?: string;
 };
@@ -88,12 +89,7 @@ function formatNumber(n: number) {
   return new Intl.NumberFormat("es-ES").format(Math.round(n));
 }
 
-// Precios USD por 1M tokens
-// Anthropic: https://www.anthropic.com/pricing
-// OpenAI:    https://openai.com/api/pricing
-// Si el modelo cambia en el futuro, ajustar aquí.
 const PRICE_PER_MILLION: Record<string, { input: number; output: number }> = {
-  // Anthropic
   default: { input: 3, output: 15 },
   "claude-sonnet-4-5": { input: 3, output: 15 },
   "claude-sonnet-4-0": { input: 3, output: 15 },
@@ -101,7 +97,6 @@ const PRICE_PER_MILLION: Record<string, { input: number; output: number }> = {
   "claude-3-5-haiku": { input: 0.8, output: 4 },
   "claude-3-haiku": { input: 0.25, output: 1.25 },
   "claude-3-opus": { input: 15, output: 75 },
-  // OpenAI
   "gpt-5": { input: 10, output: 40 },
   "gpt-4.5": { input: 75, output: 150 },
   "gpt-4o": { input: 2.5, output: 10 },
@@ -142,35 +137,35 @@ function formatUSD(n: number) {
   }).format(n);
 }
 
-type AlumnoAggregate = {
-  alumno_codigo: string;
-  alumno_nombre: string | null;
-  alumno_email: string | null;
+type CoachAggregate = {
+  coach_codigo: string;
+  coach_nombre: string | null;
   total_usos: number;
   input_tokens: number;
   output_tokens: number;
   costo_usd: number;
   ultimo_uso: string | null;
   agentesUsados: Set<string>;
+  alumnosUsados: Set<string>;
   records: UsageRecord[];
 };
 
-function AgentesUsoContent() {
+function AgentesUsoCoachContent() {
   const [records, setRecords] = useState<UsageRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [detail, setDetail] = useState<AlumnoAggregate | null>(null);
+  const [detail, setDetail] = useState<CoachAggregate | null>(null);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await apiFetch<any>(
-        "/metadata?entity=agente_uso_alumno&pageSize=5000",
+        "/metadata?entity=agente_uso_coach&pageSize=5000",
       );
       const items = coerceList(res).filter(
-        (r) => r?.entity === "agente_uso_alumno",
+        (r) => r?.entity === "agente_uso_coach",
       );
       setRecords(items);
     } catch (e: any) {
@@ -184,47 +179,49 @@ function AgentesUsoContent() {
     load();
   }, []);
 
-  const aggregates = useMemo<AlumnoAggregate[]>(() => {
-    const map = new Map<string, AlumnoAggregate>();
+  const aggregates = useMemo<CoachAggregate[]>(() => {
+    const map = new Map<string, CoachAggregate>();
     for (const r of records) {
-      const p = r.payload || ({} as AgenteUsoPayload);
+      const p = r.payload || ({} as AgenteUsoCoachPayload);
       const key =
-        String(p.alumno_codigo ?? "").trim() ||
-        String(p.alumno_id ?? r.entity_id ?? "");
+        String(p.coach_codigo ?? "").trim() ||
+        String(p.coach_id ?? r.entity_id ?? "");
       if (!key) continue;
       const existing = map.get(key);
       const created = String(p.created_at ?? r.created_at ?? "");
       const inTok = Number(p.input_tokens ?? 0);
       const outTok = Number(p.output_tokens ?? 0);
       const cost = calcCost(p.model, inTok, outTok);
+      const alumnoKey = String(p.alumno_codigo ?? "").trim();
       if (existing) {
         existing.total_usos += 1;
         existing.input_tokens += inTok;
         existing.output_tokens += outTok;
         existing.costo_usd += cost;
         existing.agentesUsados.add(String(p.agent_type ?? ""));
+        if (alumnoKey) existing.alumnosUsados.add(alumnoKey);
         existing.records.push(r);
         if (
           created &&
           (!existing.ultimo_uso || created > existing.ultimo_uso)
         ) {
           existing.ultimo_uso = created;
-          if (!existing.alumno_nombre && p.alumno_nombre)
-            existing.alumno_nombre = p.alumno_nombre;
-          if (!existing.alumno_email && p.alumno_email)
-            existing.alumno_email = p.alumno_email;
+          if (!existing.coach_nombre && p.coach_nombre)
+            existing.coach_nombre = p.coach_nombre;
         }
       } else {
+        const alumnosSet = new Set<string>();
+        if (alumnoKey) alumnosSet.add(alumnoKey);
         map.set(key, {
-          alumno_codigo: String(p.alumno_codigo ?? key),
-          alumno_nombre: p.alumno_nombre ?? null,
-          alumno_email: p.alumno_email ?? null,
+          coach_codigo: String(p.coach_codigo ?? key),
+          coach_nombre: p.coach_nombre ?? null,
           total_usos: 1,
           input_tokens: inTok,
           output_tokens: outTok,
           costo_usd: cost,
           ultimo_uso: created || null,
           agentesUsados: new Set([String(p.agent_type ?? "")]),
+          alumnosUsados: alumnosSet,
           records: [r],
         });
       }
@@ -240,7 +237,7 @@ function AgentesUsoContent() {
     if (!q.trim()) return aggregates;
     const needle = q.trim().toLowerCase();
     return aggregates.filter((a) =>
-      [a.alumno_codigo, a.alumno_nombre ?? "", a.alumno_email ?? ""].some((v) =>
+      [a.coach_codigo, a.coach_nombre ?? ""].some((v) =>
         String(v).toLowerCase().includes(needle),
       ),
     );
@@ -271,18 +268,19 @@ function AgentesUsoContent() {
             Agentes
           </Link>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-amber-500" />
-            Uso del Agente HotSelling (alumnos)
+            <BarChart3 className="h-6 w-6 text-violet-500" />
+            Uso del Agente Copy (coachs)
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Registro de consumo del agente por alumno y tokens utilizados.
+            Registro de consumo del agente por coach, agentes usados y alumnos
+            en contexto.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Buscar alumno..."
+              placeholder="Buscar coach..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
               className="h-9 w-64 pl-8"
@@ -301,9 +299,9 @@ function AgentesUsoContent() {
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
-          label="Alumnos únicos"
+          label="Coachs únicos"
           value={formatNumber(aggregates.length)}
-          icon={<User className="h-5 w-5 text-amber-500" />}
+          icon={<User className="h-5 w-5 text-violet-500" />}
         />
         <KpiCard
           label="Mensajes totales"
@@ -339,8 +337,7 @@ function AgentesUsoContent() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Alumno</th>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
+                <th className="px-4 py-3 text-left font-medium">Coach</th>
                 <th className="px-4 py-3 text-right font-medium">Mensajes</th>
                 <th className="px-4 py-3 text-right font-medium">
                   Tokens entrada
@@ -352,6 +349,9 @@ function AgentesUsoContent() {
                   Costo (USD)
                 </th>
                 <th className="px-4 py-3 text-left font-medium">Agentes</th>
+                <th className="px-4 py-3 text-right font-medium">
+                  Alumnos en contexto
+                </th>
                 <th className="px-4 py-3 text-left font-medium">Último uso</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -375,17 +375,14 @@ function AgentesUsoContent() {
                 </tr>
               )}
               {filtered.map((a) => (
-                <tr key={a.alumno_codigo} className="hover:bg-slate-50">
+                <tr key={a.coach_codigo} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800">
-                      {a.alumno_nombre || "—"}
+                      {a.coach_nombre || "—"}
                     </div>
                     <div className="text-xs text-slate-400 font-mono">
-                      {a.alumno_codigo}
+                      {a.coach_codigo}
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {a.alumno_email || "—"}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-800">
                     {formatNumber(a.total_usos)}
@@ -404,12 +401,21 @@ function AgentesUsoContent() {
                       {Array.from(a.agentesUsados).map((t) => (
                         <span
                           key={t}
-                          className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 border border-amber-200"
+                          className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 border border-violet-200"
                         >
                           {AGENT_LABEL[t] ?? t}
                         </span>
                       ))}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-right text-slate-600">
+                    {a.alumnosUsados.size > 0 ? (
+                      <span title={Array.from(a.alumnosUsados).join(", ")}>
+                        {a.alumnosUsados.size}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {formatDate(a.ultimo_uso)}
@@ -434,7 +440,7 @@ function AgentesUsoContent() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              Historial · {detail?.alumno_nombre || detail?.alumno_codigo}
+              Historial · {detail?.coach_nombre || detail?.coach_codigo}
             </DialogTitle>
           </DialogHeader>
           {detail && (
@@ -444,6 +450,9 @@ function AgentesUsoContent() {
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">Fecha</th>
                     <th className="px-3 py-2 text-left font-medium">Agente</th>
+                    <th className="px-3 py-2 text-left font-medium">
+                      Alumno contexto
+                    </th>
                     <th className="px-3 py-2 text-right font-medium">
                       Tokens in
                     </th>
@@ -452,9 +461,6 @@ function AgentesUsoContent() {
                     </th>
                     <th className="px-3 py-2 text-right font-medium">
                       Costo (USD)
-                    </th>
-                    <th className="px-3 py-2 text-right font-medium">
-                      Chars input
                     </th>
                   </tr>
                 </thead>
@@ -477,9 +483,21 @@ function AgentesUsoContent() {
                           )}
                         </td>
                         <td className="px-3 py-2 text-slate-700">
-                          {AGENT_LABEL[r.payload?.agent_type] ??
+                          {AGENT_LABEL[r.payload?.agent_type ?? ""] ??
                             r.payload?.agent_type ??
                             "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {r.payload?.alumno_nombre ? (
+                            <span>
+                              {r.payload.alumno_nombre}
+                              <span className="text-slate-400 font-mono text-[10px] ml-1">
+                                {r.payload.alumno_codigo}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
                           {formatNumber(Number(r.payload?.input_tokens ?? 0))}
@@ -494,11 +512,6 @@ function AgentesUsoContent() {
                               Number(r.payload?.input_tokens ?? 0),
                               Number(r.payload?.output_tokens ?? 0),
                             ),
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {formatNumber(
-                            Number(r.payload?.user_message_chars ?? 0),
                           )}
                         </td>
                       </tr>
@@ -539,11 +552,11 @@ function KpiCard({
   );
 }
 
-export default function AgentesUsoPage() {
+export default function AgentesUsoCoachPage() {
   return (
     <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
-        <AgentesUsoContent />
+        <AgentesUsoCoachContent />
       </DashboardLayout>
     </ProtectedRoute>
   );

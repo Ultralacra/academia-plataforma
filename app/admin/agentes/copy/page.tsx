@@ -9,16 +9,20 @@ import {
   Layers,
   Megaphone,
   Paperclip,
+  Search,
   SendHorizonal,
   Sparkles,
   Trash2,
   TvMinimalPlay,
+  User,
   Video,
   X,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Textarea } from "@/components/ui/textarea";
+import { apiFetch } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
 
 // ─── Sub-agent definitions ────────────────────────────────────────────────────
 
@@ -164,12 +168,152 @@ type ChatMessage = {
   role: "assistant" | "user";
   content: string;
   fileNames?: string[];
+  context?: {
+    ticketCount: number;
+    loomCount: number;
+    ticketIds: string[];
+  };
 };
+
+// ─── Ticket citation badge ────────────────────────────────────────────────────
+
+function TicketCitationBadge({ codigo }: { codigo: string }) {
+  return (
+    <span className="group relative inline-block align-middle mx-0.5">
+      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-mono font-medium text-amber-700 cursor-default select-none">
+        📋 {codigo}
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 w-56 scale-95 rounded-xl bg-slate-800 text-white text-[11px] px-3 py-2.5 shadow-xl opacity-0 transition-all group-hover:scale-100 group-hover:opacity-100">
+        <span className="font-semibold text-white block">
+          Ticket referenciado
+        </span>
+        <span className="text-slate-300 font-mono block mt-0.5">{codigo}</span>
+        <span className="text-slate-400 block mt-1 text-[10px]">
+          Este fragmento se basó en el historial del alumno
+        </span>
+      </span>
+    </span>
+  );
+}
+
+// ─── Student picker popover ───────────────────────────────────────────────────
+
+type StudentOption = { code: string; name: string };
+
+function StudentPickerPopover({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (s: StudentOption) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<StudentOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const doSearch = useCallback((query: string) => {
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+    setLoading(true);
+    apiFetch<any>(
+      `/client/get/clients?search=${encodeURIComponent(query)}&pageSize=20`,
+    )
+      .then((res) => {
+        const items: any[] = Array.isArray(res)
+          ? res
+          : Array.isArray(res?.items)
+            ? res.items
+            : Array.isArray(res?.data)
+              ? res.data
+              : Array.isArray(res?.data?.items)
+                ? res.data.items
+                : [];
+        setResults(
+          items.map((c) => ({
+            code: String(c.codigo ?? c.id ?? ""),
+            name: String(c.nombre ?? c.name ?? c.email ?? c.codigo ?? ""),
+          })),
+        );
+      })
+      .catch(() => setResults([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(q), 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [q, doSearch]);
+
+  return (
+    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2.5">
+        <Search className="h-4 w-4 text-slate-400 shrink-0" />
+        <input
+          ref={inputRef}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar alumno por nombre o código..."
+          className="flex-1 text-sm outline-none bg-transparent placeholder:text-slate-400"
+          onKeyDown={(e) => e.key === "Escape" && onClose()}
+        />
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="max-h-52 overflow-y-auto py-1">
+        {loading && (
+          <div className="px-3 py-2 text-sm text-slate-400">Buscando...</div>
+        )}
+        {!loading && q.trim() && results.length === 0 && (
+          <div className="px-3 py-2 text-sm text-slate-400">Sin resultados</div>
+        )}
+        {!loading && !q.trim() && (
+          <div className="px-3 py-2 text-sm text-slate-400">
+            Escribe para buscar alumnos
+          </div>
+        )}
+        {results.map((r) => (
+          <button
+            key={r.code}
+            type="button"
+            onClick={() => onSelect(r)}
+            className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 transition-colors"
+          >
+            <User className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="font-medium text-slate-800 flex-1 truncate">
+              {r.name}
+            </span>
+            <span className="text-xs text-slate-400 font-mono shrink-0">
+              {r.code}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
 
 function inlineMarkdown(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
+  const parts = text.split(
+    /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[TICKET:[^\]]+\])/g,
+  );
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
@@ -186,6 +330,10 @@ function inlineMarkdown(text: string): React.ReactNode {
           {part.slice(1, -1)}
         </code>
       );
+    }
+    const ticketMatch = part.match(/^\[TICKET:([^\]]+)\]$/);
+    if (ticketMatch) {
+      return <TicketCitationBadge key={i} codigo={ticketMatch[1]} />;
     }
     return part;
   });
@@ -287,6 +435,10 @@ function CopyAgentWorkspace() {
   const [attachedFiles, setAttachedFiles] = useState<
     Array<{ name: string; content: string }>
   >([]);
+  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(
+    null,
+  );
+  const [studentCmdOpen, setStudentCmdOpen] = useState(false);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -464,13 +616,19 @@ function CopyAgentWorkspace() {
         const controller = new AbortController();
         abortRef.current = controller;
 
+        const authToken = getAuthToken();
         const res = await fetch("/api/agentes/copy", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
           body: JSON.stringify({
             messages: history,
             agentType: selectedAgentId,
             provider: localStorage.getItem("agents-ai-provider") ?? "openai",
+            alumnoCode: selectedStudent?.code,
+            alumnoName: selectedStudent?.name,
           }),
           signal: controller.signal,
         });
@@ -494,13 +652,39 @@ function CopyAgentWorkspace() {
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6).trim();
             if (data === "[DONE]") break;
-            let parsed: { text?: string; error?: string };
+            let parsed: {
+              text?: string;
+              error?: string;
+              type?: string;
+              ticketCount?: number;
+              loomCount?: number;
+              ticketIds?: string[];
+            };
             try {
-              parsed = JSON.parse(data) as { text?: string; error?: string };
+              parsed = JSON.parse(data);
             } catch {
               continue; // línea malformada, ignorar
             }
             if (parsed.error) throw new Error(parsed.error);
+            if (parsed.type === "context") {
+              const ctx = {
+                ticketCount: Number(parsed.ticketCount ?? 0),
+                loomCount: Number(parsed.loomCount ?? 0),
+                ticketIds: Array.isArray(parsed.ticketIds)
+                  ? parsed.ticketIds.map((x) => String(x))
+                  : [],
+              };
+              setMessagesByAgent((prev) => {
+                const current = prev[selectedAgentId] ?? [];
+                return {
+                  ...prev,
+                  [selectedAgentId]: current.map((m) =>
+                    m.id === assistantId ? { ...m, context: ctx } : m,
+                  ),
+                };
+              });
+              continue;
+            }
             if (parsed.text) {
               accumulated += parsed.text;
               // Programar flush solo si no hay uno pendiente
@@ -634,6 +818,25 @@ function CopyAgentWorkspace() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {selectedStudent && (
+              <div className="flex items-center gap-1.5 rounded-full bg-violet-50 border border-violet-200 px-2.5 py-1 text-[11px] text-violet-700">
+                <User className="h-3 w-3 shrink-0" />
+                <span className="max-w-[120px] truncate font-medium">
+                  {selectedStudent.name}
+                </span>
+                <span className="text-violet-400 font-mono text-[10px]">
+                  {selectedStudent.code}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudent(null)}
+                  className="ml-0.5 text-violet-400 hover:text-violet-600"
+                  title="Quitar contexto de alumno"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
             {isStreaming && (
               <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-600">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
@@ -697,6 +900,39 @@ function CopyAgentWorkspace() {
                         ))}
                       </div>
                     )}
+                    {isAssistant &&
+                      message.context &&
+                      (message.context.ticketCount > 0 ||
+                        message.context.loomCount > 0) && (
+                        <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5">
+                          <span className="text-xs font-medium text-violet-700">
+                            🧠 Contexto del alumno analizado:
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[11px] font-medium text-violet-700 border border-violet-200">
+                            📋 {message.context.ticketCount} ticket
+                            {message.context.ticketCount === 1 ? "" : "s"}
+                          </span>
+                          {message.context.loomCount > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[11px] font-medium text-violet-700 border border-violet-200">
+                              🎬 {message.context.loomCount} Loom
+                              {message.context.loomCount === 1 ? "" : "s"}{" "}
+                              transcrito
+                              {message.context.loomCount === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          {message.context.ticketIds.length > 0 && (
+                            <span
+                              className="text-[10px] text-violet-600 font-mono truncate max-w-[200px]"
+                              title={message.context.ticketIds.join(", ")}
+                            >
+                              {message.context.ticketIds.slice(0, 3).join(", ")}
+                              {message.context.ticketIds.length > 3
+                                ? `, +${message.context.ticketIds.length - 3}`
+                                : ""}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     {isAssistant ? (
                       <div className="space-y-0.5">
                         {message.content ? (
@@ -790,7 +1026,20 @@ function CopyAgentWorkspace() {
               </div>
             )}
 
-            <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 transition-colors focus-within:border-slate-400 focus-within:bg-white">
+            <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 transition-colors focus-within:border-slate-400 focus-within:bg-white relative">
+              {studentCmdOpen && (
+                <StudentPickerPopover
+                  onSelect={(s) => {
+                    setSelectedStudent(s);
+                    setStudentCmdOpen(false);
+                    setDraft((prev) => prev.replace(/\/alumno/gi, "").trim());
+                  }}
+                  onClose={() => {
+                    setStudentCmdOpen(false);
+                    setDraft((prev) => prev.replace(/\/alumno/gi, "").trim());
+                  }}
+                />
+              )}
               <button
                 type="button"
                 title="Adjuntar documento"
@@ -833,11 +1082,17 @@ function CopyAgentWorkspace() {
 
               <Textarea
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDraft(val);
+                  if (val.includes("/alumno") && !studentCmdOpen) {
+                    setStudentCmdOpen(true);
+                  }
+                }}
                 placeholder={
                   attachedFiles.length > 0
                     ? "Añade instrucciones sobre el archivo…"
-                    : `Escribe al ${selectedAgent.label}…`
+                    : `Escribe al ${selectedAgent.label}… (tip: escribe /alumno para añadir contexto)`
                 }
                 disabled={isStreaming}
                 className="max-h-40 min-h-[44px] flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-6 shadow-none focus-visible:ring-0 disabled:opacity-60"

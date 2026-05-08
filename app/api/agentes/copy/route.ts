@@ -682,15 +682,360 @@ const SYSTEM_PROMPTS: Record<string, string> = {
   "hotwriter-ads": SYSTEM_HOTWRITER_ADS,
 };
 
+// ─── Helpers: contexto de alumno, Loom, logging ──────────────────────────────
+
+const API_HOST_INTERNAL =
+  process.env.NEXT_PUBLIC_API_HOST ?? "https://api-ax.valinkgroup.com/v1";
+
+function extractLoomIds(text: string): string[] {
+  const ids = new Set<string>();
+  for (const m of text.matchAll(/loom\.com\/share\/([a-zA-Z0-9]+)/g)) {
+    ids.add(m[1]);
+  }
+  return Array.from(ids);
+}
+
+function findTranscriptInObject(obj: unknown, depth = 0): string | null {
+  if (depth > 8 || obj === null || typeof obj !== "object") return null;
+  if (Array.isArray(obj)) {
+    if (
+      obj.length > 0 &&
+      typeof obj[0] === "object" &&
+      obj[0] !== null &&
+      "value" in (obj[0] as object)
+    ) {
+      const text = (obj as Array<{ value?: string }>)
+        .map((t) => t.value ?? "")
+        .filter(Boolean)
+        .join(" ");
+      if (text.length > 20) return text;
+    }
+    for (const item of obj) {
+      const found = findTranscriptInObject(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  const record = obj as Record<string, unknown>;
+  if ("transcript" in record) {
+    const t = record.transcript;
+    if (Array.isArray(t) && t.length > 0) {
+      if (typeof t[0] === "object" && t[0] !== null && "value" in (t[0] as object)) {
+        return (t as Array<{ value?: string }>)
+          .map((item) => item.value ?? "")
+          .filter(Boolean)
+          .join(" ");
+      }
+      if (typeof t[0] === "string") return t.join(" ");
+    }
+    if (typeof t === "string" && t.length > 20) return t;
+  }
+  for (const key of Object.keys(record)) {
+    const found = findTranscriptInObject(record[key], depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function fetchLoomTranscript(videoId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://www.loom.com/share/${videoId}`, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        Accept: "text/html",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const match = html.match(
+      /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/,
+    );
+    if (!match) return null;
+    const data = JSON.parse(match[1]) as unknown;
+    return findTranscriptInObject(data);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchStudentTickets(
+  authorization: string,
+  alumnoCode: string,
+): Promise<unknown[]> {
+  try {
+    const url = `${API_HOST_INTERNAL}/client/get/tickets/${encodeURIComponent(alumnoCode)}?page=1&pageSize=30`;
+    console.log("[copy-agent] fetchStudentTickets URL:", url);
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(10000),
+    });
+    console.log("[copy-agent] fetchStudentTickets status:", res.status);
+    if (!res.ok) return [];
+    const json = (await res.json()) as unknown;
+    console.log("[copy-agent] fetchStudentTickets response type:", Array.isArray(json) ? "array" : typeof json, "top-level keys:", json && typeof json === "object" ? Object.keys(json as object).join(",") : "none");
+    if (Array.isArray(json)) {
+      console.log("[copy-agent] fetchStudentTickets: got array of", json.length, "tickets");
+      return json;
+    }
+    if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      if (Array.isArray(j.items)) { console.log("[copy-agent] fetchStudentTickets: items[]", (j.items as unknown[]).length); return j.items as unknown[]; }
+      if (Array.isArray(j.data)) { console.log("[copy-agent] fetchStudentTickets: data[]", (j.data as unknown[]).length); return j.data as unknown[]; }
+      if (j.data && typeof j.data === "object") {
+        const d = j.data as Record<string, unknown>;
+        if (Array.isArray(d.items)) { console.log("[copy-agent] fetchStudentTickets: data.items[]", (d.items as unknown[]).length); return d.items as unknown[]; }
+        if (Array.isArray(d.rows)) { console.log("[copy-agent] fetchStudentTickets: data.rows[]", (d.rows as unknown[]).length); return d.rows as unknown[]; }
+      }
+      // Intentar extraer cualquier array del objeto raíz
+      for (const key of Object.keys(j)) {
+        if (Array.isArray(j[key]) && (j[key] as unknown[]).length > 0) {
+          console.log("[copy-agent] fetchStudentTickets: found array at key", key, "length", (j[key] as unknown[]).length);
+          return j[key] as unknown[];
+        }
+      }
+    }
+    console.log("[copy-agent] fetchStudentTickets: no array found in response");
+    return [];
+  } catch (err) {
+    console.error("[copy-agent] fetchStudentTickets error:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetch detalle de un ticket por código. Devuelve el objeto raw con
+ * respuesta_coach, descripcion, links, etc. (mismo endpoint que usa /tickets-board).
+ */
+async function fetchTicketDetail(
+  authorization: string,
+  codigo: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const url = `${API_HOST_INTERNAL}/ticket/get/ticket/${encodeURIComponent(codigo)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      console.log("[copy-agent] fetchTicketDetail", codigo, "status", res.status);
+      return null;
+    }
+    const json = (await res.json()) as unknown;
+    if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      // Algunas APIs envuelven en {data: {...}}
+      if (j.data && typeof j.data === "object" && !Array.isArray(j.data)) {
+        return j.data as Record<string, unknown>;
+      }
+      return j;
+    }
+    return null;
+  } catch (err) {
+    console.error("[copy-agent] fetchTicketDetail error", codigo, err);
+    return null;
+  }
+}
+
+async function buildStudentContext(
+  authorization: string,
+  alumnoCode: string,
+  alumnoName: string,
+): Promise<{ block: string; ticketIds: string[]; loomCount: number; ticketCount: number }> {
+  const tickets = await fetchStudentTickets(authorization, alumnoCode);
+  if (!tickets.length) {
+    console.log("[copy-agent] buildStudentContext: no tickets for", alumnoCode);
+    return { block: "", ticketIds: [], loomCount: 0, ticketCount: 0 };
+  }
+
+  console.log("[copy-agent] buildStudentContext: tickets raw count", tickets.length, "sample keys:", tickets[0] && typeof tickets[0] === "object" ? Object.keys(tickets[0] as object).join(",") : "none");
+
+  // Filtra tickets válidos (objeto) y ordena por fecha desc para tomar los más recientes
+  const validTickets = tickets
+    .filter((t): t is Record<string, unknown> => !!t && typeof t === "object")
+    .map((t) => ({
+      summary: t,
+      codigo: String(t.id_externo ?? t.codigo ?? t.id ?? ""),
+      fecha: String(t.creacion ?? t.created_at ?? t.createdAt ?? ""),
+    }))
+    .filter((x) => x.codigo)
+    .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
+    .slice(0, 10); // máx 10 tickets para mantener el contexto razonable
+
+  if (!validTickets.length) return { block: "", ticketIds: [], loomCount: 0, ticketCount: 0 };
+
+  // Fetch de detalles en paralelo — el endpoint /ticket/get/ticket/{codigo}
+  // es el que trae respuesta_coach, descripcion completa, links, etc.
+  console.log("[copy-agent] fetching detail for", validTickets.length, "tickets in parallel");
+  const detailedTickets = await Promise.all(
+    validTickets.map(async (x) => {
+      const detail = await fetchTicketDetail(authorization, x.codigo);
+      return {
+        codigo: x.codigo,
+        // Merge: el detalle tiene prioridad, el summary llena los huecos
+        data: detail ? { ...x.summary, ...detail } : x.summary,
+        hasDetail: !!detail,
+      };
+    }),
+  );
+
+  const detailFetched = detailedTickets.filter((d) => d.hasDetail).length;
+  console.log("[copy-agent] detail fetched OK for", detailFetched, "/", validTickets.length, "tickets");
+
+  const ticketIds: string[] = [];
+  let loomCount = 0;
+  const lines: string[] = [];
+  lines.push(
+    `## HISTORIAL DEL ALUMNO: ${alumnoName} (código: ${alumnoCode})\n`,
+  );
+  lines.push(
+    "Los siguientes tickets son las consultas previas del alumno con la respuesta exacta que ya le dio el coach (campo \"Respuesta Coach\" del sistema). Tu trabajo es generar una respuesta que sea COHERENTE con el feedback previo: si el coach ya corrigió algo, mantén esa corrección; si ya dio una recomendación, refuérzala; nunca contradigas el feedback histórico.",
+  );
+  lines.push(
+    "Cuando tu respuesta se base en alguno de estos tickets, AÑADE el formato exacto [TICKET:CODIGO] al final de la frase, párrafo o bullet correspondiente. CODIGO debe ser el id_externo del ticket tal como aparece en el listado. Si usaste varios tickets, incluye varios badges. NO inventes códigos.\n",
+  );
+
+  for (const { codigo, data: t } of detailedTickets) {
+    ticketIds.push(codigo);
+
+    const nombre = String(t.nombre ?? t.subject ?? t.asunto ?? "(sin título)");
+    const tipo = String(t.tipo ?? t.type ?? "");
+    const ultimoEstadoStr = (t.ultimo_estado && typeof t.ultimo_estado === "object") ? String((t.ultimo_estado as Record<string, unknown>).estatus ?? "") : "";
+    const estado = String(t.estado ?? t.status ?? ultimoEstadoStr);
+    const fecha = String(t.creacion ?? t.created_at ?? t.createdAt ?? "");
+
+    // Contenido del ticket
+    const desc = String(
+      t.descripcion ?? t.description ?? t.body ?? t.contenido ?? t.mensaje ?? ""
+    ).slice(0, 1200);
+
+    // Respuesta del coach (campo principal del detalle)
+    const respuesta = String(
+      t.respuesta_coach ?? t.respuestaCoach ?? t.respuesta ??
+      t.respuesta_del_coach ?? t.coach_response ?? t.coachResponse ??
+      t.feedback ?? t.solucion ?? t.solution ?? ""
+    ).slice(0, 2000);
+
+    // Links del ticket — pueden incluir Loom de respuesta del coach
+    const linkUrls: string[] = [];
+    if (Array.isArray(t.links)) {
+      for (const it of t.links as unknown[]) {
+        if (typeof it === "string") linkUrls.push(it);
+        else if (it && typeof it === "object") {
+          const url = (it as Record<string, unknown>).url;
+          if (typeof url === "string") linkUrls.push(url);
+        }
+      }
+    }
+
+    lines.push(`### [${codigo}] ${nombre}`);
+    const meta = [tipo, estado, fecha].filter(Boolean).join(" · ");
+    if (meta) lines.push(`(${meta})`);
+    if (desc) lines.push(`Consulta del alumno: ${desc}`);
+
+    // Buscar IDs Loom en TODO: descripción, respuesta y links
+    const allText = `${desc} ${respuesta} ${linkUrls.join(" ")}`;
+    const loomIds = Array.from(new Set(extractLoomIds(allText)));
+    for (const loomId of loomIds.slice(0, 3)) {
+      const transcript = await fetchLoomTranscript(loomId);
+      if (transcript) {
+        loomCount++;
+        lines.push(
+          `Loom del coach (loom.com/share/${loomId}) — transcripción: ${transcript.slice(0, 1500)}`,
+        );
+      } else {
+        lines.push(`Loom del coach (loom.com/share/${loomId}) — sin transcripción disponible`);
+      }
+    }
+
+    if (respuesta) lines.push(`Respuesta Coach (texto exacto): ${respuesta}`);
+    lines.push("");
+  }
+
+  console.log("[copy-agent] buildStudentContext done", { ticketCount: ticketIds.length, loomCount, detailFetched, blockChars: lines.join("\n").length });
+  return { block: lines.join("\n"), ticketIds, loomCount, ticketCount: ticketIds.length };
+}
+
+async function fetchCoachInfo(
+  authorization: string,
+): Promise<{ id: unknown; codigo: string; nombre: string } | null> {
+  try {
+    const res = await fetch(`${API_HOST_INTERNAL}/auth/me`, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as unknown;
+    const user =
+      json && typeof json === "object" && "data" in (json as object)
+        ? (json as Record<string, unknown>).data
+        : json;
+    if (!user || typeof user !== "object") return null;
+    const u = user as Record<string, unknown>;
+    return {
+      id: u.id ?? u.user_id ?? null,
+      codigo: String(u.codigo ?? u.username ?? u.email ?? "unknown"),
+      nombre: String(u.nombre ?? u.name ?? u.email ?? "Coach"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function logCoachAgentUsage(
+  authorization: string,
+  payload: {
+    coach_id?: unknown;
+    coach_codigo?: string;
+    coach_nombre?: string;
+    agent_type: string;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    user_message_chars: number;
+    alumno_codigo?: string;
+    alumno_nombre?: string;
+    created_at: string;
+  },
+): Promise<void> {
+  try {
+    await fetch(`${API_HOST_INTERNAL}/metadata`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authorization,
+      },
+      body: JSON.stringify({
+        entity: "agente_uso_coach",
+        entity_id: String(
+          payload.coach_codigo ?? payload.coach_id ?? "unknown",
+        ),
+        payload,
+      }),
+    });
+  } catch {
+    // Non-critical
+  }
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages, agentType, provider: reqProvider } = body as {
+    const {
+      messages,
+      agentType,
+      provider: reqProvider,
+      alumnoCode,
+      alumnoName,
+    } = body as {
       messages: Array<{ role: "user" | "assistant"; content: string }>;
       agentType: string;
       provider?: string;
+      alumnoCode?: string;
+      alumnoName?: string;
     };
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -700,10 +1045,33 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const systemPrompt = SYSTEM_PROMPTS[agentType] ?? SYSTEM_HOTSYSTEM;
+    const basePrompt = SYSTEM_PROMPTS[agentType] ?? SYSTEM_HOTSYSTEM;
 
     // Determinar proveedor: el cliente puede indicar openai | anthropic
     const provider = reqProvider === "anthropic" ? "anthropic" : "openai";
+
+    // Auth token del coach para peticiones a la API externa
+    const authorization = request.headers.get("authorization") ?? "";
+
+    // Inyectar historial del alumno si fue seleccionado
+    let studentCtx: { block: string; ticketIds: string[]; loomCount: number; ticketCount: number } = { block: "", ticketIds: [], loomCount: 0, ticketCount: 0 };
+    if (alumnoCode && authorization) {
+      studentCtx = await buildStudentContext(
+        authorization,
+        alumnoCode,
+        alumnoName ?? alumnoCode,
+      );
+    }
+    const reinforcement = studentCtx.block
+      ? `\n\n[INSTRUCCIÓN CRÍTICA]\nTienes acceso al historial real de tickets del alumno ${alumnoName ?? alumnoCode}. DEBES usar ese contexto para que tu respuesta sea coherente con el feedback previo del coach. Cada vez que tu respuesta esté basada o influenciada por un ticket específico, AÑADE el formato exacto [TICKET:CODIGO] al final de la frase, párrafo o bullet correspondiente. Usa el código tal como aparece en el listado (id_externo). Si usaste varios tickets, incluye varios badges. NO inventes códigos.`
+      : "";
+    const systemPrompt = studentCtx.block
+      ? `${basePrompt}\n\n${studentCtx.block}${reinforcement}`
+      : basePrompt;
+
+    // Info del coach para logging
+    const coachInfo = authorization ? await fetchCoachInfo(authorization) : null;
+    const userMsg = String(messages[messages.length - 1]?.content ?? "");
 
     const encoder = new TextEncoder();
 
@@ -731,6 +1099,14 @@ export async function POST(request: NextRequest) {
       const stream = new ReadableStream({
         async start(controller) {
           try {
+            // Emitir metadata de contexto antes del stream
+            if (studentCtx.ticketCount > 0 || studentCtx.loomCount > 0) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "context", ticketCount: studentCtx.ticketCount, loomCount: studentCtx.loomCount, ticketIds: studentCtx.ticketIds })}\n\n`,
+                ),
+              );
+            }
             console.log("[copy-agent] Llamando a Anthropic con modelo:", modelId);
             const anthropic = new Anthropic({ apiKey });
 
@@ -746,7 +1122,15 @@ export async function POST(request: NextRequest) {
             });
 
             let chunkCount = 0;
+            let anthropicInputTokens = 0;
+            let anthropicOutputTokens = 0;
             for await (const event of sdkStream) {
+              if (event.type === "message_start" && (event as any).message?.usage) {
+                anthropicInputTokens = (event as any).message.usage.input_tokens ?? 0;
+              }
+              if (event.type === "message_delta" && (event as any).usage) {
+                anthropicOutputTokens = (event as any).usage.output_tokens ?? 0;
+              }
               if (
                 event.type === "content_block_delta" &&
                 event.delta.type === "text_delta"
@@ -762,6 +1146,24 @@ export async function POST(request: NextRequest) {
             }
 
             console.log("[copy-agent] Anthropic stream completado. Chunks:", chunkCount);
+
+            // Log de uso del coach
+            if (authorization) {
+              void logCoachAgentUsage(authorization, {
+                coach_id: coachInfo?.id,
+                coach_codigo: coachInfo?.codigo,
+                coach_nombre: coachInfo?.nombre,
+                agent_type: agentType,
+                model: modelId,
+                input_tokens: anthropicInputTokens,
+                output_tokens: anthropicOutputTokens,
+                user_message_chars: userMsg.length,
+                alumno_codigo: alumnoCode,
+                alumno_nombre: alumnoName,
+                created_at: new Date().toISOString(),
+              });
+            }
+
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           } catch (err: any) {
@@ -821,15 +1223,26 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // Emitir metadata de contexto antes del stream
+          if (studentCtx.ticketCount > 0 || studentCtx.loomCount > 0) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "context", ticketCount: studentCtx.ticketCount, loomCount: studentCtx.loomCount, ticketIds: studentCtx.ticketIds })}\n\n`,
+              ),
+            );
+          }
           console.log("[copy-agent] Llamando a OpenAI con modelo:", modelId);
           const completion = await client.chat.completions.create({
             model: modelId,
             messages: openaiMessages,
             stream: true,
+            stream_options: { include_usage: true },
             max_completion_tokens: 16000,
           });
 
           let chunkCount = 0;
+          let openaiInputTokens = 0;
+          let openaiOutputTokens = 0;
           for await (const chunk of completion) {
             const text = chunk.choices[0]?.delta?.content ?? "";
             if (text) {
@@ -840,8 +1253,29 @@ export async function POST(request: NextRequest) {
                 ),
               );
             }
+            if (chunk.usage) {
+              openaiInputTokens = chunk.usage.prompt_tokens ?? 0;
+              openaiOutputTokens = chunk.usage.completion_tokens ?? 0;
+            }
           }
           console.log("[copy-agent] Stream completado. Chunks:", chunkCount);
+
+          // Log de uso del coach
+          if (authorization) {
+            void logCoachAgentUsage(authorization, {
+              coach_id: coachInfo?.id,
+              coach_codigo: coachInfo?.codigo,
+              coach_nombre: coachInfo?.nombre,
+              agent_type: agentType,
+              model: modelId,
+              input_tokens: openaiInputTokens,
+              output_tokens: openaiOutputTokens,
+              user_message_chars: userMsg.length,
+              alumno_codigo: alumnoCode,
+              alumno_nombre: alumnoName,
+              created_at: new Date().toISOString(),
+            });
+          }
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
