@@ -7,6 +7,7 @@ import { useAccessDueNotifications } from "@/components/hooks/useAccessDueNotifi
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -16,6 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Loader2,
   RefreshCw,
@@ -28,7 +37,14 @@ import {
   Users,
   Crown,
   Download,
+  Mail,
 } from "lucide-react";
+import { getAuthToken } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-config";
+import {
+  CONTRACT_EXPIRY_TEMPLATES,
+  type ContractExpiryKey,
+} from "@/lib/email-templates/contract-expiry";
 
 function canSeeAccesos(
   user: { role?: string | null; area?: string | null } | null | undefined,
@@ -188,6 +204,19 @@ export default function AccesosPage() {
   const [tipoFilter, setTipoFilter] = useState<TipoFilter>("todos");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
 
+  // ── Mail dialog state ──
+  const [mailDialogItem, setMailDialogItem] = useState<
+    (typeof items)[number] | null
+  >(null);
+  const [mailDialogVariant, setMailDialogVariant] = useState<"due" | "overdue">(
+    "due",
+  );
+  const [mailStudentEmail, setMailStudentEmail] = useState("");
+  const [mailSending, setMailSending] = useState(false);
+  const [fetchingEmail, setFetchingEmail] = useState(false);
+  const [mailTemplateKey, setMailTemplateKey] =
+    useState<ContractExpiryKey | null>(null);
+
   const [monthFilter, setMonthFilter] = useState<string>("todos");
   const [dueMes, setDueMes] = useState<string>("todos");
   const [tagFilter, setTagFilter] = useState<string>("todos");
@@ -300,6 +329,7 @@ export default function AccesosPage() {
     if (quickFilter === "urgentes") return it.daysLeft <= 7;
     if (quickFilter === "membresia") return esMembresia(it);
     if (quickFilter === "contractual") return !esMembresia(it);
+    // filtro para_notificar eliminado
     return true;
   };
 
@@ -375,6 +405,46 @@ export default function AccesosPage() {
   const contractualDueCount = filteredDue.filter(
     (it) => !esMembresia(it),
   ).length;
+
+  async function handleSendFromAccesos() {
+    const item = mailDialogItem;
+    if (!item || !mailTemplateKey) return;
+
+    const email = mailStudentEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+
+    setMailSending(true);
+    try {
+      const token = getAuthToken();
+      const res = await fetch("/api/brevo/send-contract-expiry", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          to: email,
+          recipientName: String(item.alumnoNombre ?? "").trim(),
+          templateKey: mailTemplateKey,
+          appName: "Hotselling",
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || String(json?.status || "") !== "success") {
+        throw new Error(String(json?.message || "No se pudo enviar"));
+      }
+      const tplMeta = CONTRACT_EXPIRY_TEMPLATES.find(
+        (t) => t.key === mailTemplateKey,
+      );
+      alert(`Email "${tplMeta?.name ?? mailTemplateKey}" enviado a ${email}.`);
+      setMailDialogItem(null);
+    } catch (err: any) {
+      alert(`Error al enviar: ${err?.message ?? "Intenta nuevamente."}`);
+    } finally {
+      setMailSending(false);
+    }
+  }
 
   if (!enabled) {
     return (
@@ -525,6 +595,45 @@ export default function AccesosPage() {
             size="sm"
             variant="ghost"
             className="shrink-0 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Enviar email de notificación"
+            onClick={() => {
+              setMailDialogItem(it);
+              setMailDialogVariant(variant);
+              // Selección automática de plantilla sugerida
+              let suggested: ContractExpiryKey;
+              if (variant === "overdue") {
+                suggested = "contrato_completado_5d";
+              } else if (it.venceTipo === "membresia") {
+                suggested = "membresia_por_vencer_10d";
+              } else {
+                suggested = "contrato_por_vencer_15d";
+              }
+              setMailTemplateKey(suggested);
+              setMailStudentEmail("");
+              if (it.alumnoCodigo) {
+                setFetchingEmail(true);
+                apiFetch(`/users/${encodeURIComponent(it.alumnoCodigo)}`)
+                  .then((resp: any) => {
+                    const data = resp?.data ?? resp;
+                    const email = String(
+                      data?.correo ?? data?.email ?? data?.mail ?? "",
+                    ).trim();
+                    setMailStudentEmail(email);
+                  })
+                  .catch(() => {})
+                  .finally(() => setFetchingEmail(false));
+              }
+            }}
+          >
+            <Mail className="h-4 w-4" />
+          </Button>
+        )}
+        {it.alumnoCodigo && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="shrink-0 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={() =>
               router.push(
                 `/admin/alumnos/${encodeURIComponent(it.alumnoCodigo!)}/perfil`,
@@ -609,7 +718,7 @@ export default function AccesosPage() {
 
         {/* Tarjetas de resumen */}
         {(dueCount > 0 || overdueCount > 0 || !loading) && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
             <div className="rounded-xl border bg-card p-4">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">
                 <Clock className="h-3.5 w-3.5" />
@@ -994,6 +1103,131 @@ export default function AccesosPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* ── Mail Dialog ─────────────────────────────── */}
+      <Dialog
+        open={!!mailDialogItem}
+        onOpenChange={(open) => {
+          if (!open) setMailDialogItem(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" /> Enviar email de notificación
+            </DialogTitle>
+            <DialogDescription>
+              {mailDialogItem && (
+                <span>
+                  Alumno:{" "}
+                  <strong>
+                    {String(
+                      mailDialogItem.alumnoNombre ??
+                        mailDialogItem.alumnoCodigo ??
+                        "",
+                    )}
+                  </strong>
+                  {" — "}
+                  {mailDialogVariant === "overdue"
+                    ? "Correo post-vencimiento (completado)"
+                    : mailDialogItem.venceTipo === "membresia"
+                      ? "Correo membresía por vencer"
+                      : "Correo contrato por vencer"}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 space-y-3">
+            {mailDialogItem && (
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2">
+                  {CONTRACT_EXPIRY_TEMPLATES.map((tpl) => {
+                    const checked = mailTemplateKey === tpl.key;
+                    return (
+                      <label
+                        key={tpl.key}
+                        className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-all ${checked ? "border-primary bg-primary/10" : "border-border bg-card"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="mail-template"
+                          value={tpl.key}
+                          checked={checked}
+                          onChange={() =>
+                            setMailTemplateKey(tpl.key as ContractExpiryKey)
+                          }
+                          className="accent-primary"
+                          disabled={mailSending}
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold">
+                            {tpl.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {tpl.description}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div>
+                  <Label
+                    htmlFor="mail-accesos-email"
+                    className="mb-1.5 block text-sm"
+                  >
+                    Email del alumno
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="mail-accesos-email"
+                      type="email"
+                      placeholder="alumno@email.com"
+                      value={mailStudentEmail}
+                      onChange={(e) => setMailStudentEmail(e.target.value)}
+                      disabled={mailSending || fetchingEmail}
+                      className={fetchingEmail ? "pr-9" : ""}
+                    />
+                    {fetchingEmail && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setMailDialogItem(null)}
+              disabled={mailSending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSendFromAccesos}
+              disabled={
+                mailSending ||
+                !mailStudentEmail.trim() ||
+                fetchingEmail ||
+                !mailTemplateKey
+              }
+            >
+              {mailSending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando…
+                </>
+              ) : (
+                <>
+                  <Mail className="w-4 h-4 mr-2" /> Enviar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

@@ -191,6 +191,11 @@ export async function POST(req: Request) {
       subject: rendered.subject,
       htmlContent: rendered.html,
       textContent: rendered.text,
+      tags: [entry.key, workflow],
+      trackingSettings: {
+        openTracking: { enabled: true },
+        clickTracking: { enabled: true },
+      },
     };
 
     try {

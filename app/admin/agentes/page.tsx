@@ -11,6 +11,7 @@ import {
   FileSearch,
   Headphones,
   LayoutGrid,
+  LifeBuoy,
   Megaphone,
   MessageCircle,
   Monitor,
@@ -74,6 +75,16 @@ const agents = [
     href: "/admin/agentes/atc",
     gradient: "from-sky-300 to-blue-400",
     bgGlow: "bg-sky-300/10",
+    active: true,
+  },
+  {
+    name: "Soporte ATC",
+    description:
+      "Responde consultas frecuentes de alumnos usando el histórico real de tickets de soporte. Clasifica el riesgo del caso, sugiere la ruta de acción y orienta al equipo ATC sobre contratos, membresías, pausas, garantías y continuidad.",
+    icon: LifeBuoy,
+    href: "/admin/agentes/soporte-atc",
+    gradient: "from-teal-400 to-emerald-500",
+    bgGlow: "bg-teal-400/10",
     active: true,
   },
   {

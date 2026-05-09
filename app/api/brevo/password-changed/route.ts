@@ -142,6 +142,11 @@ export async function POST(req: Request) {
     subject,
     htmlContent: rendered.html,
     textContent: rendered.text,
+    tags: ["password_changed"],
+    trackingSettings: {
+      openTracking: { enabled: true },
+      clickTracking: { enabled: true },
+    },
   };
 
   try {

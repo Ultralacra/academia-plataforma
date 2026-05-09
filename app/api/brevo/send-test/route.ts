@@ -239,6 +239,10 @@ export async function POST(req: Request) {
       subject: resolvedSubject,
       htmlContent: rendered.html,
       textContent: rendered.text,
+      trackingSettings: {
+        openTracking: { enabled: true },
+        clickTracking: { enabled: true },
+      },
     };
 
     const res = await fetch("https://api.brevo.com/v3/smtp/email", {

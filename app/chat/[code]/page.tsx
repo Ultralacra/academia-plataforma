@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import StudentChatInline from "@/components/chat/StudentChatInline";
 import ChatRealtime from "@/components/chat/ChatRealtime";
 import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
+import StudentChatDisclaimer from "@/components/chat/StudentChatDisclaimer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { dataService, type StudentItem } from "@/lib/data-service";
 import Link from "next/link";
@@ -178,6 +179,19 @@ function ChatByCodePageContent({ params }: { params: { code: string } }) {
           )}
 
           <div className="flex-1 min-h-0 overflow-hidden">
+            {senderRole !== "alumno" && student && (
+              <StudentChatDisclaimer
+                alumnoId={String(student.id ?? "")}
+                alumnoCode={student.code ?? code}
+                studentInfo={{
+                  name: student.name ?? null,
+                  state: student.state ?? null,
+                  stage: student.stage ?? null,
+                  tag: student.tag ?? null,
+                  joinDate: student.joinDate ?? null,
+                }}
+              />
+            )}
             {senderRole === "alumno" ? (
               <StudentChatInline
                 code={roomCode}

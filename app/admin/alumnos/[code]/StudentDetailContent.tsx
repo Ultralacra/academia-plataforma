@@ -107,6 +107,11 @@ import {
   DEFAULT_RENEWAL_LINK,
   type AccessExpiryDay,
 } from "@/lib/email-templates/access-expiry";
+import {
+  CONTRACT_EXPIRY_TEMPLATES,
+  getContractExpirySource,
+  type ContractExpiryKey,
+} from "@/lib/email-templates/contract-expiry";
 import StudentBrevoEvents from "./_parts/StudentBrevoEvents";
 import StudentProfileDataPanel from "./_parts/StudentProfileDataPanel";
 import StudentAuditButton from "./_parts/StudentAuditButton";
@@ -176,7 +181,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
   // ── Access email dialog ──
   const [accessEmailOpen, setAccessEmailOpen] = useState(false);
-  const [accessEmailDay, setAccessEmailDay] = useState<AccessExpiryDay>("-5");
+  const [accessEmailDay, setAccessEmailDay] = useState<string>(
+    "contrato_por_vencer_15d",
+  );
   const [accessEmailSending, setAccessEmailSending] = useState(false);
   const [lastActivity, setLastActivity] = useState<string>("");
   const [lastTaskAt, setLastTaskAt] = useState<string>("");
@@ -316,24 +323,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   }
 
   function openAccessEmailDialog() {
-    if (!accessStats) return;
-    // Auto-sugerir según días restantes
-    const remaining = accessStats.remainingDays;
-    let suggested: AccessExpiryDay = "-5";
-    if (remaining <= 0) {
-      // Ya vencido
-      const daysAfter = Math.abs(remaining);
-      if (daysAfter >= 5) suggested = "+5";
-      else if (daysAfter >= 1) suggested = "+1";
-      else suggested = "0";
-    } else if (remaining <= 1) {
-      suggested = "0";
-    } else if (remaining <= 3) {
-      suggested = "-3";
-    } else {
-      suggested = "-5";
-    }
-    setAccessEmailDay(suggested);
+    setAccessEmailDay("contrato_por_vencer_15d");
     setAccessEmailOpen(true);
   }
 
@@ -352,57 +342,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     try {
       const token = getAuthToken();
 
-      // Buscar override de metadata
-      const tplKey =
-        ACCESS_EXPIRY_TEMPLATES.find((t) => t.day === accessEmailDay)?.key ||
-        `acceso_dia_${accessEmailDay}`;
-      let tplSource = getAccessExpirySource(accessEmailDay);
-
-      try {
-        const res = await listMetadata<any>();
-        const allRecord = (res.items || []).find(
-          (item: any) =>
-            String(item?.entity || "") === "plantillas_mails" &&
-            String(item?.entity_id || "").toLowerCase() === "all_templates",
-        );
-        if (allRecord?.payload?.templates?.[tplKey]) {
-          const override = allRecord.payload.templates[tplKey];
-          tplSource = {
-            subject: override.subject || tplSource.subject,
-            html: override.html || tplSource.html,
-            text: override.text || tplSource.text,
-          };
-        }
-      } catch {
-        /* fallback to base template */
-      }
-
-      const expiryDate = accessStats
-        ? accessStats.estimatedEnd.toLocaleDateString("es-AR", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })
-        : "";
-
-      const vars: Record<string, string> = {
-        recipientName: getStudentName(),
-        appName: "Hotselling",
-        expiryDate,
-        renewalLink: DEFAULT_RENEWAL_LINK,
-        portalLink:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/login`
-            : "",
-        origin: typeof window !== "undefined" ? window.location.origin : "",
-        recipientEmail: email,
-      };
-
-      const finalSubject = interpolateEmailVars(tplSource.subject, vars);
-      const finalHtml = interpolateEmailVars(tplSource.html, vars);
-      const finalText = interpolateEmailVars(tplSource.text, vars);
-
-      const res = await fetch("/api/brevo/send-preview", {
+      const res = await fetch("/api/brevo/send-contract-expiry", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -411,9 +351,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
         credentials: "include",
         body: JSON.stringify({
           to: email,
-          subject: finalSubject,
-          html: finalHtml,
-          text: finalText,
+          recipientName: getStudentName(),
+          templateKey: accessEmailDay,
+          appName: "Hotselling",
         }),
       });
 
@@ -422,9 +362,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
         throw new Error(String(json?.message || "No se pudo enviar"));
       }
 
+      const tplMeta = CONTRACT_EXPIRY_TEMPLATES.find(
+        (t) => t.key === accessEmailDay,
+      );
       toast({
         title: "Email enviado",
-        description: `Plantilla "${ACCESS_EXPIRY_TEMPLATES.find((t) => t.day === accessEmailDay)?.name}" enviada a ${email}.`,
+        description: `Plantilla "${tplMeta?.name ?? accessEmailDay}" enviada a ${email}.`,
       });
       setAccessEmailOpen(false);
     } catch (err: any) {
@@ -5164,21 +5107,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
             </Label>
             <RadioGroup
               value={accessEmailDay}
-              onValueChange={(v) => setAccessEmailDay(v as AccessExpiryDay)}
+              onValueChange={(v) => setAccessEmailDay(v)}
               className="gap-2"
             >
-              {ACCESS_EXPIRY_TEMPLATES.map((tpl) => (
+              {CONTRACT_EXPIRY_TEMPLATES.map((tpl) => (
                 <label
-                  key={tpl.day}
+                  key={tpl.key}
                   className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
-                    accessEmailDay === tpl.day
+                    accessEmailDay === tpl.key
                       ? "border-primary bg-primary/5"
                       : "hover:bg-muted/50"
                   }`}
                 >
                   <RadioGroupItem
-                    value={tpl.day}
-                    id={`access-tpl-${tpl.day}`}
+                    value={tpl.key}
+                    id={`contract-tpl-${tpl.key}`}
                     className="mt-0.5"
                   />
                   <div>

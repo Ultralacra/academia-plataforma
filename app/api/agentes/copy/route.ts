@@ -738,6 +738,8 @@ function findTranscriptInObject(obj: unknown, depth = 0): string | null {
 }
 
 async function fetchLoomTranscript(videoId: string): Promise<string | null> {
+  const t0 = Date.now();
+  console.log(`[copy-agent][loom] ▶ fetching transcript for ${videoId}...`);
   try {
     const res = await fetch(`https://www.loom.com/share/${videoId}`, {
       headers: {
@@ -747,15 +749,34 @@ async function fetchLoomTranscript(videoId: string): Promise<string | null> {
       },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.log(`[copy-agent][loom] ✗ ${videoId} HTTP ${res.status} (${Date.now() - t0}ms)`);
+      return null;
+    }
     const html = await res.text();
     const match = html.match(
       /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/,
     );
-    if (!match) return null;
-    const data = JSON.parse(match[1]) as unknown;
-    return findTranscriptInObject(data);
-  } catch {
+    if (!match) {
+      console.log(`[copy-agent][loom] ✗ ${videoId} no __NEXT_DATA__ found in HTML (${html.length} chars, ${Date.now() - t0}ms)`);
+      return null;
+    }
+    let data: unknown;
+    try {
+      data = JSON.parse(match[1]);
+    } catch (parseErr) {
+      console.log(`[copy-agent][loom] ✗ ${videoId} JSON parse error:`, (parseErr as Error).message);
+      return null;
+    }
+    const transcript = findTranscriptInObject(data);
+    if (transcript) {
+      console.log(`[copy-agent][loom] ✓ ${videoId} transcript OK (${transcript.length} chars, ${Date.now() - t0}ms) preview:`, transcript.slice(0, 120).replace(/\s+/g, " "));
+    } else {
+      console.log(`[copy-agent][loom] ✗ ${videoId} __NEXT_DATA__ parsed pero NO se encontró campo transcript (probablemente video privado o sin transcripción) (${Date.now() - t0}ms)`);
+    }
+    return transcript;
+  } catch (err) {
+    console.log(`[copy-agent][loom] ✗ ${videoId} exception:`, (err as Error).message, `(${Date.now() - t0}ms)`);
     return null;
   }
 }
@@ -838,15 +859,86 @@ async function fetchTicketDetail(
   }
 }
 
+/**
+ * Fetch comentarios públicos (observaciones) de un ticket.
+ * Estos son los mensajes que el coach escribe en respuesta al alumno (donde
+ * suele pegar links de Loom con su feedback en video).
+ * Endpoint: /ticket/get/public-comments/{codigo}
+ */
+async function fetchTicketPublicComments(
+  authorization: string,
+  codigo: string,
+): Promise<
+  Array<{
+    contenido: string;
+    user_nombre?: string;
+    created_at?: string;
+  }>
+> {
+  try {
+    const url = `${API_HOST_INTERNAL}/ticket/get/public-comments/${encodeURIComponent(codigo)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      console.log(
+        "[copy-agent] fetchTicketPublicComments",
+        codigo,
+        "status",
+        res.status,
+      );
+      return [];
+    }
+    const json = (await res.json()) as unknown;
+    let list: unknown[] = [];
+    if (Array.isArray(json)) list = json;
+    else if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      if (Array.isArray(j.data)) list = j.data;
+      else if (Array.isArray(j.comments)) list = j.comments;
+    }
+    return list
+      .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+      .map((c) => ({
+        contenido: String(c.contenido ?? c.content ?? c.body ?? c.mensaje ?? ""),
+        user_nombre: c.user_nombre ? String(c.user_nombre) : undefined,
+        created_at: c.created_at ? String(c.created_at) : undefined,
+      }))
+      .filter((c) => c.contenido);
+  } catch (err) {
+    console.error(
+      "[copy-agent] fetchTicketPublicComments error",
+      codigo,
+      err,
+    );
+    return [];
+  }
+}
+
 async function buildStudentContext(
   authorization: string,
   alumnoCode: string,
   alumnoName: string,
-): Promise<{ block: string; ticketIds: string[]; loomCount: number; ticketCount: number }> {
+): Promise<{
+  block: string;
+  ticketIds: string[];
+  loomCount: number;
+  ticketCount: number;
+  previews: Array<{
+    codigo: string;
+    nombre: string;
+    fecha: string;
+    estado: string;
+    consulta: string;
+    respuestaCoach: string;
+    looms: Array<{ id: string; transcript: string | null }>;
+  }>;
+}> {
   const tickets = await fetchStudentTickets(authorization, alumnoCode);
   if (!tickets.length) {
     console.log("[copy-agent] buildStudentContext: no tickets for", alumnoCode);
-    return { block: "", ticketIds: [], loomCount: 0, ticketCount: 0 };
+    return { block: "", ticketIds: [], loomCount: 0, ticketCount: 0, previews: [] };
   }
 
   console.log("[copy-agent] buildStudentContext: tickets raw count", tickets.length, "sample keys:", tickets[0] && typeof tickets[0] === "object" ? Object.keys(tickets[0] as object).join(",") : "none");
@@ -863,29 +955,44 @@ async function buildStudentContext(
     .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
     .slice(0, 10); // máx 10 tickets para mantener el contexto razonable
 
-  if (!validTickets.length) return { block: "", ticketIds: [], loomCount: 0, ticketCount: 0 };
+  if (!validTickets.length) return { block: "", ticketIds: [], loomCount: 0, ticketCount: 0, previews: [] };
 
-  // Fetch de detalles en paralelo — el endpoint /ticket/get/ticket/{codigo}
-  // es el que trae respuesta_coach, descripcion completa, links, etc.
-  console.log("[copy-agent] fetching detail for", validTickets.length, "tickets in parallel");
+  // Fetch de detalles + comentarios públicos en paralelo.
+  // - detalle  → /ticket/get/ticket/{codigo}            (descripcion, links, respuesta_coach legacy)
+  // - comments → /ticket/get/public-comments/{codigo}  (observaciones del coach donde están los Looms reales)
+  console.log("[copy-agent] fetching detail + public comments for", validTickets.length, "tickets in parallel");
   const detailedTickets = await Promise.all(
     validTickets.map(async (x) => {
-      const detail = await fetchTicketDetail(authorization, x.codigo);
+      const [detail, comments] = await Promise.all([
+        fetchTicketDetail(authorization, x.codigo),
+        fetchTicketPublicComments(authorization, x.codigo),
+      ]);
       return {
         codigo: x.codigo,
         // Merge: el detalle tiene prioridad, el summary llena los huecos
         data: detail ? { ...x.summary, ...detail } : x.summary,
+        comments,
         hasDetail: !!detail,
       };
     }),
   );
 
   const detailFetched = detailedTickets.filter((d) => d.hasDetail).length;
-  console.log("[copy-agent] detail fetched OK for", detailFetched, "/", validTickets.length, "tickets");
+  const totalComments = detailedTickets.reduce((acc, d) => acc + d.comments.length, 0);
+  console.log("[copy-agent] detail OK:", detailFetched, "/", validTickets.length, "| public-comments:", totalComments);
 
   const ticketIds: string[] = [];
   let loomCount = 0;
   const lines: string[] = [];
+  const previews: Array<{
+    codigo: string;
+    nombre: string;
+    fecha: string;
+    estado: string;
+    consulta: string;
+    respuestaCoach: string;
+    looms: Array<{ id: string; transcript: string | null }>;
+  }> = [];
   lines.push(
     `## HISTORIAL DEL ALUMNO: ${alumnoName} (código: ${alumnoCode})\n`,
   );
@@ -896,7 +1003,7 @@ async function buildStudentContext(
     "Cuando tu respuesta se base en alguno de estos tickets, AÑADE el formato exacto [TICKET:CODIGO] al final de la frase, párrafo o bullet correspondiente. CODIGO debe ser el id_externo del ticket tal como aparece en el listado. Si usaste varios tickets, incluye varios badges. NO inventes códigos.\n",
   );
 
-  for (const { codigo, data: t } of detailedTickets) {
+  for (const { codigo, data: t, comments } of detailedTickets) {
     ticketIds.push(codigo);
 
     const nombre = String(t.nombre ?? t.subject ?? t.asunto ?? "(sin título)");
@@ -910,12 +1017,31 @@ async function buildStudentContext(
       t.descripcion ?? t.description ?? t.body ?? t.contenido ?? t.mensaje ?? ""
     ).slice(0, 1200);
 
-    // Respuesta del coach (campo principal del detalle)
-    const respuesta = String(
+    // Respuesta legacy (campo del ticket detail — suele estar vacío)
+    const respuestaLegacy = String(
       t.respuesta_coach ?? t.respuestaCoach ?? t.respuesta ??
       t.respuesta_del_coach ?? t.coach_response ?? t.coachResponse ??
       t.feedback ?? t.solucion ?? t.solution ?? ""
-    ).slice(0, 2000);
+    );
+
+    // Respuesta REAL del coach: comentarios públicos concatenados.
+    // Cada comentario es una "observación" donde el coach escribe su feedback
+    // (incluyendo links de Loom). Los unimos en orden cronológico.
+    const commentsText = comments
+      .map((c) => {
+        const author = c.user_nombre ? `[${c.user_nombre}]` : "[Coach]";
+        const date = c.created_at ? ` (${c.created_at})` : "";
+        return `${author}${date}: ${c.contenido}`;
+      })
+      .join("\n---\n");
+
+    // El campo respuestaCoach que mostramos al usuario y al LLM combina
+    // ambas fuentes (legacy + comentarios), priorizando comentarios.
+    const respuesta = (
+      commentsText
+        ? commentsText + (respuestaLegacy ? `\n\n[respuesta_coach legacy]: ${respuestaLegacy}` : "")
+        : respuestaLegacy
+    ).slice(0, 4000);
 
     // Links del ticket — pueden incluir Loom de respuesta del coach
     const linkUrls: string[] = [];
@@ -934,11 +1060,23 @@ async function buildStudentContext(
     if (meta) lines.push(`(${meta})`);
     if (desc) lines.push(`Consulta del alumno: ${desc}`);
 
-    // Buscar IDs Loom en TODO: descripción, respuesta y links
-    const allText = `${desc} ${respuesta} ${linkUrls.join(" ")}`;
+    // Buscar IDs Loom en TODO: descripción, respuesta legacy, comentarios públicos y links
+    const allText = `${desc} ${respuestaLegacy} ${commentsText} ${linkUrls.join(" ")}`;
     const loomIds = Array.from(new Set(extractLoomIds(allText)));
+    if (loomIds.length > 0) {
+      console.log(
+        `[copy-agent][ticket ${codigo}] 🎬 ${loomIds.length} Loom ID(s) detectado(s) (comments=${comments.length}):`,
+        loomIds.join(", "),
+      );
+    } else {
+      console.log(
+        `[copy-agent][ticket ${codigo}] (sin Loom — desc=${desc.length}c respuestaLegacy=${respuestaLegacy.length}c comments=${comments.length} links=${linkUrls.length})`,
+      );
+    }
+    const ticketLooms: Array<{ id: string; transcript: string | null }> = [];
     for (const loomId of loomIds.slice(0, 3)) {
       const transcript = await fetchLoomTranscript(loomId);
+      ticketLooms.push({ id: loomId, transcript });
       if (transcript) {
         loomCount++;
         lines.push(
@@ -951,10 +1089,29 @@ async function buildStudentContext(
 
     if (respuesta) lines.push(`Respuesta Coach (texto exacto): ${respuesta}`);
     lines.push("");
+
+    // Guardar preview para enviar al frontend (debug visible)
+    previews.push({
+      codigo,
+      nombre,
+      fecha,
+      estado,
+      consulta: desc,
+      respuestaCoach: respuesta,
+      looms: ticketLooms,
+    });
   }
 
   console.log("[copy-agent] buildStudentContext done", { ticketCount: ticketIds.length, loomCount, detailFetched, blockChars: lines.join("\n").length });
-  return { block: lines.join("\n"), ticketIds, loomCount, ticketCount: ticketIds.length };
+  console.log("═══════════════════════════════════════════════════════════════");
+  console.log(`[copy-agent] 📊 RESUMEN CONTEXTO ALUMNO: ${alumnoName}`);
+  console.log(`[copy-agent]   • Tickets analizados:     ${ticketIds.length}`);
+  console.log(`[copy-agent]   • Detalles cargados:      ${detailFetched}/${ticketIds.length}`);
+  console.log(`[copy-agent]   • Loom transcripts OK:    ${loomCount}`);
+  console.log(`[copy-agent]   • Caracteres inyectados:  ${lines.join("\n").length}`);
+  console.log(`[copy-agent]   • Tickets IDs:            ${ticketIds.join(", ")}`);
+  console.log("═══════════════════════════════════════════════════════════════");
+  return { block: lines.join("\n"), ticketIds, loomCount, ticketCount: ticketIds.length, previews };
 }
 
 async function fetchCoachInfo(
@@ -1054,7 +1211,7 @@ export async function POST(request: NextRequest) {
     const authorization = request.headers.get("authorization") ?? "";
 
     // Inyectar historial del alumno si fue seleccionado
-    let studentCtx: { block: string; ticketIds: string[]; loomCount: number; ticketCount: number } = { block: "", ticketIds: [], loomCount: 0, ticketCount: 0 };
+    let studentCtx: Awaited<ReturnType<typeof buildStudentContext>> = { block: "", ticketIds: [], loomCount: 0, ticketCount: 0, previews: [] };
     if (alumnoCode && authorization) {
       studentCtx = await buildStudentContext(
         authorization,
@@ -1103,7 +1260,7 @@ export async function POST(request: NextRequest) {
             if (studentCtx.ticketCount > 0 || studentCtx.loomCount > 0) {
               controller.enqueue(
                 encoder.encode(
-                  `data: ${JSON.stringify({ type: "context", ticketCount: studentCtx.ticketCount, loomCount: studentCtx.loomCount, ticketIds: studentCtx.ticketIds })}\n\n`,
+                  `data: ${JSON.stringify({ type: "context", ticketCount: studentCtx.ticketCount, loomCount: studentCtx.loomCount, ticketIds: studentCtx.ticketIds, previews: studentCtx.previews })}\n\n`,
                 ),
               );
             }
@@ -1227,7 +1384,7 @@ export async function POST(request: NextRequest) {
           if (studentCtx.ticketCount > 0 || studentCtx.loomCount > 0) {
             controller.enqueue(
               encoder.encode(
-                `data: ${JSON.stringify({ type: "context", ticketCount: studentCtx.ticketCount, loomCount: studentCtx.loomCount, ticketIds: studentCtx.ticketIds })}\n\n`,
+                `data: ${JSON.stringify({ type: "context", ticketCount: studentCtx.ticketCount, loomCount: studentCtx.loomCount, ticketIds: studentCtx.ticketIds, previews: studentCtx.previews })}\n\n`,
               ),
             );
           }

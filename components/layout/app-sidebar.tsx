@@ -931,7 +931,7 @@ export function AppSidebar() {
                       const disabled = !!item.disabled;
 
                       return (
-                        <SidebarMenuItem key={item.title}>
+                        <SidebarMenuItem key={item.url ?? item.title}>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <SidebarMenuButton
@@ -1022,7 +1022,7 @@ export function AppSidebar() {
                       : !!openGroups[item.title];
 
                     return (
-                      <SidebarMenuItem key={item.title}>
+                      <SidebarMenuItem key={item.url ?? item.title}>
                         <div
                           className={cn(
                             "group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
@@ -1143,7 +1143,10 @@ export function AppSidebar() {
                                 const active =
                                   !!child.url && bestActiveUrl === child.url;
                                 return (
-                                  <li key={child.title} className="relative">
+                                  <li
+                                    key={child.url ?? child.title}
+                                    className="relative"
+                                  >
                                     <Link
                                       href={child.url ?? "#"}
                                       className={cn(

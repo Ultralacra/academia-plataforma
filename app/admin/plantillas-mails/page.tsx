@@ -26,6 +26,7 @@ import {
   Mail,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Send,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -52,6 +53,10 @@ import {
   getStarterWorkflowSource,
   STARTER_WORKFLOW_TEMPLATES,
 } from "@/lib/email-templates/starter-workflow";
+import {
+  getContractExpirySource,
+  CONTRACT_EXPIRY_TEMPLATES,
+} from "@/lib/email-templates/contract-expiry";
 
 type MailTemplateKey =
   | "welcome"
@@ -77,7 +82,10 @@ type MailTemplateKey =
   | "starter_bienvenida"
   | "starter_acceso"
   | "starter_metodologia"
-  | "starter_cierre";
+  | "starter_cierre"
+  | "contrato_por_vencer_15d"
+  | "contrato_completado_5d"
+  | "membresia_por_vencer_10d";
 
 type TemplateCategory =
   | "general"
@@ -121,6 +129,9 @@ const TEMPLATE_CATEGORY_MAP: Record<MailTemplateKey, TemplateCategory> = {
   starter_acceso: "starter",
   starter_metodologia: "starter",
   starter_cierre: "starter",
+  contrato_por_vencer_15d: "accesos",
+  contrato_completado_5d: "accesos",
+  membresia_por_vencer_10d: "accesos",
 };
 
 type MetadataTemplatePayload = {
@@ -152,6 +163,8 @@ type MailTemplateItem = {
   activo: boolean;
   orden: number;
   fromMetadata: boolean;
+  /** Plantilla pausada — no se puede probar ni enviar desde aquí */
+  disabled?: boolean;
 };
 
 type MailTemplateFormState = {
@@ -339,6 +352,9 @@ const TEMPLATE_SPECIFIC_VARIABLES: Record<MailTemplateKey, TemplateVariable[]> =
     ],
     starter_metodologia: [],
     starter_cierre: [],
+    contrato_por_vencer_15d: [],
+    contrato_completado_5d: [],
+    membresia_por_vencer_10d: [],
   };
 
 /* ── Interpolación de variables para preview / test ────────────── */
@@ -510,7 +526,7 @@ function getDefaultTemplates(): MailTemplateItem[] {
     });
   }
 
-  // Agregar las 5 plantillas de vencimiento de acceso
+  // Agregar las 5 plantillas de vencimiento de acceso (pausadas — reemplazadas por contract-expiry)
   for (let i = 0; i < ACCESS_EXPIRY_TEMPLATES.length; i++) {
     const meta = ACCESS_EXPIRY_TEMPLATES[i];
     const src = getAccessExpirySource(meta.day);
@@ -528,6 +544,29 @@ function getDefaultTemplates(): MailTemplateItem[] {
       activo: true,
       orden: 11 + i,
       fromMetadata: false,
+      disabled: true,
+    });
+  }
+
+  // Agregar las 3 nuevas plantillas de vencimiento de contrato/membresía
+  for (let i = 0; i < CONTRACT_EXPIRY_TEMPLATES.length; i++) {
+    const meta = CONTRACT_EXPIRY_TEMPLATES[i];
+    const src = getContractExpirySource(meta.key);
+    base.push({
+      key: meta.key as MailTemplateKey,
+      entityId: meta.key,
+      name: meta.name,
+      description: meta.description,
+      endpoint: "/api/brevo/send-contract-expiry",
+      source: "lib/email-templates/contract-expiry.ts",
+      subject: src.subject,
+      html: src.html,
+      text: src.text,
+      headerImageUrl: extractFirstImageSrc(src.html),
+      activo: true,
+      orden: 16 + i,
+      fromMetadata: false,
+      disabled: false,
     });
   }
 
@@ -547,7 +586,7 @@ function getDefaultTemplates(): MailTemplateItem[] {
       text: src.text,
       headerImageUrl: extractFirstImageSrc(src.html),
       activo: true,
-      orden: 16 + i,
+      orden: 19 + i,
       fromMetadata: false,
     });
   }
@@ -568,7 +607,7 @@ function getDefaultTemplates(): MailTemplateItem[] {
       text: src.text,
       headerImageUrl: extractFirstImageSrc(src.html),
       activo: true,
-      orden: 21 + i,
+      orden: 24 + i,
       fromMetadata: false,
     });
   }
@@ -946,6 +985,34 @@ export default function PlantillasMailsPage() {
     }
   }
 
+  /* ── Restaurar plantilla a la versión del código fuente ──── */
+
+  async function handleResetToSource(key: MailTemplateKey) {
+    const sourceTemplate = getDefaultTemplates().find((t) => t.key === key);
+    if (!sourceTemplate) return;
+
+    setSyncingKey(key);
+    try {
+      const { recordId, currentTemplates } =
+        await fetchCurrentAllTemplatesPayload();
+      currentTemplates[key] = buildMetadataPayload(toFormState(sourceTemplate));
+      await upsertAllTemplatesRecord(currentTemplates, recordId);
+      toast({
+        title: "Plantilla restaurada",
+        description: `"${sourceTemplate.name}" restaurada a la versión del código fuente.`,
+      });
+      await loadTemplates();
+    } catch (error: any) {
+      toast({
+        title: "Error al restaurar",
+        description: String(error?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingKey(null);
+    }
+  }
+
   /* ── Guardar plantilla editada ────────────────────────────── */
 
   async function saveTemplate() {
@@ -1171,13 +1238,23 @@ export default function PlantillasMailsPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-medium text-sm">{item.name}</p>
-                          <Badge
-                            variant={
-                              item.fromMetadata ? "default" : "secondary"
-                            }
-                          >
-                            {item.fromMetadata ? "metadata" : "base"}
-                          </Badge>
+                          <div className="flex items-center gap-1.5">
+                            {item.disabled && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] border-amber-400 text-amber-600 dark:text-amber-400"
+                              >
+                                Pausada
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={
+                                item.fromMetadata ? "default" : "secondary"
+                              }
+                            >
+                              {item.fromMetadata ? "metadata" : "base"}
+                            </Badge>
+                          </div>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {item.description}
@@ -1191,7 +1268,9 @@ export default function PlantillasMailsPage() {
                             variant="outline"
                             size="sm"
                             className="h-7"
-                            disabled={sendingTestKey !== null}
+                            disabled={
+                              sendingTestKey !== null || !!item.disabled
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
                               sendTemplateTest(item);
@@ -1222,6 +1301,26 @@ export default function PlantillasMailsPage() {
                               <RefreshCw className="h-3.5 w-3.5" />
                             )}
                           </Button>
+                          {item.fromMetadata && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-amber-600 hover:text-amber-700"
+                              title="Restaurar a la versión del código fuente"
+                              disabled={syncingKey !== null || creatingMeta}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleResetToSource(item.key);
+                              }}
+                            >
+                              {syncingKey === item.key ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </button>
                     );

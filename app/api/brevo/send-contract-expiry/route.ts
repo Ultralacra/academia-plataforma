@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { buildUrl } from "@/lib/api-config";
+import {
+  applyTemplateOverrideWithVars,
+  fetchMailTemplateOverride,
+} from "@/app/api/brevo/_shared/template-runtime";
+import {
+  getContractExpirySource,
+  CONTRACT_EXPIRY_TEMPLATES,
+  type ContractExpiryKey,
+} from "@/lib/email-templates/contract-expiry";
 
 export const dynamic = "force-dynamic";
 
@@ -8,8 +17,13 @@ function json(data: any, status = 200) {
   return NextResponse.json(data, { status });
 }
 
-async function requireAdmin(token: string | null) {
-  const allowNoAuth = String(process.env.BREVO_ALLOW_NOAUTH ?? "").toLowerCase() === "true";
+function isEmail(s: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+async function requireStaff(token: string | null) {
+  const allowNoAuth =
+    String(process.env.BREVO_ALLOW_NOAUTH ?? "").toLowerCase() === "true";
   if (!token) {
     if (allowNoAuth || process.env.NODE_ENV !== "production") {
       return { ok: true as const, me: { email: "local@dev", role: "admin (dev)" } };
@@ -27,11 +41,15 @@ async function requireAdmin(token: string | null) {
       cache: "no-store",
     });
 
-    if (!res.ok) return { ok: false as const, status: res.status, error: "No autorizado" };
-    const me: any = await res.json();
-    const role = String(me?.role ?? "").toLowerCase();
-    if (role !== "admin") {
-      return { ok: false as const, status: 403, error: "Solo admin" };
+    if (!res.ok) {
+      return { ok: false as const, status: res.status, error: "No autorizado" };
+    }
+
+    const raw: any = await res.json().catch(() => null);
+    const me: any = raw?.data ?? raw ?? {};
+    const role = String(me?.role ?? me?.tipo ?? "").trim().toLowerCase();
+    if (!["admin", "equipo", "coach", "atc"].includes(role)) {
+      return { ok: false as const, status: 403, error: "Solo staff" };
     }
 
     return { ok: true as const, me };
@@ -39,6 +57,8 @@ async function requireAdmin(token: string | null) {
     return { ok: false as const, status: 500, error: "Error validando sesión" };
   }
 }
+
+const VALID_KEYS = new Set<string>(CONTRACT_EXPIRY_TEMPLATES.map((t) => t.key));
 
 export async function POST(req: Request) {
   const authHeader = req.headers.get("authorization");
@@ -48,11 +68,10 @@ export async function POST(req: Request) {
     const m = v.match(/^Bearer\s+(.+)$/i);
     return m?.[1]?.trim() || null;
   })();
-
   const tokenFromCookie = cookies().get("token")?.value ?? null;
   const token = tokenFromHeader || tokenFromCookie;
 
-  const gate = await requireAdmin(token);
+  const gate = await requireStaff(token);
   if (!gate.ok) return json({ status: "error", message: gate.error }, gate.status);
 
   const apiKey = String(
@@ -65,6 +84,29 @@ export async function POST(req: Request) {
     );
   }
 
+  let body: any = null;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ status: "error", message: "Body inválido" }, 400);
+  }
+
+  const to = String(body?.to ?? "").trim().toLowerCase();
+  if (!to || !isEmail(to)) {
+    return json({ status: "error", message: "Email destino inválido" }, 400);
+  }
+
+  const templateKey = String(body?.templateKey ?? "").trim();
+  if (!VALID_KEYS.has(templateKey)) {
+    return json(
+      {
+        status: "error",
+        message: `Template inválido. Valores válidos: ${Array.from(VALID_KEYS).join(", ")}`,
+      },
+      400,
+    );
+  }
+
   const fromEmail =
     process.env.BREVO_FROM_EMAIL ||
     process.env.NEXT_PUBLIC_BREVO_FROM_EMAIL ||
@@ -74,34 +116,23 @@ export async function POST(req: Request) {
     process.env.NEXT_PUBLIC_BREVO_FROM_NAME ||
     "Sistema Hotselling";
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return json({ status: "error", message: "Body inválido" }, 400);
-  }
+  const vars = {
+    appName: String(body?.appName || "Hotselling").trim() || "Hotselling",
+    recipientName: String(body?.recipientName || "").trim(),
+    recipientEmail: to,
+  };
 
-  const to = String(body?.to ?? "").trim().toLowerCase();
-  const subject = String(body?.subject ?? "").trim();
-  const html = String(body?.html ?? "").trim();
-  const text = String(body?.text ?? "").trim();
-
-  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-    return json({ status: "error", message: "Email destino inválido" }, 400);
-  }
-  if (!subject) {
-    return json({ status: "error", message: "Falta subject" }, 400);
-  }
-  if (!html && !text) {
-    return json({ status: "error", message: "Falta contenido (html o text)" }, 400);
-  }
+  const baseSource = getContractExpirySource(templateKey as ContractExpiryKey);
+  const override = await fetchMailTemplateOverride(token, templateKey);
+  const rendered = applyTemplateOverrideWithVars(baseSource, override, vars);
 
   const brevoPayload = {
     sender: { name: fromName, email: fromEmail },
-    to: [{ email: to }],
-    subject,
-    htmlContent: html || undefined,
-    textContent: text || undefined,
+    to: [{ email: to, ...(vars.recipientName ? { name: vars.recipientName } : {}) }],
+    subject: rendered.subject,
+    htmlContent: rendered.html,
+    textContent: rendered.text,
+    tags: [templateKey, "contract_expiry"],
     trackingSettings: {
       openTracking: { enabled: true },
       clickTracking: { enabled: true },
@@ -136,7 +167,11 @@ export async function POST(req: Request) {
       return json({ status: "error", message }, 502);
     }
 
-    return json({ status: "success", message: "Correo de prueba enviado" });
+    const tplMeta = CONTRACT_EXPIRY_TEMPLATES.find((t) => t.key === templateKey);
+    return json({
+      status: "success",
+      message: `Correo "${tplMeta?.name ?? templateKey}" enviado a ${to}`,
+    });
   } catch (e: any) {
     return json({ status: "error", message: e?.message ?? "Error enviando" }, 500);
   }
