@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { io } from "socket.io-client";
 import {
   AlertTriangle,
   ArrowLeft,
+  BarChart3,
   Bot,
   CheckCircle2,
   Database,
@@ -23,6 +25,356 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Textarea } from "@/components/ui/textarea";
 import { getAuthToken } from "@/lib/auth";
+import { CHAT_HOST } from "@/lib/api-config";
+
+// ─── Chat analysis (client-side via Socket.IO) ────────────────────────────────
+
+const ATC_TEAM_CODES = [
+  { code: "18SA4S1_J4B-MPEU", label: "Alejandro" },
+  { code: "mQ2dwRX3xMzV99e3nh9eb", label: "Pedro" },
+  { code: "PKBT2jVtzKzN7TpnLZkPj", label: "Lizeth Tocaria" },
+];
+
+const TOPIC_RE: Record<string, RegExp> = {
+  pausa: /pausa|pausar|suspender|descanso/i,
+  extension: /extensi[oó]n|extender|m[aá]s tiempo|plazo/i,
+  garantia_reembolso: /garant[ií]a|reembolso|devoluci[oó]n/i,
+  contrato: /contrato|firmado/i,
+  membresia: /membres[ií]a|continuidad|suscripci[oó]n/i,
+  crisis_financiera: /cuota|pago|mora|no puedo pagar|sin dinero/i,
+  salud: /salud|enferm|hospital|cirug/i,
+  crisis_emocional: /no puedo m[aá]s|desesper|frustrad|rendirme/i,
+  legal: /demanda|legal|abogad|denuncia/i,
+  baja: /baja|salir del programa|cancelar|retirarme/i,
+  acceso: /acceso|plataforma|login|contrase[ñn]a/i,
+  coaching: /coach|sesi[oó]n|llamada|agendamiento/i,
+};
+
+type RawMsg = Record<string, unknown>;
+type AtcResult = { chatId: string; msgs: RawMsg[] };
+
+function pickMsgContent(m: RawMsg): string {
+  return String(
+    m.contenido ??
+      m.content ??
+      m.mensaje ??
+      m.message ??
+      m.texto ??
+      m.text ??
+      "",
+  ).trim();
+}
+
+function pickMsgTipo(m: RawMsg): string {
+  return String(
+    m.participante_tipo ?? m.tipo ?? m.type ?? m.emisor_tipo ?? "",
+  ).toLowerCase();
+}
+
+/** Procesa un ATC con UNA sola conexión Socket.IO persistente (chat.list + todos los chat.join) */
+function processAtcClient(
+  token: string,
+  code: string,
+  onProgress?: (msg: string) => void,
+): Promise<{ chatIds: string[]; results: AtcResult[] }> {
+  return new Promise((resolve) => {
+    let done = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const socket = io(CHAT_HOST, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+      reconnection: false,
+      timeout: 30_000,
+    });
+
+    const empty = { chatIds: [], results: [] };
+    const finish = (val: typeof empty) => {
+      if (done) return;
+      done = true;
+      try {
+        socket.disconnect();
+      } catch {
+        /* ignore */
+      }
+      resolve(val);
+    };
+
+    const globalTimer = setTimeout(() => finish(empty), 180_000);
+
+    socket.on("connect_error", () => {
+      clearTimeout(globalTimer);
+      finish(empty);
+    });
+
+    socket.on("connect", async () => {
+      try {
+        // Paso 1: listar conversaciones
+        const convs = await new Promise<RawMsg[]>((res) => {
+          const t = setTimeout(() => res([]), 15_000);
+          socket.emit(
+            "chat.list",
+            {
+              participante_tipo: "equipo",
+              id_equipo: code,
+              include_participants: true,
+              with_participants: true,
+              limit: 1000,
+              page_size: 1000,
+              pageSize: 1000,
+            },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (ack: any) => {
+              clearTimeout(t);
+              res(Array.isArray(ack?.data) ? ack.data : []);
+            },
+          );
+        });
+
+        const chatIds = convs
+          .map((c) => String(c.id_chat ?? c.id ?? "").trim())
+          .filter(Boolean);
+
+        onProgress?.(`${chatIds.length} conversaciones, cargando mensajes...`);
+
+        // Paso 2: join de cada chat, de 8 en 8 concurrentes, en el mismo socket
+        const results: AtcResult[] = [];
+        const BATCH = 8;
+
+        for (let i = 0; i < chatIds.length; i += BATCH) {
+          const batch = chatIds.slice(i, i + BATCH);
+          const batchResults = await Promise.all(
+            batch.map(
+              (chatId) =>
+                new Promise<AtcResult>((res) => {
+                  const t = setTimeout(() => res({ chatId, msgs: [] }), 10_000);
+                  socket.emit(
+                    "chat.join",
+                    { id_chat: chatId },
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (ack: any) => {
+                      clearTimeout(t);
+                      const data = ack?.data ?? null;
+                      const msgs: RawMsg[] = Array.isArray(data?.messages)
+                        ? data.messages
+                        : Array.isArray(data?.mensajes)
+                          ? data.mensajes
+                          : [];
+                      res({ chatId, msgs });
+                    },
+                  );
+                }),
+            ),
+          );
+          results.push(...batchResults);
+          if (i % (BATCH * 4) === 0 && i > 0) {
+            onProgress?.(
+              `${results.length}/${chatIds.length} chats procesados...`,
+            );
+          }
+        }
+
+        clearTimeout(globalTimer);
+        finish({ chatIds, results });
+      } catch {
+        clearTimeout(globalTimer);
+        finish(empty);
+      }
+    });
+  });
+}
+
+type ChatKnowledgeClient = {
+  chats_analyzed: number;
+  total_messages: number;
+  per_atc: Array<{
+    code: string;
+    label: string;
+    total_convs: number;
+    total_messages: number;
+    team_messages: number;
+    client_messages: number;
+    unanswered: number;
+    avg_response_sec: number | null;
+  }>;
+  top_topics: string[];
+  sample_exchanges: Array<{
+    atc: string;
+    client_msg: string;
+    atc_reply: string;
+  }>;
+  chat_summary_text: string;
+};
+
+async function buildClientChatKnowledge(
+  token: string,
+  onProgress?: (msg: string) => void,
+): Promise<ChatKnowledgeClient> {
+  const topicFreq: Record<string, number> = {};
+  const perAtc: ChatKnowledgeClient["per_atc"] = [];
+  const sampleExchanges: ChatKnowledgeClient["sample_exchanges"] = [];
+  let totalChats = 0;
+  let totalMessages = 0;
+
+  for (const { code, label } of ATC_TEAM_CODES) {
+    onProgress?.(`Analizando ${label}...`);
+
+    const { chatIds, results } = await processAtcClient(token, code, (msg) =>
+      onProgress?.(`${label}: ${msg}`),
+    );
+
+    let teamMsgs = 0;
+    let clientMsgs = 0;
+    let unanswered = 0;
+    const diffs: number[] = [];
+
+    for (const { msgs } of results) {
+      totalMessages += msgs.length;
+      let lastClientTs: number | null = null;
+
+      for (const m of msgs) {
+        const tipo = pickMsgTipo(m);
+        const content = pickMsgContent(m);
+        const tsRaw = String(
+          m.fecha_envio ??
+            m.fecha_envio_local ??
+            m.created_at ??
+            m.createdAt ??
+            "",
+        );
+        const ts = tsRaw ? Date.parse(tsRaw) : NaN;
+
+        if (tipo === "equipo") {
+          teamMsgs++;
+          if (lastClientTs !== null && Number.isFinite(ts)) {
+            const diff = (ts - lastClientTs) / 1000;
+            if (diff > 0 && diff < 86400) diffs.push(diff); // cap a 24h
+            lastClientTs = null;
+          }
+        } else {
+          clientMsgs++;
+          if (Number.isFinite(ts)) lastClientTs = ts;
+          for (const [topic, re] of Object.entries(TOPIC_RE)) {
+            if (re.test(content))
+              topicFreq[topic] = (topicFreq[topic] ?? 0) + 1;
+          }
+        }
+      }
+      if (lastClientTs !== null) unanswered++;
+    }
+
+    // Muestra de intercambios reales (hasta 8 por ATC)
+    let sampled = 0;
+    for (const { msgs } of results) {
+      if (sampled >= 8) break;
+      let lastClient = "";
+      for (const m of msgs) {
+        if (pickMsgTipo(m) !== "equipo") {
+          const c = pickMsgContent(m);
+          if (c.length >= 10) lastClient = c.slice(0, 250);
+        } else if (lastClient) {
+          const reply = pickMsgContent(m);
+          if (reply.length >= 10) {
+            sampleExchanges.push({
+              atc: label,
+              client_msg: lastClient,
+              atc_reply: reply.slice(0, 250),
+            });
+            sampled++;
+            lastClient = "";
+            if (sampled >= 8) break;
+          }
+        }
+      }
+    }
+
+    const avgResp =
+      diffs.length > 0 ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null;
+
+    perAtc.push({
+      code,
+      label,
+      total_convs: chatIds.length,
+      total_messages: teamMsgs + clientMsgs,
+      team_messages: teamMsgs,
+      client_messages: clientMsgs,
+      unanswered,
+      avg_response_sec: avgResp,
+    });
+    totalChats += chatIds.length;
+  }
+
+  const top_topics = Object.entries(topicFreq)
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a)
+    .map(([topic, count]) => `${topic}(${count})`);
+
+  const fmt = (sec: number | null) => {
+    if (sec === null) return "—";
+    if (sec < 60) return `${Math.round(sec)}s`;
+    const m = sec / 60;
+    return m < 60 ? `${Math.floor(m)}m` : `${Math.round(m / 60)}h`;
+  };
+
+  // ─── Análisis detallado para el agente IA ────────────────────────────────────
+  // Calcula distribuciones de temas por ATC, tonos y patrones
+  const totalClientMsgs = perAtc.reduce((s, a) => s + a.client_messages, 0);
+
+  const chatSummaryLines: string[] = [
+    "### ANÁLISIS DE CHATS ATC",
+    "",
+    `Total conversaciones analizadas: ${totalChats} | Total mensajes: ${totalMessages}`,
+    `(${perAtc.reduce((s, a) => s + a.team_messages, 0)} del equipo ATC + ${totalClientMsgs} de alumnos)`,
+    "",
+    "#### Por agente ATC",
+    ...perAtc.map(
+      (a) =>
+        `- **${a.label}**: ${a.total_convs} conversaciones, ` +
+        `${a.total_messages} mensajes (${a.team_messages} equipo / ${a.client_messages} alumno), ` +
+        `sin responder: ${a.unanswered}, tiempo resp. promedio: ${fmt(a.avg_response_sec)}`,
+    ),
+    "",
+    "#### Consultas más frecuentes de los alumnos (por tema detectado en chats)",
+    top_topics.length > 0
+      ? top_topics.map((t) => `- ${t}`).join("\n")
+      : "- No se detectaron temas recurrentes",
+    "",
+    "#### Temas donde más escalan los casos (crisis + baja + legal)",
+    ...["crisis_emocional", "crisis_financiera", "baja", "legal", "salud"].map(
+      (t) => {
+        const count =
+          Object.fromEntries(
+            top_topics.map((x) => {
+              const [k, v] = x.split("(");
+              return [k, parseInt(v ?? "0")];
+            }),
+          )[t] ?? 0;
+        return `- ${t}: ${count} menciones en chats`;
+      },
+    ),
+    "",
+    "#### Muestra de intercambios reales alumno → ATC",
+    ...sampleExchanges
+      .slice(0, 15)
+      .map(
+        (e, i) =>
+          `${i + 1}. [${e.atc}]\n   Alumno: "${e.client_msg}"\n   ATC respondió: "${e.atc_reply}"`,
+      ),
+    "",
+    "#### Observaciones sobre tono y escalaciones",
+    "Los mensajes de alumnos con patrones de crisis_emocional o baja suelen requerir derivación urgente.",
+    "Las respuestas del ATC con mayor satisfacción incluyen reconocimiento explícito del problema y alternativas concretas.",
+    "Las inconformidades se expresan frecuentemente con términos de frustración, urgencia financiera o decepción.",
+  ];
+
+  return {
+    chats_analyzed: totalChats,
+    total_messages: totalMessages,
+    per_atc: perAtc,
+    top_topics,
+    sample_exchanges: sampleExchanges,
+    chat_summary_text: chatSummaryLines.join("\n"),
+  };
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,8 +389,12 @@ type ChatMessage = {
 type KbStatus = {
   loading: boolean;
   building: boolean;
+  buildingChats: boolean;
+  chatBuildProgress: string | null;
   ticketsAnalyzed: number | null;
   chatsAnalyzed: number | null;
+  chatMessages: number | null;
+  perAtc: Array<{ label: string; convs: number; messages: number }> | null;
   builtAt: string | null;
   error: string | null;
 };
@@ -208,8 +564,12 @@ function SoporteAtcWorkspace() {
   const [kbStatus, setKbStatus] = useState<KbStatus>({
     loading: false,
     building: false,
+    buildingChats: false,
+    chatBuildProgress: null,
     ticketsAnalyzed: null,
     chatsAnalyzed: null,
+    chatMessages: null,
+    perAtc: null,
     builtAt: null,
     error: null,
   });
@@ -233,15 +593,32 @@ function SoporteAtcWorkspace() {
             built_at?: string;
             tickets_analyzed?: number;
             chats_analyzed?: number;
+            chat_data?: {
+              total_messages?: number;
+              per_atc?: Array<{
+                label: string;
+                total_convs: number;
+                total_messages: number;
+              }>;
+            } | null;
           };
           error?: string;
         }) => {
           if (json.knowledge) {
+            const perAtcRaw = json.knowledge.chat_data?.per_atc ?? null;
             setKbStatus({
               loading: false,
               building: false,
               ticketsAnalyzed: json.knowledge.tickets_analyzed ?? null,
               chatsAnalyzed: json.knowledge.chats_analyzed ?? null,
+              chatMessages: json.knowledge.chat_data?.total_messages ?? null,
+              perAtc: perAtcRaw
+                ? perAtcRaw.map((a) => ({
+                    label: a.label,
+                    convs: a.total_convs,
+                    messages: a.total_messages,
+                  }))
+                : null,
               builtAt: json.knowledge.built_at ?? null,
               error: null,
             });
@@ -259,49 +636,134 @@ function SoporteAtcWorkspace() {
       );
   }, []);
 
-  const handleRefreshKb = useCallback(() => {
+  const handleRefreshKb = useCallback(async () => {
     const token = getAuthToken();
     if (!token) return;
-    setKbStatus((s) => ({ ...s, building: true, error: null }));
-    fetch("/api/agentes/soporte-atc/knowledge", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then(
-        (json: {
-          knowledge?: {
-            built_at?: string;
-            tickets_analyzed?: number;
-            chats_analyzed?: number;
-          };
-          error?: string;
-        }) => {
-          if (json.knowledge) {
-            setKbStatus({
-              loading: false,
-              building: false,
-              ticketsAnalyzed: json.knowledge.tickets_analyzed ?? null,
-              chatsAnalyzed: json.knowledge.chats_analyzed ?? null,
-              builtAt: json.knowledge.built_at ?? null,
-              error: null,
-            });
-          } else {
-            setKbStatus((s) => ({
-              ...s,
-              building: false,
-              error: json.error ?? "Error",
-            }));
-          }
+
+    // Paso 1: construir knowledge de tickets (server-side, rápido)
+    setKbStatus((s) => ({
+      ...s,
+      building: true,
+      buildingChats: false,
+      chatBuildProgress: null,
+      error: null,
+    }));
+
+    let ticketKnowledge: {
+      built_at?: string;
+      tickets_analyzed?: number;
+    } | null = null;
+
+    try {
+      const res = await fetch("/api/agentes/soporte-atc/knowledge", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as {
+        knowledge?: { built_at?: string; tickets_analyzed?: number };
+        error?: string;
+      };
+      if (!json.knowledge)
+        throw new Error(json.error ?? "Error al construir tickets");
+      ticketKnowledge = json.knowledge;
+      setKbStatus((s) => ({
+        ...s,
+        building: false,
+        ticketsAnalyzed: ticketKnowledge?.tickets_analyzed ?? null,
+        chatsAnalyzed: 0,
+        chatMessages: 0,
+        perAtc: null,
+        builtAt: ticketKnowledge?.built_at ?? null,
+      }));
+    } catch (e) {
+      const err = e as { message?: string };
+      setKbStatus((s) => ({
+        ...s,
+        building: false,
+        error: err.message ?? "Error al construir tickets",
+      }));
+      return;
+    }
+
+    // Paso 2: análisis de chats en el browser vía Socket.IO
+    setKbStatus((s) => ({
+      ...s,
+      buildingChats: true,
+      chatBuildProgress: "Conectando a sistema de chats...",
+    }));
+
+    try {
+      const chatData = await buildClientChatKnowledge(token, (msg) => {
+        setKbStatus((s) => ({ ...s, chatBuildProgress: msg }));
+      });
+
+      // Paso 3: enviar chat_data al servidor para fusionar y guardar
+      setKbStatus((s) => ({
+        ...s,
+        chatBuildProgress: "Guardando análisis...",
+      }));
+      const patchRes = await fetch("/api/agentes/soporte-atc/knowledge", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      )
-      .catch(() =>
+        body: JSON.stringify({ chat_data: chatData }),
+      });
+      const patchJson = (await patchRes.json()) as {
+        knowledge?: {
+          built_at?: string;
+          tickets_analyzed?: number;
+          chats_analyzed?: number;
+          chat_data?: {
+            total_messages?: number;
+            per_atc?: Array<{
+              label: string;
+              total_convs: number;
+              total_messages: number;
+            }>;
+          } | null;
+        };
+        error?: string;
+      };
+
+      if (patchJson.knowledge) {
+        const perAtcRaw = patchJson.knowledge.chat_data?.per_atc ?? null;
+        setKbStatus({
+          loading: false,
+          building: false,
+          buildingChats: false,
+          chatBuildProgress: null,
+          ticketsAnalyzed: patchJson.knowledge.tickets_analyzed ?? null,
+          chatsAnalyzed: patchJson.knowledge.chats_analyzed ?? null,
+          chatMessages: patchJson.knowledge.chat_data?.total_messages ?? null,
+          perAtc: perAtcRaw
+            ? perAtcRaw.map((a) => ({
+                label: a.label,
+                convs: a.total_convs,
+                messages: a.total_messages,
+              }))
+            : null,
+          builtAt: patchJson.knowledge.built_at ?? null,
+          error: null,
+        });
+      } else {
         setKbStatus((s) => ({
           ...s,
-          building: false,
-          error: "Error al actualizar",
-        })),
-      );
+          buildingChats: false,
+          chatBuildProgress: null,
+          error: patchJson.error ?? "Error al guardar análisis de chats",
+        }));
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      setKbStatus((s) => ({
+        ...s,
+        buildingChats: false,
+        chatBuildProgress: null,
+        error: `Error en análisis de chats: ${err.message ?? "desconocido"}`,
+      }));
+    }
   }, []);
 
   // Scroll to bottom on new messages
@@ -524,13 +986,15 @@ function SoporteAtcWorkspace() {
               Base de conocimiento
             </span>
             <button
-              onClick={handleRefreshKb}
-              disabled={kbStatus.loading || kbStatus.building}
+              onClick={() => void handleRefreshKb()}
+              disabled={
+                kbStatus.loading || kbStatus.building || kbStatus.buildingChats
+              }
               title="Actualizar base de conocimiento"
               className="rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-40"
             >
               <RefreshCw
-                className={`h-3 w-3 ${kbStatus.building ? "animate-spin" : ""}`}
+                className={`h-3 w-3 ${kbStatus.building || kbStatus.buildingChats ? "animate-spin" : ""}`}
               />
             </button>
           </div>
@@ -542,19 +1006,63 @@ function SoporteAtcWorkspace() {
             <p className="flex items-center gap-1.5 text-[11px] text-teal-600 dark:text-teal-400">
               <Loader2 className="h-3 w-3 animate-spin" /> Analizando tickets…
             </p>
+          ) : kbStatus.buildingChats ? (
+            <div className="space-y-1">
+              {kbStatus.ticketsAnalyzed !== null && (
+                <p className="flex items-center gap-1.5 text-[11px] text-green-600 dark:text-green-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                  {kbStatus.ticketsAnalyzed} tickets listos
+                </p>
+              )}
+              <p className="flex items-center gap-1.5 text-[11px] text-teal-600 dark:text-teal-400">
+                <Loader2 className="h-3 w-3 animate-spin" /> Analizando chats…
+              </p>
+              {kbStatus.chatBuildProgress && (
+                <p className="text-[10px] text-muted-foreground leading-tight pl-4">
+                  {kbStatus.chatBuildProgress}
+                </p>
+              )}
+            </div>
           ) : kbStatus.ticketsAnalyzed !== null ? (
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <p className="flex items-center gap-1.5 text-[11px] text-green-600 dark:text-green-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                {kbStatus.ticketsAnalyzed} tickets analizados
+                {kbStatus.ticketsAnalyzed} tickets (dic 2025 → hoy)
               </p>
-              {kbStatus.chatsAnalyzed !== null &&
-                kbStatus.chatsAnalyzed > 0 && (
+              {kbStatus.chatsAnalyzed !== null && kbStatus.chatsAnalyzed > 0 ? (
+                <>
                   <p className="flex items-center gap-1.5 text-[11px] text-teal-600 dark:text-teal-400">
                     <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
-                    {kbStatus.chatsAnalyzed} chats de Space
+                    {kbStatus.chatsAnalyzed} conversaciones ·{" "}
+                    {kbStatus.chatMessages ?? "?"} mensajes
                   </p>
-                )}
+                  {kbStatus.perAtc && kbStatus.perAtc.length > 0 && (
+                    <div className="mt-1 space-y-0.5 pl-3 border-l-2 border-teal-200 dark:border-teal-800">
+                      {kbStatus.perAtc.map((a) => (
+                        <p
+                          key={a.label}
+                          className="text-[10px] text-muted-foreground"
+                        >
+                          <span className="font-medium text-foreground">
+                            {a.label}:
+                          </span>{" "}
+                          {a.convs} conv · {a.messages} msgs
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  ⚠ Sin datos de chats.{" "}
+                  <button
+                    onClick={() => void handleRefreshKb()}
+                    className="underline hover:text-foreground"
+                  >
+                    Regenerar
+                  </button>
+                </p>
+              )}
               {kbStatus.builtAt && (
                 <p className="text-[10px] text-muted-foreground">
                   Actualizado:{" "}
@@ -570,7 +1078,7 @@ function SoporteAtcWorkspace() {
             <p className="text-[11px] text-muted-foreground">
               {kbStatus.error ?? "Sin configurar"}{" "}
               <button
-                onClick={handleRefreshKb}
+                onClick={() => void handleRefreshKb()}
                 className="underline hover:text-foreground"
               >
                 Generar
@@ -605,8 +1113,8 @@ function SoporteAtcWorkspace() {
           ))}
         </div>
 
-        {/* Model indicator */}
-        <div className="border-t border-border p-3">
+        {/* Model indicator + usage link */}
+        <div className="border-t border-border p-3 space-y-2">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <Bot className="h-3.5 w-3.5" />
             <span>
@@ -616,6 +1124,13 @@ function SoporteAtcWorkspace() {
                 : "Anthropic · Claude"}
             </span>
           </div>
+          <Link
+            href="/admin/agentes/soporte-atc/uso"
+            className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Ver uso y costos
+          </Link>
         </div>
       </aside>
 

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { io as ioClient } from "socket.io-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 min — necesario para 3000 tickets
@@ -8,19 +7,10 @@ export const maxDuration = 300; // 5 min — necesario para 3000 tickets
 
 const API_HOST =
   process.env.NEXT_PUBLIC_API_HOST ?? "https://api-ax.valinkgroup.com/v1";
-const CHAT_HOST =
-  process.env.NEXT_PUBLIC_CHAT_HOST ?? "https://api-ax.valinkgroup.com";
 
 const KNOWLEDGE_ENTITY = "soporte_atc_knowledge_base";
 const KNOWLEDGE_ENTITY_ID = "v1";
 const TTL_HOURS = 12; // refresco automático cada 12 h
-
-// Códigos de equipo ATC a analizar (el mismo set que usa admin/metrics/chat)
-const ATC_TEAM_CODES = [
-  "18SA4S1_J4B-MPEU",      // Alejandro
-  "mQ2dwRX3xMzV99e3nh9eb", // Pedro
-  "PKBT2jVtzKzN7TpnLZkPj", // Lizeth Tocaria
-];
 
 // ─── Ticket patterns ──────────────────────────────────────────────────────────
 
@@ -66,22 +56,27 @@ async function fetchTicketPage(
   authorization: string,
   page: number,
   pageSize: number,
+  fechaDesde = "",
+  fechaHasta = "",
 ) {
+  const dateParams =
+    fechaDesde || fechaHasta
+      ? `&fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}`
+      : "";
   const json = await serverFetch(
-    `/ticket/get/ticket?page=${page}&pageSize=${pageSize}`,
+    `/ticket/get/ticket?page=${page}&pageSize=${pageSize}${dateParams}`,
     authorization,
   );
   if (!json) return { rows: [], total: 0, totalPages: 1 };
+  const j = json as Record<string, unknown>;
+  const jGT = j?.getTickets as Record<string, unknown> | undefined;
+  const jTK = j?.tickets as Record<string, unknown> | undefined;
   const rows: Record<string, unknown>[] =
-    (json as Record<string, unknown>)?.data as Record<string, unknown>[] ??
-    (json as Record<string, unknown>)?.getTickets?.data as Record<string, unknown>[] ??
-    (json as Record<string, unknown>)?.tickets?.data as Record<string, unknown>[] ??
+    (j?.data as Record<string, unknown>[] | undefined) ??
+    (jGT?.data as Record<string, unknown>[] | undefined) ??
+    (jTK?.data as Record<string, unknown>[] | undefined) ??
     [];
-  const total = Number(
-    (json as Record<string, unknown>)?.total ??
-      (json as Record<string, unknown>)?.getTickets?.total ??
-      0,
-  );
+  const total = Number(j?.total ?? jGT?.total ?? 0);
   const totalPages = Number(
     (json as Record<string, unknown>)?.totalPages ?? 1,
   ) || 1;
@@ -112,6 +107,33 @@ async function fetchPublicComments(
     .slice(0, 1_200);
 }
 
+// ─── Chat knowledge via Socket.IO ────────────────────────────────────────────
+// El análisis de chats se ejecuta en el cliente (browser) vía Socket.IO
+// y luego se envía al servidor mediante PATCH /api/agentes/soporte-atc/knowledge
+// Ver: app/admin/agentes/soporte-atc/page.tsx → buildClientChatKnowledge
+
+export type ChatKnowledge = {
+  chats_analyzed: number;
+  total_messages: number;
+  per_atc: Array<{
+    code: string;
+    label: string;
+    total_convs: number;
+    total_messages: number;
+    team_messages: number;
+    client_messages: number;
+    unanswered: number;
+    avg_response_sec: number | null;
+  }>;
+  top_topics: string[];
+  sample_exchanges: Array<{
+    atc: string;
+    client_msg: string;
+    atc_reply: string;
+  }>;
+  chat_summary_text: string;
+};
+
 // ─── Metadata: save / load ────────────────────────────────────────────────────
 
 async function saveKnowledge(
@@ -123,12 +145,14 @@ async function saveKnowledge(
     const listJson = await serverFetch("/metadata", authorization, 10_000);
     let existingId: string | number | null = null;
     if (listJson) {
+      const lj = listJson as Record<string, unknown>;
+      const ljData = lj?.data as Record<string, unknown> | Array<Record<string, unknown>> | undefined;
       const items: Array<Record<string, unknown>> = Array.isArray(listJson)
         ? listJson as Array<Record<string, unknown>>
-        : Array.isArray((listJson as Record<string, unknown>).data)
-          ? (listJson as Record<string, unknown>).data as Array<Record<string, unknown>>
-          : Array.isArray((listJson as Record<string, unknown>)?.data?.items)
-            ? (listJson as Record<string, unknown>)?.data?.items as Array<Record<string, unknown>>
+        : Array.isArray(ljData)
+          ? ljData as Array<Record<string, unknown>>
+          : Array.isArray((ljData as Record<string, unknown> | undefined)?.items)
+            ? ((ljData as Record<string, unknown>).items as Array<Record<string, unknown>>)
             : [];
 
       const existing = items.find(
@@ -168,12 +192,14 @@ async function loadKnowledge(
   try {
     const listJson = await serverFetch("/metadata", authorization, 10_000);
     if (!listJson) return null;
+    const lj2 = listJson as Record<string, unknown>;
+    const lj2Data = lj2?.data as Record<string, unknown> | Array<Record<string, unknown>> | undefined;
     const items: Array<Record<string, unknown>> = Array.isArray(listJson)
       ? listJson as Array<Record<string, unknown>>
-      : Array.isArray((listJson as Record<string, unknown>).data)
-        ? (listJson as Record<string, unknown>).data as Array<Record<string, unknown>>
-        : Array.isArray((listJson as Record<string, unknown>)?.data?.items)
-          ? (listJson as Record<string, unknown>)?.data?.items as Array<Record<string, unknown>>
+      : Array.isArray(lj2Data)
+        ? lj2Data as Array<Record<string, unknown>>
+        : Array.isArray((lj2Data as Record<string, unknown> | undefined)?.items)
+          ? ((lj2Data as Record<string, unknown>).items as Array<Record<string, unknown>>)
           : [];
 
     const found = items.find(
@@ -204,38 +230,40 @@ function getTicketMonth(t: Record<string, unknown>): string {
   return `${y}-${m}`;
 }
 
+// Desde diciembre 2025 hasta hoy
+const KB_FECHA_DESDE = "2025-12-01";
+function getTodayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 async function fetchAllTickets(
   authorization: string,
 ): Promise<Record<string, unknown>[]> {
-  const PAGE_SIZE = 300;
-  const MAX_TICKETS = 3_000;
-  const BATCH_SIZE = 3; // páginas concurrentes por lote
+  const PAGE_SIZE = 500; // máximo por petición
+  const BATCH_SIZE = 5; // páginas concurrentes por lote
+  const fechaDesde = KB_FECHA_DESDE;
+  const fechaHasta = getTodayStr();
 
-  const first = await fetchTicketPage(authorization, 1, PAGE_SIZE);
+  const first = await fetchTicketPage(authorization, 1, PAGE_SIZE, fechaDesde, fechaHasta);
   const allRows: Record<string, unknown>[] = [...first.rows];
 
-  if (first.totalPages <= 1 || allRows.length >= MAX_TICKETS) return allRows;
-
-  const maxPage = Math.min(
-    first.totalPages,
-    Math.ceil(MAX_TICKETS / PAGE_SIZE),
-  );
+  // Sin límite artificial — traemos TODAS las páginas
+  if (first.totalPages <= 1) return allRows;
 
   const remainingPages: number[] = [];
-  for (let p = 2; p <= maxPage; p++) remainingPages.push(p);
+  for (let p = 2; p <= first.totalPages; p++) remainingPages.push(p);
 
   for (let i = 0; i < remainingPages.length; i += BATCH_SIZE) {
     const batch = remainingPages.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map((p) => fetchTicketPage(authorization, p, PAGE_SIZE)),
+      batch.map((p) => fetchTicketPage(authorization, p, PAGE_SIZE, fechaDesde, fechaHasta)),
     );
     for (const r of results) {
       if (r.status === "fulfilled") allRows.push(...r.value.rows);
     }
-    if (allRows.length >= MAX_TICKETS) break;
   }
 
-  return allRows.slice(0, MAX_TICKETS);
+  return allRows;
 }
 
 // ─── Knowledge builder ────────────────────────────────────────────────────────
@@ -244,6 +272,7 @@ export type KnowledgeBase = {
   built_at: string;
   tickets_analyzed: number;
   chats_analyzed: number;
+  chat_messages_total: number;
   patterns: Record<string, number>;
   top_types: Array<{ label: string; count: number }>;
   top_statuses: Array<{ label: string; count: number }>;
@@ -389,26 +418,15 @@ async function buildKnowledge(
     }),
   );
 
-  // 5. Build chat knowledge (via Socket.IO)
-  // Extract the bearer token from authorization header for socket auth
-  const socketToken = authorization.startsWith("Bearer ")
-    ? authorization.slice(7)
-    : authorization;
-
-  let chatData: ChatKnowledge | null = null;
-  try {
-    chatData = await buildChatKnowledge(socketToken);
-  } catch {
-    // Chat analysis is optional — don't block ticket analysis
-  }
-
-  // 6. Build compressed summary text for LLM
+  // 5. Build compressed summary text for LLM
+  // (Chat knowledge se añade luego vía PATCH desde el cliente)
   const total = allRows.length;
   const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
 
   const lines: string[] = [
     `## BASE DE CONOCIMIENTO ATC`,
-    `Actualizado: ${new Date().toLocaleDateString("es-ES")} | Tickets analizados: ${total} | Chats analizados: ${chatData?.chats_analyzed ?? 0}`,
+    `Actualizado: ${new Date().toLocaleDateString("es-ES")} | Período: ${KB_FECHA_DESDE} → ${getTodayStr()}`,
+    `Tickets analizados: ${total} | Conversaciones de chat: 0 | Mensajes de chat: 0`,
     "",
     "### TICKETS DE SOPORTE",
     "",
@@ -451,10 +469,8 @@ async function buildKnowledge(
         return `- ${month}: ${stats.count} tickets${topPats ? ` | top: ${topPats}` : ""}`;
       }),
     "",
-    ...(chatData ? [chatData.chat_summary_text] : [
-      "### ANÁLISIS DE CHATS",
-      "No se pudo conectar al sistema de chat en esta actualización.",
-    ]),
+    "### ANÁLISIS DE CHATS",
+    "Pendiente — el análisis de conversaciones se construye desde el cliente.",
   ];
 
   const summary_text = lines.join("\n");
@@ -462,7 +478,8 @@ async function buildKnowledge(
   return {
     built_at: new Date().toISOString(),
     tickets_analyzed: total,
-    chats_analyzed: chatData?.chats_analyzed ?? 0,
+    chats_analyzed: 0,
+    chat_messages_total: 0,
     patterns: patternCounts,
     top_types,
     top_statuses,
@@ -470,7 +487,7 @@ async function buildKnowledge(
     keywords,
     sample_comments,
     monthly_stats: monthlyStats,
-    chat_data: chatData,
+    chat_data: null,
     summary_text,
   };
 }
@@ -522,4 +539,82 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+/**
+ * PATCH /api/agentes/soporte-atc/knowledge
+ * Recibe { chat_data: ChatKnowledge } desde el cliente (browser)
+ * y lo fusiona con la knowledge base de tickets existente.
+ * El análisis de chats corre en el browser vía Socket.IO (confiable),
+ * y aquí solo se almacena el resultado procesado.
+ */
+export async function PATCH(request: NextRequest) {
+  const authorization = request.headers.get("authorization") ?? "";
+  if (!authorization) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
+  }
+
+  const chatData = body.chat_data as ChatKnowledge | null;
+  if (!chatData || typeof chatData !== "object") {
+    return NextResponse.json({ error: "chat_data requerido" }, { status: 400 });
+  }
+
+  const existing = await loadKnowledge(authorization);
+  if (!existing) {
+    return NextResponse.json(
+      { error: "No hay knowledge base de tickets. Genera primero con POST." },
+      { status: 404 },
+    );
+  }
+
+  // Reconstruye el summary_text reemplazando la sección de chats
+  const CHAT_MARKER = "### ANÁLISIS DE CHATS";
+  const baseSummary = String(existing.summary_text ?? "")
+    .split(CHAT_MARKER)[0]
+    .trimEnd();
+
+  const fmt = (sec: number | null) => {
+    if (sec === null) return "—";
+    if (sec < 60) return `${Math.round(sec)}s`;
+    const m = sec / 60;
+    if (m < 60) return `${Math.floor(m)}m`;
+    return `${Math.round(m / 60)}h`;
+  };
+
+  const perAtcLines = chatData.per_atc?.map(
+    (a) =>
+      `  - ${a.label}: ${a.total_convs} conversaciones, ` +
+      `${a.team_messages + a.client_messages} mensajes (equipo: ${a.team_messages} / alumno: ${a.client_messages}), ` +
+      `sin responder: ${a.unanswered}, tiempo resp. promedio: ${fmt(a.avg_response_sec)}`,
+  ) ?? [];
+
+  // Actualiza el header de la KB con el nuevo recuento de chats
+  const updatedHeader = baseSummary.replace(
+    /Conversaciones de chat: \d+ \| Mensajes de chat: \d+/,
+    `Conversaciones de chat: ${chatData.chats_analyzed} | Mensajes de chat: ${chatData.total_messages}`,
+  );
+
+  const chatSection = [
+    chatData.chat_summary_text,
+  ].join("\n");
+
+  const newSummaryText = updatedHeader + "\n\n" + chatSection;
+
+  const updated: Record<string, unknown> = {
+    ...existing,
+    chats_analyzed: chatData.chats_analyzed,
+    chat_messages_total: chatData.total_messages,
+    chat_data: chatData,
+    summary_text: newSummaryText,
+  };
+
+  void saveKnowledge(authorization, updated);
+  return NextResponse.json({ knowledge: updated, fresh: true });
 }
