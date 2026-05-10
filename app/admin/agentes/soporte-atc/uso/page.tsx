@@ -44,7 +44,11 @@ function priceFor(model: string | null | undefined) {
   return PRICE_PER_MILLION.default;
 }
 
-function calcCost(model: string | null | undefined, input: number, output: number) {
+function calcCost(
+  model: string | null | undefined,
+  input: number,
+  output: number,
+) {
   const p = priceFor(model);
   return (input / 1_000_000) * p.input + (output / 1_000_000) * p.output;
 }
@@ -138,7 +142,17 @@ function coerceList(res: any): UsageRecord[] {
 
 // ─── KPI Card ────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon }: { label: string; value: string; sub?: string; icon: React.ReactNode }) {
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: React.ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center gap-3">
@@ -146,7 +160,9 @@ function KpiCard({ label, value, sub, icon }: { label: string; value: string; su
           {icon}
         </div>
         <div>
-          <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            {label}
+          </div>
           <div className="text-xl font-semibold text-slate-800">{value}</div>
           {sub && <div className="text-[11px] text-slate-400">{sub}</div>}
         </div>
@@ -182,7 +198,9 @@ function AtcUsoContent() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   // ── Totals ───────────────────────────────────────────────────────────────────
 
@@ -232,7 +250,9 @@ function AtcUsoContent() {
         });
       }
     }
-    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+    return Array.from(map.values()).sort((a, b) =>
+      b.date.localeCompare(a.date),
+    );
   }, [records]);
 
   // ── Signal frequency ─────────────────────────────────────────────────────────
@@ -279,7 +299,8 @@ function AtcUsoContent() {
             Uso del Agente Soporte ATC
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Registro de consumo de tokens y costo estimado por consulta del equipo ATC.
+            Registro de consumo de tokens y costo estimado por consulta del
+            equipo ATC.
           </p>
         </div>
         <Button variant="outline" onClick={load} disabled={loading}>
@@ -335,14 +356,23 @@ function AtcUsoContent() {
             </h2>
             <div className="space-y-2">
               {signalFreq.slice(0, 12).map(({ signal, count }) => (
-                <div key={signal} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-600 capitalize">{signal.replace(/_/g, " ")}</span>
+                <div
+                  key={signal}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="text-xs text-slate-600 capitalize">
+                    {signal.replace(/_/g, " ")}
+                  </span>
                   <div className="flex items-center gap-1.5">
                     <div
                       className="h-2 rounded-full bg-amber-400"
-                      style={{ width: `${Math.max(8, (count / (signalFreq[0]?.count ?? 1)) * 80)}px` }}
+                      style={{
+                        width: `${Math.max(8, (count / (signalFreq[0]?.count ?? 1)) * 80)}px`,
+                      }}
                     />
-                    <span className="text-xs font-semibold text-slate-700 w-6 text-right">{count}</span>
+                    <span className="text-xs font-semibold text-slate-700 w-6 text-right">
+                      {count}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -351,19 +381,31 @@ function AtcUsoContent() {
         )}
 
         {/* Por día */}
-        <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${signalFreq.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}`}>
+        <div
+          className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${signalFreq.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}`}
+        >
           <div className="px-4 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-slate-700">Uso por día</h2>
+            <h2 className="text-sm font-semibold text-slate-700">
+              Uso por día
+            </h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Fecha</th>
-                  <th className="px-4 py-2 text-right font-medium">Consultas</th>
-                  <th className="px-4 py-2 text-right font-medium">Tokens entrada</th>
-                  <th className="px-4 py-2 text-right font-medium">Tokens salida</th>
-                  <th className="px-4 py-2 text-right font-medium">Costo (USD)</th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Consultas
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Tokens entrada
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Tokens salida
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Costo (USD)
+                  </th>
                   <th className="px-4 py-2 text-left font-medium">Modelos</th>
                 </tr>
               </thead>
@@ -377,18 +419,31 @@ function AtcUsoContent() {
                 )}
                 {!loading && byDay.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                    <td
+                      colSpan={6}
+                      className="px-4 py-8 text-center text-sm text-slate-500"
+                    >
                       No hay registros de uso aún.
                     </td>
                   </tr>
                 )}
                 {byDay.map((d) => (
                   <tr key={d.date} className="hover:bg-slate-50">
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{d.date}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-700">{formatNumber(d.usos)}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{formatNumber(d.input_tokens)}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{formatNumber(d.output_tokens)}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-rose-700">{formatUSD(d.costo_usd)}</td>
+                    <td className="px-4 py-2.5 font-medium text-slate-800">
+                      {d.date}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-700">
+                      {formatNumber(d.usos)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-600">
+                      {formatNumber(d.input_tokens)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-600">
+                      {formatNumber(d.output_tokens)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-rose-700">
+                      {formatUSD(d.costo_usd)}
+                    </td>
                     <td className="px-4 py-2.5">
                       <div className="flex flex-wrap gap-1">
                         {Array.from(d.models).map((m) => (
@@ -412,7 +467,9 @@ function AtcUsoContent() {
       {/* Últimas 50 consultas */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="px-4 pt-4 pb-2">
-          <h2 className="text-sm font-semibold text-slate-700">Últimas 50 consultas</h2>
+          <h2 className="text-sm font-semibold text-slate-700">
+            Últimas 50 consultas
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -422,15 +479,22 @@ function AtcUsoContent() {
                 <th className="px-4 py-2 text-left font-medium">Modelo</th>
                 <th className="px-4 py-2 text-right font-medium">Tokens in</th>
                 <th className="px-4 py-2 text-right font-medium">Tokens out</th>
-                <th className="px-4 py-2 text-right font-medium">Costo (USD)</th>
-                <th className="px-4 py-2 text-left font-medium">Señales detectadas</th>
+                <th className="px-4 py-2 text-right font-medium">
+                  Costo (USD)
+                </th>
+                <th className="px-4 py-2 text-left font-medium">
+                  Señales detectadas
+                </th>
                 <th className="px-4 py-2 text-left font-medium">Alumno ctx</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {recent.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td
+                    colSpan={7}
+                    className="px-4 py-8 text-center text-sm text-slate-500"
+                  >
                     Sin registros.
                   </td>
                 </tr>
@@ -451,9 +515,15 @@ function AtcUsoContent() {
                         {p.model || "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{formatNumber(inTok)}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{formatNumber(outTok)}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-rose-700">{formatUSD(cost)}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-600">
+                      {formatNumber(inTok)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-600">
+                      {formatNumber(outTok)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-medium text-rose-700">
+                      {formatUSD(cost)}
+                    </td>
                     <td className="px-4 py-2.5">
                       <div className="flex flex-wrap gap-1">
                         {signals.length === 0 ? (
