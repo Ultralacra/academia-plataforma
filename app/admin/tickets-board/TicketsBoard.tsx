@@ -781,6 +781,7 @@ function TicketsBoardContent({
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("");
+  const [areaFiltro, setAreaFiltro] = useState("");
   const [onlyMyTickets, setOnlyMyTickets] = useState(false);
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">(
@@ -887,6 +888,24 @@ function TicketsBoardContent({
     const atc = isAtcCoach(coach);
     return { code, id, atc };
   }, [coachFiltro, coaches]);
+
+  // Áreas únicas derivadas de los coaches asignados a los tickets cargados
+  const areasDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tickets) {
+      const allCoaches = [
+        ...(t.coaches ?? []),
+        ...(Array.isArray(t.coaches_override)
+          ? t.coaches_override.filter((c) => c && typeof c === "object")
+          : []),
+      ] as Array<{ area?: string | null }>;
+      for (const c of allCoaches) {
+        const a = String(c?.area ?? "").trim();
+        if (a) set.add(a);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [tickets]);
 
   const filterTicketsForViewer = (
     list: TicketBoardItem[],
@@ -1005,6 +1024,20 @@ function TicketsBoardContent({
       );
     }
 
+    if (areaFiltro) {
+      result = result.filter((t) => {
+        const allCoaches = [
+          ...(t.coaches ?? []),
+          ...(Array.isArray(t.coaches_override)
+            ? t.coaches_override.filter((c) => c && typeof c === "object")
+            : []),
+        ] as Array<{ area?: string | null }>;
+        return allCoaches.some(
+          (c) => String(c?.area ?? "").trim() === areaFiltro,
+        );
+      });
+    }
+
     return result;
   }, [
     tickets,
@@ -1014,6 +1047,7 @@ function TicketsBoardContent({
     coachFiltro,
     selectedCoachUser,
     etiquetaFiltro,
+    areaFiltro,
   ]);
 
   // Debug: imprimir en consola el coach seleccionado y los tickets "de ese coach"
@@ -2757,6 +2791,25 @@ function TicketsBoardContent({
                   value={String(et.codigo ?? "")}
                 >
                   {et.nombre}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {!isStudent && areasDisponibles.length > 0 && (
+            <select
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-auto sm:min-w-[160px]"
+              value={areaFiltro}
+              onChange={(e) => {
+                setAreaFiltro(e.target.value);
+                if (e.target.value && onlyMyTickets) setOnlyMyTickets(false);
+              }}
+              title="Filtrar por área"
+            >
+              <option value="">Todas las áreas</option>
+              {areasDisponibles.map((a) => (
+                <option key={a} value={a}>
+                  {a}
                 </option>
               ))}
             </select>
