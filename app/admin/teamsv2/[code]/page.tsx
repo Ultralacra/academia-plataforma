@@ -57,6 +57,8 @@ import {
   offerSession,
   listAlumnoSessions,
   type SessionItem,
+  fetchTransferHistory,
+  type TransferAuditPayload,
 } from "../api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -3342,6 +3344,7 @@ function CoachStudentsInline({
     name?: string | null,
   ) => void;
 }) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -3573,6 +3576,8 @@ function CoachStudentsInline({
           stageOptions={etapaOptions.length ? etapaOptions : stagesOptions}
           onPatchRow={(code, patch) => patchItemByCode(code, patch)}
           onTransferDone={() => setReloadBump((n) => n + 1)}
+          operatorCode={String((user as any)?.codigo ?? "")}
+          operatorName={String((user as any)?.name ?? "")}
           onOffer={(row: any) => {
             const code = String(row.code || "").trim();
             if (!code) return;
@@ -3606,6 +3611,9 @@ function CoachStudentsInline({
       <div className="text-xs text-neutral-500">
         Total: {totalCount} • Mostrando: {filteredRows.length}
       </div>
+
+      {/* Historial de transferencias */}
+      <TransferHistoryPanel coachCode={coachCode} />
 
       {/* Quick Offer Modal (Alumnos tab) */}
       <Dialog open={quickOpen} onOpenChange={setQuickOpen}>
@@ -3832,4 +3840,133 @@ function toDatetimeLocal(d?: Date): string {
   const hh = pad(dt.getHours());
   const mi = pad(dt.getMinutes());
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+// ─── Panel historial de transferencias ────────────────────────────────────────
+
+function TransferHistoryPanel({ coachCode }: { coachCode: string }) {
+  const [records, setRecords] = useState<
+    Array<{ id: string | number; payload: TransferAuditPayload; created_at: string | null }>
+  >([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await fetchTransferHistory(coachCode);
+      setRecords(data);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function fmtDate(iso: string | null) {
+    if (!iso) return "—";
+    try {
+      return new Intl.DateTimeFormat("es-ES", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  }
+
+  const accionBadge = (accion: string) => {
+    if (accion === "replaced")
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">
+          Sustituido
+        </span>
+      );
+    if (accion === "assigned")
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
+          Asignado
+        </span>
+      );
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-neutral-100 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+        {accion}
+      </span>
+    );
+  };
+
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-card overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-foreground hover:bg-muted/40 transition-colors"
+        onClick={() => {
+          if (!open) load();
+          setOpen((v) => !v);
+        }}
+      >
+        <span>Historial de transferencias</span>
+        <span className="text-muted-foreground text-xs">{open ? "▲ Cerrar" : "▼ Ver"}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-border px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-muted-foreground">
+              Registros en los que este coach aparece como origen o destino.
+            </p>
+            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+              {loading ? "Cargando…" : "Actualizar"}
+            </Button>
+          </div>
+
+          {loading ? (
+            <div className="text-sm text-muted-foreground py-4 text-center">Cargando…</div>
+          ) : records.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4 text-center">
+              Sin transferencias registradas para este coach.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Fecha</th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Alumno</th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Acción</th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Origen</th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Destino</th>
+                    <th className="pb-2 font-medium whitespace-nowrap">Hecho por</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => (
+                    <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="py-2 pr-4 whitespace-nowrap text-muted-foreground">
+                        {fmtDate(r.created_at ?? r.payload.fecha)}
+                      </td>
+                      <td className="py-2 pr-4">
+                        <div className="font-medium">{r.payload.alumno_nombre || "—"}</div>
+                        <div className="text-muted-foreground">{r.payload.alumno_codigo}</div>
+                      </td>
+                      <td className="py-2 pr-4">{accionBadge(r.payload.accion)}</td>
+                      <td className="py-2 pr-4 text-muted-foreground">
+                        {r.payload.coach_origen_nombre || r.payload.coach_origen_codigo || "—"}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {r.payload.coach_destino_nombre || r.payload.coach_destino_codigo || "—"}
+                      </td>
+                      <td className="py-2 text-muted-foreground">
+                        {r.payload.realizado_por_nombre || r.payload.realizado_por_codigo || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

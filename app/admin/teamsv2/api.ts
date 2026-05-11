@@ -159,6 +159,83 @@ export async function getCoachById(id: number) {
   return list.find((c) => c.id === id) ?? null;
 }
 
+// ─── Auditoría de transferencias ─────────────────────────────────────────────
+
+export type TransferAuditPayload = {
+  alumno_codigo: string;
+  alumno_nombre: string;
+  coach_origen_codigo: string;
+  coach_origen_nombre: string;
+  coach_destino_codigo: string;
+  coach_destino_nombre: string;
+  accion: "replaced" | "assigned";
+  detalle: string;
+  realizado_por_codigo: string;
+  realizado_por_nombre: string;
+  fecha: string; // ISO
+};
+
+/**
+ * Guarda un registro de auditoría cuando se transfiere un alumno entre coaches.
+ * entity: "coach_transfer_audit" / entity_id: alumno_codigo
+ * Fire-and-forget: nunca lanza — los errores solo se logean en consola.
+ */
+export async function logCoachTransferAudit(
+  payload: TransferAuditPayload,
+): Promise<void> {
+  try {
+    await apiFetch("/metadata", {
+      method: "POST",
+      body: JSON.stringify({
+        entity: "coach_transfer_audit",
+        entity_id: payload.alumno_codigo,
+        payload,
+      }),
+    });
+  } catch (e) {
+    console.warn("[transfer-audit] Error guardando auditoría:", e);
+  }
+}
+
+/**
+ * Lee el historial de transferencias de un coach (como origen o destino).
+ * Devuelve los registros ordenados del más reciente al más antiguo.
+ */
+export async function fetchTransferHistory(
+  coachCode: string,
+): Promise<Array<{ id: string | number; payload: TransferAuditPayload; created_at: string | null }>> {
+  try {
+    const qs = new URLSearchParams({ entity: "coach_transfer_audit", page: "1", pageSize: "500" });
+    const json = await apiFetch<any>(`/metadata?${qs.toString()}`);
+    const rows: any[] = Array.isArray(json)
+      ? json
+      : Array.isArray(json?.data)
+        ? json.data
+        : Array.isArray(json?.items)
+          ? json.items
+          : Array.isArray(json?.data?.items)
+            ? json.data.items
+            : [];
+    return rows
+      .filter((r) => {
+        const p: TransferAuditPayload = r.payload ?? {};
+        return (
+          p.coach_origen_codigo === coachCode ||
+          p.coach_destino_codigo === coachCode
+        );
+      })
+      .map((r) => ({
+        id: r.id,
+        payload: r.payload as TransferAuditPayload,
+        created_at: r.created_at ?? null,
+      }))
+      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  } catch (e) {
+    console.warn("[transfer-audit] Error leyendo historial:", e);
+    return [];
+  }
+}
+
 export async function getCoachStudents(coachCode: string) {
   const url = `/client/get/clients-coaches?coach=${encodeURIComponent(
     coachCode

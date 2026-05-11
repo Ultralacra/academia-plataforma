@@ -45,6 +45,7 @@ import { apiFetch } from "@/lib/api-config";
 import {
   assignCoachToStudent,
   getStudentCoaches,
+  logCoachTransferAudit,
   removeCoachFromStudent,
   updateClientEtapa,
   updateClientIngreso,
@@ -227,6 +228,8 @@ export default function CoachStudentsTable({
   stageOptions,
   onPatchRow,
   onTransferDone,
+  operatorCode = "",
+  operatorName = "",
 }: {
   rows: Row[];
   title?: string;
@@ -236,6 +239,8 @@ export default function CoachStudentsTable({
   stageOptions?: StageOptionLike[];
   onPatchRow?: (code: string, patch: Partial<Row>) => void;
   onTransferDone?: () => void;
+  operatorCode?: string;
+  operatorName?: string;
 }) {
   const { toast } = useToast();
   const fmt = useMemo(() => new Intl.DateTimeFormat("es-ES"), []);
@@ -539,6 +544,21 @@ export default function CoachStudentsTable({
           detail = "No tenía coach del área, se asignó";
           action = "assigned";
         }
+
+        // Auditoría de transferencia — best-effort, no bloquea
+        void logCoachTransferAudit({
+          alumno_codigo: items[i].code,
+          alumno_nombre: items[i].name,
+          coach_origen_codigo: sameAreaCoach?.coachCode ?? coachCode ?? "",
+          coach_origen_nombre: sameAreaCoach?.coachName ?? "",
+          coach_destino_codigo: targetCoach.teamCode,
+          coach_destino_nombre: targetCoach.name,
+          accion: action as "replaced" | "assigned",
+          detalle: detail,
+          realizado_por_codigo: operatorCode,
+          realizado_por_nombre: operatorName,
+          fecha: new Date().toISOString(),
+        });
 
         setTransferItems((prev) =>
           prev.map((it, idx) =>
