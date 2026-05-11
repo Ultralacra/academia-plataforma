@@ -20,6 +20,8 @@ export type BusinessMonthRecord = {
   roicOperationalCost: number;
   marketingSalesCost: number;
   notes?: string;
+  /** Valores para campos personalizados (clave -> número o texto). */
+  extra?: Record<string, number | string>;
 };
 
 export type BusinessExpenseEntry = {
@@ -29,11 +31,43 @@ export type BusinessExpenseEntry = {
   category: string;
   amount: number;
   note?: string;
+  /** Valores para campos personalizados (clave -> número o texto). */
+  extra?: Record<string, number | string>;
+};
+
+export type CustomFieldType = "number" | "currency" | "percent" | "text";
+export type CustomFieldTarget = "record" | "expense";
+
+export type CustomFieldDef = {
+  key: string;
+  label: string;
+  type: CustomFieldType;
+  target: CustomFieldTarget;
+  /** Si true, se muestra como columna en la tabla del CRUD. */
+  showInTable?: boolean;
+};
+
+export type CustomFormulaFormat = "number" | "currency" | "percent";
+
+export type CustomFormulaDef = {
+  key: string;
+  label: string;
+  /** Expresión libre: +, -, *, /, (), nombres de variables y números. */
+  expression: string;
+  format: CustomFormulaFormat;
+  /** Si true se muestra como tarjeta en el overview. */
+  showInOverview?: boolean;
 };
 
 export type BusinessMetricsState = {
   records: BusinessMonthRecord[];
   expenses: BusinessExpenseEntry[];
+  /** Definiciones de campos extra para registros mensuales y partidas. */
+  customFields?: CustomFieldDef[];
+  /** Definiciones de KPIs personalizados. */
+  customFormulas?: CustomFormulaDef[];
+  /** Clave (vault) del módulo, editable desde el panel auto-admin. */
+  vaultPassword?: string;
 };
 
 export type BusinessKpiRow = {
@@ -561,4 +595,342 @@ export function sortBusinessExpenses(expenses: BusinessExpenseEntry[]) {
     if (monthCompare !== 0) return monthCompare;
     return a.category.localeCompare(b.category);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Capa "auto-admin": custom fields + custom formulas
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RESERVED_RECORD_KEYS = new Set<string>([
+  "id",
+  "month",
+  "ads",
+  "closerCommissions",
+  "carlaBonus",
+  "newClients",
+  "highTicketRevenue",
+  "delinquencyRate",
+  "highTicketClients",
+  "activeStudents",
+  "durationMonths",
+  "churnRate",
+  "operatingCostMonthly",
+  "roicOperationalCost",
+  "marketingSalesCost",
+  "notes",
+  "extra",
+]);
+
+const RESERVED_EXPENSE_KEYS = new Set<string>([
+  "id",
+  "month",
+  "scope",
+  "category",
+  "amount",
+  "note",
+  "extra",
+]);
+
+/** Normaliza un texto humano a una clave JS válida (camelCase básico). */
+export function slugifyCustomKey(input: string): string {
+  const trimmed = String(input || "").trim().toLowerCase();
+  if (!trimmed) return "";
+  const ascii = trimmed
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 _-]+/g, " ")
+    .trim();
+  const parts = ascii.split(/[\s_-]+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  const [head, ...rest] = parts;
+  let key = head + rest.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join("");
+  if (/^[0-9]/.test(key)) key = `f_${key}`;
+  return key;
+}
+
+/** Devuelve un mensaje de error si la clave colisiona con campos base o ya existe. */
+export function validateCustomFieldKey(
+  key: string,
+  target: CustomFieldTarget,
+  existing: CustomFieldDef[],
+  ignoreKey?: string,
+): string | null {
+  if (!key) return "La clave es obligatoria.";
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+    return "Clave inválida: usa solo letras, números y _ (sin empezar por número).";
+  }
+  const reserved = target === "record" ? RESERVED_RECORD_KEYS : RESERVED_EXPENSE_KEYS;
+  if (reserved.has(key)) return "Clave reservada por el sistema.";
+  const clash = existing.find(
+    (f) => f.key === key && f.target === target && f.key !== ignoreKey,
+  );
+  if (clash) return "Ya existe un campo con esa clave para este destino.";
+  return null;
+}
+
+/** Asegura que el estado tenga arrays válidos para campos/formulas personalizados. */
+export function normalizeBusinessState(
+  raw: Partial<BusinessMetricsState> | null | undefined,
+): BusinessMetricsState {
+  const seed = buildBusinessSeedState();
+  const records = Array.isArray(raw?.records)
+    ? sortBusinessRecords(raw!.records as BusinessMonthRecord[])
+    : seed.records;
+  const expenses = Array.isArray(raw?.expenses)
+    ? sortBusinessExpenses(raw!.expenses as BusinessExpenseEntry[])
+    : seed.expenses;
+  const customFields = Array.isArray(raw?.customFields)
+    ? (raw!.customFields as CustomFieldDef[]).filter(
+        (f) => f && typeof f.key === "string" && typeof f.label === "string",
+      )
+    : [];
+  const customFormulas = Array.isArray(raw?.customFormulas)
+    ? (raw!.customFormulas as CustomFormulaDef[]).filter(
+        (f) =>
+          f &&
+          typeof f.key === "string" &&
+          typeof f.label === "string" &&
+          typeof f.expression === "string",
+      )
+    : [];
+  const vaultPassword =
+    typeof raw?.vaultPassword === "string" ? raw!.vaultPassword : undefined;
+  return { records, expenses, customFields, customFormulas, vaultPassword };
+}
+
+// — Mini evaluador seguro de expresiones aritméticas —
+// Solo permite: números, identificadores [A-Za-z_][A-Za-z0-9_]*, + - * / ( ) , espacios.
+// Soporta funciones básicas: min, max, abs, round, floor, ceil, sqrt, pow.
+const FORMULA_FUNCTIONS: Record<string, (...args: number[]) => number> = {
+  min: Math.min,
+  max: Math.max,
+  abs: Math.abs,
+  round: Math.round,
+  floor: Math.floor,
+  ceil: Math.ceil,
+  sqrt: Math.sqrt,
+  pow: Math.pow,
+};
+
+type Token =
+  | { type: "num"; value: number }
+  | { type: "id"; value: string }
+  | { type: "op"; value: "+" | "-" | "*" | "/" | "(" | ")" | "," };
+
+function tokenizeFormula(expr: string): Token[] {
+  const tokens: Token[] = [];
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (ch === " " || ch === "\t" || ch === "\n") {
+      i++;
+      continue;
+    }
+    if ("+-*/(),".includes(ch)) {
+      tokens.push({ type: "op", value: ch as any });
+      i++;
+      continue;
+    }
+    if (/[0-9.]/.test(ch)) {
+      let j = i + 1;
+      while (j < expr.length && /[0-9._]/.test(expr[j])) j++;
+      const raw = expr.slice(i, j).replace(/_/g, "");
+      const value = Number(raw);
+      if (!Number.isFinite(value)) {
+        throw new Error(`Número inválido: ${raw}`);
+      }
+      tokens.push({ type: "num", value });
+      i = j;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(ch)) {
+      let j = i + 1;
+      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j++;
+      tokens.push({ type: "id", value: expr.slice(i, j) });
+      i = j;
+      continue;
+    }
+    throw new Error(`Carácter no permitido en la fórmula: "${ch}"`);
+  }
+  return tokens;
+}
+
+function parseFormula(
+  tokens: Token[],
+  variables: Record<string, number>,
+): number {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const consume = () => tokens[pos++];
+
+  function parseExpression(): number {
+    let value = parseTerm();
+    while (pos < tokens.length) {
+      const t = peek();
+      if (t.type === "op" && (t.value === "+" || t.value === "-")) {
+        consume();
+        const rhs = parseTerm();
+        value = t.value === "+" ? value + rhs : value - rhs;
+      } else break;
+    }
+    return value;
+  }
+
+  function parseTerm(): number {
+    let value = parseFactor();
+    while (pos < tokens.length) {
+      const t = peek();
+      if (t.type === "op" && (t.value === "*" || t.value === "/")) {
+        consume();
+        const rhs = parseFactor();
+        if (t.value === "*") value = value * rhs;
+        else value = rhs === 0 ? 0 : value / rhs;
+      } else break;
+    }
+    return value;
+  }
+
+  function parseFactor(): number {
+    const t = consume();
+    if (!t) throw new Error("Expresión incompleta.");
+    if (t.type === "op" && t.value === "-") {
+      return -parseFactor();
+    }
+    if (t.type === "op" && t.value === "+") {
+      return parseFactor();
+    }
+    if (t.type === "num") return t.value;
+    if (t.type === "op" && t.value === "(") {
+      const v = parseExpression();
+      const closing = consume();
+      if (!closing || closing.type !== "op" || closing.value !== ")") {
+        throw new Error("Falta cerrar paréntesis.");
+      }
+      return v;
+    }
+    if (t.type === "id") {
+      // ¿Llamada a función?
+      if (peek() && peek().type === "op" && (peek() as any).value === "(") {
+        consume(); // (
+        const args: number[] = [];
+        if (!(peek() && peek().type === "op" && (peek() as any).value === ")")) {
+          args.push(parseExpression());
+          while (peek() && peek().type === "op" && (peek() as any).value === ",") {
+            consume();
+            args.push(parseExpression());
+          }
+        }
+        const close = consume();
+        if (!close || close.type !== "op" || close.value !== ")") {
+          throw new Error(`Falta cerrar ")" en función ${t.value}.`);
+        }
+        const fn = FORMULA_FUNCTIONS[t.value];
+        if (!fn) throw new Error(`Función no soportada: ${t.value}.`);
+        return fn(...args);
+      }
+      if (!(t.value in variables)) {
+        throw new Error(`Variable no encontrada: ${t.value}`);
+      }
+      const v = variables[t.value];
+      return Number.isFinite(v) ? v : 0;
+    }
+    throw new Error("Token inesperado en la fórmula.");
+  }
+
+  const result = parseExpression();
+  if (pos < tokens.length) {
+    throw new Error("Hay tokens extra al final de la fórmula.");
+  }
+  return result;
+}
+
+/**
+ * Construye el diccionario de variables disponibles para un registro mensual:
+ * todos los campos base + KPIs calculados + extras.
+ */
+export function buildFormulaVariables(
+  record: BusinessMonthRecord,
+): Record<string, number> {
+  const kpis = calculateBusinessKpis(record);
+  const vars: Record<string, number> = {
+    ads: record.ads,
+    closerCommissions: record.closerCommissions,
+    carlaBonus: record.carlaBonus,
+    newClients: record.newClients,
+    highTicketRevenue: record.highTicketRevenue,
+    delinquencyRate: record.delinquencyRate,
+    highTicketClients: record.highTicketClients,
+    activeStudents: record.activeStudents,
+    durationMonths: record.durationMonths,
+    churnRate: record.churnRate,
+    operatingCostMonthly: record.operatingCostMonthly,
+    roicOperationalCost: record.roicOperationalCost,
+    marketingSalesCost: record.marketingSalesCost,
+    acquisitionCost: kpis.acquisitionCost,
+    cac: kpis.cac,
+    delinquencyLoss: kpis.delinquencyLoss,
+    incomePerClient: kpis.incomePerClient,
+    costPerClient: kpis.costPerClient,
+    totalCostPerClient: kpis.totalCostPerClient,
+    operatingMarginPerClient: kpis.operatingMarginPerClient,
+    ltgpExcel: kpis.ltgpExcel,
+    ltgpProjected: kpis.ltgpProjected,
+    cacRatio: kpis.cacRatio,
+    benefitPerClient: kpis.benefitPerClient,
+    paybackMonths: kpis.paybackMonths,
+    roic: kpis.roic,
+    salesVelocity: kpis.salesVelocity,
+    structuralChurn: kpis.structuralChurn,
+    entryVsExit: kpis.entryVsExit,
+    grossValueGenerated: kpis.grossValueGenerated,
+    roicProfit: kpis.roicProfit,
+  };
+  if (record.extra) {
+    for (const [k, v] of Object.entries(record.extra)) {
+      const n = typeof v === "number" ? v : Number(v);
+      vars[k] = Number.isFinite(n) ? n : 0;
+    }
+  }
+  return vars;
+}
+
+export type FormulaEvalResult =
+  | { ok: true; value: number }
+  | { ok: false; error: string };
+
+/** Evalúa una expresión contra un diccionario de variables. */
+export function evaluateBusinessFormula(
+  expression: string,
+  variables: Record<string, number>,
+): FormulaEvalResult {
+  if (!expression || !expression.trim()) {
+    return { ok: false, error: "Expresión vacía." };
+  }
+  try {
+    const tokens = tokenizeFormula(expression);
+    if (tokens.length === 0) return { ok: false, error: "Expresión vacía." };
+    const value = parseFormula(tokens, variables);
+    if (!Number.isFinite(value)) return { ok: true, value: 0 };
+    return { ok: true, value };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message || "Fórmula inválida") };
+  }
+}
+
+/** Evalúa una fórmula promediada/sumada sobre una lista de registros. */
+export function evaluateFormulaOverRecords(
+  expression: string,
+  records: BusinessMonthRecord[],
+  mode: "sum" | "avg" = "sum",
+): FormulaEvalResult {
+  if (records.length === 0) return { ok: true, value: 0 };
+  let total = 0;
+  let count = 0;
+  for (const record of records) {
+    const r = evaluateBusinessFormula(expression, buildFormulaVariables(record));
+    if (!r.ok) return r;
+    total += r.value;
+    count += 1;
+  }
+  return { ok: true, value: mode === "avg" ? total / Math.max(count, 1) : total };
 }

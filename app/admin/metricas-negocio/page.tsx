@@ -37,14 +37,25 @@ import { getAuthToken } from "@/lib/auth";
 import {
   BUSINESS_FORMULAS,
   buildBusinessSeedState,
+  buildFormulaVariables,
   calculateBusinessKpis,
   calculateBusinessSummary,
   canAccessBusinessMetrics,
+  evaluateBusinessFormula,
+  evaluateFormulaOverRecords,
+  normalizeBusinessState,
+  slugifyCustomKey,
   sortBusinessExpenses,
   sortBusinessRecords,
+  validateCustomFieldKey,
   type BusinessExpenseEntry,
   type BusinessMetricsState,
   type BusinessMonthRecord,
+  type CustomFieldDef,
+  type CustomFieldTarget,
+  type CustomFieldType,
+  type CustomFormulaDef,
+  type CustomFormulaFormat,
 } from "@/lib/business-metrics";
 import {
   AlertTriangle,
@@ -58,6 +69,8 @@ import {
   Pencil,
   Plus,
   Receipt,
+  Settings,
+  Sigma,
   TrendingDown,
   TrendingUp,
   Trash2,
@@ -81,6 +94,7 @@ const EMPTY_MONTH_FORM: BusinessMonthRecord = {
   roicOperationalCost: 0,
   marketingSalesCost: 0,
   notes: "",
+  extra: {},
 };
 
 const EMPTY_EXPENSE_FORM: BusinessExpenseEntry = {
@@ -90,6 +104,7 @@ const EMPTY_EXPENSE_FORM: BusinessExpenseEntry = {
   category: "",
   amount: 0,
   note: "",
+  extra: {},
 };
 
 function formatCurrency(value: number) {
@@ -120,12 +135,12 @@ function parseNumericInput(value: string) {
 }
 
 const BM_SESSION_KEY = "bm-vault-auth";
-const BM_VAULT_PASSWORD = "JJWEPNTLDIJE";
+const BM_VAULT_PASSWORD_DEFAULT = "JJWEPNTLDIJE";
 
 function BusinessMetricsContent() {
   const { user, isLoading } = useAuth();
-  const [state, setState] = useState<BusinessMetricsState>(
-    buildBusinessSeedState,
+  const [state, setState] = useState<BusinessMetricsState>(() =>
+    normalizeBusinessState(buildBusinessSeedState()),
   );
   const [metaId, setMetaId] = useState<string | null>(null);
   const [loadingMeta, setLoadingMeta] = useState(true);
@@ -148,6 +163,32 @@ function BusinessMetricsContent() {
   const [importedFields, setImportedFields] = useState<string[]>([]);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
+  // ── Auto-admin: formularios de campos / fórmulas / clave ─────────────────
+  const [fieldDraft, setFieldDraft] = useState<CustomFieldDef>({
+    key: "",
+    label: "",
+    type: "number",
+    target: "record",
+    showInTable: true,
+  });
+  const [fieldEditingKey, setFieldEditingKey] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  const [formulaDraft, setFormulaDraft] = useState<CustomFormulaDef>({
+    key: "",
+    label: "",
+    expression: "",
+    format: "currency",
+    showInOverview: true,
+  });
+  const [formulaEditingKey, setFormulaEditingKey] = useState<string | null>(
+    null,
+  );
+  const [formulaError, setFormulaError] = useState<string | null>(null);
+
+  const [vaultDraft, setVaultDraft] = useState("");
+  const [vaultSavedFlash, setVaultSavedFlash] = useState(false);
+
   useEffect(() => {
     if (sessionStorage.getItem(BM_SESSION_KEY) === "1") {
       setSecondaryAuthed(true);
@@ -155,7 +196,9 @@ function BusinessMetricsContent() {
   }, []);
 
   const handleVaultLogin = () => {
-    if (pwInput === BM_VAULT_PASSWORD) {
+    const expected =
+      (state.vaultPassword || "").trim() || BM_VAULT_PASSWORD_DEFAULT;
+    if (pwInput === expected) {
       sessionStorage.setItem(BM_SESSION_KEY, "1");
       setSecondaryAuthed(true);
       setPwError(false);
@@ -193,14 +236,7 @@ function BusinessMetricsContent() {
         if (cancelled) return;
         if (found) {
           const pl = found.payload ?? {};
-          const next: BusinessMetricsState = {
-            records: Array.isArray(pl.records)
-              ? sortBusinessRecords(pl.records as BusinessMonthRecord[])
-              : buildBusinessSeedState().records,
-            expenses: Array.isArray(pl.expenses)
-              ? sortBusinessExpenses(pl.expenses as BusinessExpenseEntry[])
-              : buildBusinessSeedState().expenses,
-          };
+          const next = normalizeBusinessState(pl);
           skipSaveRef.current = true;
           setState(next);
           setMetaId(String(found.id));
@@ -503,6 +539,155 @@ function BusinessMetricsContent() {
     resetExpenseForm();
   };
 
+  // ── Capa "auto-admin": custom fields, formulas y vault password ───────────
+  const customFields = state.customFields ?? [];
+  const customFormulas = state.customFormulas ?? [];
+  const recordCustomFields = useMemo(
+    () => customFields.filter((f) => f.target === "record"),
+    [customFields],
+  );
+  const expenseCustomFields = useMemo(
+    () => customFields.filter((f) => f.target === "expense"),
+    [customFields],
+  );
+
+  function setExtraValue<T extends { extra?: Record<string, number | string> }>(
+    obj: T,
+    key: string,
+    raw: string,
+    type: CustomFieldType,
+  ): T {
+    const nextExtra = { ...(obj.extra ?? {}) } as Record<
+      string,
+      number | string
+    >;
+    if (type === "text") {
+      nextExtra[key] = raw;
+    } else {
+      nextExtra[key] = parseNumericInput(raw);
+    }
+    return { ...obj, extra: nextExtra };
+  }
+
+  function getExtraValue(
+    obj: { extra?: Record<string, number | string> } | null | undefined,
+    key: string,
+    type: CustomFieldType,
+  ): string {
+    const v = obj?.extra?.[key];
+    if (v == null) return type === "text" ? "" : "0";
+    return String(v);
+  }
+
+  function formatCustomValue(
+    value: number | string | undefined,
+    type: CustomFieldType,
+  ): string {
+    if (value == null) return "—";
+    if (type === "text") return String(value);
+    const n = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(n)) return "—";
+    if (type === "currency") return formatCurrency(n);
+    if (type === "percent") return formatPercent(n);
+    return new Intl.NumberFormat("es-ES", {
+      maximumFractionDigits: 2,
+    }).format(n);
+  }
+
+  function formatFormulaValue(
+    value: number,
+    format: CustomFormulaFormat,
+  ): string {
+    if (format === "currency") return formatCurrency(value);
+    if (format === "percent") return formatPercent(value);
+    return new Intl.NumberFormat("es-ES", {
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  const addCustomField = (field: CustomFieldDef) => {
+    setState((current) => ({
+      ...current,
+      customFields: [...(current.customFields ?? []), field],
+    }));
+  };
+
+  const updateCustomField = (originalKey: string, next: CustomFieldDef) => {
+    setState((current) => ({
+      ...current,
+      customFields: (current.customFields ?? []).map((f) =>
+        f.key === originalKey && f.target === next.target ? next : f,
+      ),
+    }));
+  };
+
+  const removeCustomField = (field: CustomFieldDef) => {
+    setState((current) => ({
+      ...current,
+      customFields: (current.customFields ?? []).filter(
+        (f) => !(f.key === field.key && f.target === field.target),
+      ),
+      // Limpia valores de ese campo en los registros existentes
+      records:
+        field.target === "record"
+          ? current.records.map((r) => {
+              if (!r.extra) return r;
+              const { [field.key]: _omit, ...rest } = r.extra;
+              return { ...r, extra: rest };
+            })
+          : current.records,
+      expenses:
+        field.target === "expense"
+          ? current.expenses.map((e) => {
+              if (!e.extra) return e;
+              const { [field.key]: _omit, ...rest } = e.extra;
+              return { ...e, extra: rest };
+            })
+          : current.expenses,
+    }));
+  };
+
+  const addCustomFormula = (formula: CustomFormulaDef) => {
+    setState((current) => ({
+      ...current,
+      customFormulas: [...(current.customFormulas ?? []), formula],
+    }));
+  };
+
+  const updateCustomFormula = (originalKey: string, next: CustomFormulaDef) => {
+    setState((current) => ({
+      ...current,
+      customFormulas: (current.customFormulas ?? []).map((f) =>
+        f.key === originalKey ? next : f,
+      ),
+    }));
+  };
+
+  const removeCustomFormula = (key: string) => {
+    setState((current) => ({
+      ...current,
+      customFormulas: (current.customFormulas ?? []).filter(
+        (f) => f.key !== key,
+      ),
+    }));
+  };
+
+  const setVaultPassword = (next: string) => {
+    setState((current) => ({ ...current, vaultPassword: next }));
+  };
+
+  // KPIs personalizados resumidos sobre los registros visibles
+  const customFormulaSummaries = useMemo(() => {
+    return customFormulas.map((formula) => {
+      const result = evaluateFormulaOverRecords(
+        formula.expression,
+        visibleRecords,
+        formula.format === "percent" ? "avg" : "sum",
+      );
+      return { formula, result };
+    });
+  }, [customFormulas, visibleRecords]);
+
   if (isLoading || loadingMeta) {
     return null;
   }
@@ -773,6 +958,39 @@ function BusinessMetricsContent() {
           </Card>
         </div>
 
+        {customFormulaSummaries.filter((s) => s.formula.showInOverview).length >
+          0 && (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {customFormulaSummaries
+              .filter((s) => s.formula.showInOverview)
+              .map(({ formula, result }) => (
+                <Card
+                  key={`cf-${formula.key}`}
+                  className="border-l-4 border-l-amber-500 dark:border-l-amber-400"
+                >
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
+                      <Sigma className="h-3 w-3" />
+                      {formula.label}
+                    </CardDescription>
+                    <CardTitle className="text-amber-700 dark:text-amber-300">
+                      {result.ok
+                        ? formatFormulaValue(result.value, formula.format)
+                        : "—"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground">
+                    {result.ok ? (
+                      <code className="text-[10px]">{formula.expression}</code>
+                    ) : (
+                      <span className="text-red-500">{result.error}</span>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+          </div>
+        )}
+
         <div className="grid gap-4 xl:grid-cols-3">
           <Card className="border-l-4 border-l-sky-500">
             <CardHeader className="bg-sky-50/50 dark:bg-sky-950/30 rounded-t-lg pb-2">
@@ -965,6 +1183,13 @@ function BusinessMetricsContent() {
               className="data-[state=active]:bg-gray-700 data-[state=active]:text-white"
             >
               Fórmulas
+            </TabsTrigger>
+            <TabsTrigger
+              value="auto-admin"
+              className="data-[state=active]:bg-amber-600 data-[state=active]:text-white"
+            >
+              <Settings className="mr-1 h-3 w-3" />
+              Auto-admin
             </TabsTrigger>
           </TabsList>
 
@@ -1417,6 +1642,49 @@ function BusinessMetricsContent() {
                   </div>
                 </div>
 
+                {recordCustomFields.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-1">
+                      <Settings className="h-3 w-3" />
+                      Campos personalizados
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      {recordCustomFields.map((field) => (
+                        <div key={field.key} className="space-y-2">
+                          <Label className="flex items-center gap-1">
+                            {field.label}
+                            <Badge
+                              variant="outline"
+                              className="ml-1 text-[10px]"
+                            >
+                              {field.key}
+                            </Badge>
+                          </Label>
+                          <Input
+                            type={field.type === "text" ? "text" : "number"}
+                            step={field.type === "percent" ? "0.01" : undefined}
+                            value={getExtraValue(
+                              monthForm,
+                              field.key,
+                              field.type,
+                            )}
+                            onChange={(e) =>
+                              setMonthForm((current) =>
+                                setExtraValue(
+                                  current,
+                                  field.key,
+                                  e.target.value,
+                                  field.type,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <Button onClick={upsertMonth}>
                     {editingMonthId ? "Guardar cambios" : "Agregar mes"}
@@ -1448,6 +1716,11 @@ function BusinessMetricsContent() {
                       <TableHead>Costo op.</TableHead>
                       <TableHead>ROIC op.</TableHead>
                       <TableHead>Ventas</TableHead>
+                      {recordCustomFields
+                        .filter((f) => f.showInTable)
+                        .map((f) => (
+                          <TableHead key={`th-${f.key}`}>{f.label}</TableHead>
+                        ))}
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1470,13 +1743,23 @@ function BusinessMetricsContent() {
                         <TableCell>
                           {formatCurrency(record.marketingSalesCost)}
                         </TableCell>
+                        {recordCustomFields
+                          .filter((f) => f.showInTable)
+                          .map((f) => (
+                            <TableCell key={`td-${record.id}-${f.key}`}>
+                              {formatCustomValue(record.extra?.[f.key], f.type)}
+                            </TableCell>
+                          ))}
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                setMonthForm(record);
+                                setMonthForm({
+                                  ...record,
+                                  extra: { ...(record.extra ?? {}) },
+                                });
                                 setEditingMonthId(record.id);
                               }}
                             >
@@ -1594,6 +1877,48 @@ function BusinessMetricsContent() {
                     }
                   />
                 </div>
+                {expenseCustomFields.length > 0 && (
+                  <div className="xl:col-span-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-1">
+                      <Settings className="h-3 w-3" />
+                      Campos personalizados
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      {expenseCustomFields.map((field) => (
+                        <div key={field.key} className="space-y-2">
+                          <Label className="flex items-center gap-1">
+                            {field.label}
+                            <Badge
+                              variant="outline"
+                              className="ml-1 text-[10px]"
+                            >
+                              {field.key}
+                            </Badge>
+                          </Label>
+                          <Input
+                            type={field.type === "text" ? "text" : "number"}
+                            step={field.type === "percent" ? "0.01" : undefined}
+                            value={getExtraValue(
+                              expenseForm,
+                              field.key,
+                              field.type,
+                            )}
+                            onChange={(e) =>
+                              setExpenseForm((current) =>
+                                setExtraValue(
+                                  current,
+                                  field.key,
+                                  e.target.value,
+                                  field.type,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-end gap-2 xl:col-span-5">
                   <Button onClick={upsertExpense}>
                     <Plus className="mr-2 h-4 w-4" />
@@ -1623,6 +1948,11 @@ function BusinessMetricsContent() {
                       <TableHead>Categoría</TableHead>
                       <TableHead>Monto</TableHead>
                       <TableHead>Nota</TableHead>
+                      {expenseCustomFields
+                        .filter((f) => f.showInTable)
+                        .map((f) => (
+                          <TableHead key={`exth-${f.key}`}>{f.label}</TableHead>
+                        ))}
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1647,13 +1977,26 @@ function BusinessMetricsContent() {
                         <TableCell className="max-w-65 truncate">
                           {expense.note || "-"}
                         </TableCell>
+                        {expenseCustomFields
+                          .filter((f) => f.showInTable)
+                          .map((f) => (
+                            <TableCell key={`extd-${expense.id}-${f.key}`}>
+                              {formatCustomValue(
+                                expense.extra?.[f.key],
+                                f.type,
+                              )}
+                            </TableCell>
+                          ))}
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                setExpenseForm(expense);
+                                setExpenseForm({
+                                  ...expense,
+                                  extra: { ...(expense.extra ?? {}) },
+                                });
                                 setEditingExpenseId(expense.id);
                               }}
                             >
@@ -2642,6 +2985,602 @@ function BusinessMetricsContent() {
                     ) : null}
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="auto-admin" className="space-y-4">
+            <Card className="border-amber-200 dark:border-amber-800">
+              <CardHeader className="bg-amber-50/50 dark:bg-amber-950/30 rounded-t-lg">
+                <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                  <Settings className="h-4 w-4" />
+                  Auto-administración
+                </CardTitle>
+                <CardDescription>
+                  Todo lo que ves en este módulo se guarda en el metadata
+                  sincronizado (entidad{" "}
+                  <code className="text-xs">business_metrics_state</code>). Aquí
+                  puedes definir campos nuevos, fórmulas/KPIs y la clave de
+                  acceso sin tocar el código.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            {/* ── Clave de acceso del módulo ─────────────────────────── */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Lock className="h-4 w-4" />
+                  Clave de acceso del módulo
+                </CardTitle>
+                <CardDescription>
+                  La clave actual se solicita al entrar. Si la dejas vacía se
+                  usa la clave por defecto del sistema.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+                  <Input
+                    type="text"
+                    value={
+                      vaultDraft !== ""
+                        ? vaultDraft
+                        : (state.vaultPassword ?? "")
+                    }
+                    placeholder={BM_VAULT_PASSWORD_DEFAULT}
+                    onChange={(e) => setVaultDraft(e.target.value)}
+                  />
+                  <Button
+                    onClick={() => {
+                      setVaultPassword(vaultDraft.trim());
+                      setVaultSavedFlash(true);
+                      setTimeout(() => setVaultSavedFlash(false), 2000);
+                    }}
+                  >
+                    Guardar clave
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setVaultDraft("");
+                      setVaultPassword("");
+                    }}
+                  >
+                    Restablecer
+                  </Button>
+                </div>
+                {vaultSavedFlash && (
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    Clave actualizada y sincronizada.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Recuerda: cualquier admin con permiso para abrir este panel
+                  puede ver o cambiar la clave. Para mayor seguridad mueve la
+                  validación a backend.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* ── Campos personalizados ──────────────────────────────── */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Plus className="h-4 w-4" />
+                  Campos personalizados
+                </CardTitle>
+                <CardDescription>
+                  Crea columnas/atributos nuevos para los meses o las partidas.
+                  Quedan disponibles para usarlos en fórmulas personalizadas.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                  <div className="space-y-1 xl:col-span-2">
+                    <Label className="text-xs">Etiqueta</Label>
+                    <Input
+                      value={fieldDraft.label}
+                      placeholder="p. ej. Comisión Affiliates"
+                      onChange={(e) => {
+                        const label = e.target.value;
+                        setFieldDraft((current) => ({
+                          ...current,
+                          label,
+                          key:
+                            fieldEditingKey || current.key
+                              ? current.key
+                              : slugifyCustomKey(label),
+                        }));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1 xl:col-span-2">
+                    <Label className="text-xs">Clave (uso en fórmulas)</Label>
+                    <Input
+                      value={fieldDraft.key}
+                      placeholder="comisionAffiliates"
+                      onChange={(e) =>
+                        setFieldDraft((current) => ({
+                          ...current,
+                          key: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tipo</Label>
+                    <Select
+                      value={fieldDraft.type}
+                      onValueChange={(value: CustomFieldType) =>
+                        setFieldDraft((current) => ({
+                          ...current,
+                          type: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="number">Número</SelectItem>
+                        <SelectItem value="currency">Moneda (USD)</SelectItem>
+                        <SelectItem value="percent">Porcentaje</SelectItem>
+                        <SelectItem value="text">Texto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Destino</Label>
+                    <Select
+                      value={fieldDraft.target}
+                      onValueChange={(value: CustomFieldTarget) =>
+                        setFieldDraft((current) => ({
+                          ...current,
+                          target: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="record">Mes (CRUD)</SelectItem>
+                        <SelectItem value="expense">Partida (gasto)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end gap-2 xl:col-span-6">
+                    <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={!!fieldDraft.showInTable}
+                        onChange={(e) =>
+                          setFieldDraft((current) => ({
+                            ...current,
+                            showInTable: e.target.checked,
+                          }))
+                        }
+                      />
+                      Mostrar como columna en la tabla
+                    </label>
+                    <div className="grow" />
+                    <Button
+                      onClick={() => {
+                        const candidate: CustomFieldDef = {
+                          ...fieldDraft,
+                          label: fieldDraft.label.trim(),
+                          key:
+                            fieldDraft.key.trim() ||
+                            slugifyCustomKey(fieldDraft.label),
+                        };
+                        if (!candidate.label) {
+                          setFieldError("La etiqueta es obligatoria.");
+                          return;
+                        }
+                        const validationError = validateCustomFieldKey(
+                          candidate.key,
+                          candidate.target,
+                          customFields,
+                          fieldEditingKey ?? undefined,
+                        );
+                        if (validationError) {
+                          setFieldError(validationError);
+                          return;
+                        }
+                        setFieldError(null);
+                        if (fieldEditingKey) {
+                          updateCustomField(fieldEditingKey, candidate);
+                        } else {
+                          addCustomField(candidate);
+                        }
+                        setFieldDraft({
+                          key: "",
+                          label: "",
+                          type: "number",
+                          target: "record",
+                          showInTable: true,
+                        });
+                        setFieldEditingKey(null);
+                      }}
+                    >
+                      {fieldEditingKey ? "Guardar cambios" : "Agregar campo"}
+                    </Button>
+                    {fieldEditingKey && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setFieldEditingKey(null);
+                          setFieldError(null);
+                          setFieldDraft({
+                            key: "",
+                            label: "",
+                            type: "number",
+                            target: "record",
+                            showInTable: true,
+                          });
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {fieldError && (
+                  <p className="text-sm text-red-500">{fieldError}</p>
+                )}
+
+                <Separator />
+
+                {customFields.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No hay campos personalizados todavía. Crea el primero arriba
+                    y aparecerá en los formularios.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Etiqueta</TableHead>
+                        <TableHead>Clave</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Destino</TableHead>
+                        <TableHead>Columna</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {customFields.map((field) => (
+                        <TableRow key={`${field.target}-${field.key}`}>
+                          <TableCell>{field.label}</TableCell>
+                          <TableCell>
+                            <code className="text-xs">{field.key}</code>
+                          </TableCell>
+                          <TableCell>{field.type}</TableCell>
+                          <TableCell>
+                            {field.target === "record" ? "Mes" : "Partida"}
+                          </TableCell>
+                          <TableCell>
+                            {field.showInTable ? "Sí" : "No"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setFieldDraft({ ...field });
+                                  setFieldEditingKey(field.key);
+                                  setFieldError(null);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeCustomField(field)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ── Fórmulas/KPIs personalizados ───────────────────────── */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sigma className="h-4 w-4" />
+                  Fórmulas / KPIs personalizados
+                </CardTitle>
+                <CardDescription>
+                  Operadores soportados: <code>+ - * / ( )</code> y funciones{" "}
+                  <code>min, max, abs, round, floor, ceil, sqrt, pow</code>.
+                  Variables disponibles: campos base (ej.{" "}
+                  <code>highTicketRevenue</code>, <code>activeStudents</code>),
+                  KPIs calculados (ej. <code>cac</code>, <code>roic</code>,{" "}
+                  <code>ltgpExcel</code>) y tus campos personalizados.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                  <div className="space-y-1 xl:col-span-2">
+                    <Label className="text-xs">Nombre del KPI</Label>
+                    <Input
+                      value={formulaDraft.label}
+                      placeholder="p. ej. Margen neto"
+                      onChange={(e) => {
+                        const label = e.target.value;
+                        setFormulaDraft((current) => ({
+                          ...current,
+                          label,
+                          key:
+                            formulaEditingKey || current.key
+                              ? current.key
+                              : slugifyCustomKey(label),
+                        }));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1 xl:col-span-2">
+                    <Label className="text-xs">Clave</Label>
+                    <Input
+                      value={formulaDraft.key}
+                      placeholder="margenNeto"
+                      onChange={(e) =>
+                        setFormulaDraft((current) => ({
+                          ...current,
+                          key: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Formato</Label>
+                    <Select
+                      value={formulaDraft.format}
+                      onValueChange={(value: CustomFormulaFormat) =>
+                        setFormulaDraft((current) => ({
+                          ...current,
+                          format: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="number">Número</SelectItem>
+                        <SelectItem value="currency">Moneda (USD)</SelectItem>
+                        <SelectItem value="percent">Porcentaje</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={!!formulaDraft.showInOverview}
+                        onChange={(e) =>
+                          setFormulaDraft((current) => ({
+                            ...current,
+                            showInOverview: e.target.checked,
+                          }))
+                        }
+                      />
+                      Mostrar en overview
+                    </label>
+                  </div>
+                  <div className="space-y-1 xl:col-span-6">
+                    <Label className="text-xs">Expresión</Label>
+                    <Textarea
+                      rows={2}
+                      value={formulaDraft.expression}
+                      placeholder="highTicketRevenue - operatingCostMonthly - marketingSalesCost"
+                      onChange={(e) =>
+                        setFormulaDraft((current) => ({
+                          ...current,
+                          expression: e.target.value,
+                        }))
+                      }
+                    />
+                    {visibleRecords[0] && formulaDraft.expression.trim() && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Vista previa con <code>{visibleRecords[0].month}</code>:{" "}
+                        {(() => {
+                          const r = evaluateBusinessFormula(
+                            formulaDraft.expression,
+                            buildFormulaVariables(visibleRecords[0]),
+                          );
+                          if (!r.ok)
+                            return (
+                              <span className="text-red-500">{r.error}</span>
+                            );
+                          return (
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              {formatFormulaValue(r.value, formulaDraft.format)}
+                            </span>
+                          );
+                        })()}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-end gap-2 xl:col-span-6">
+                    <Button
+                      onClick={() => {
+                        const candidate: CustomFormulaDef = {
+                          ...formulaDraft,
+                          label: formulaDraft.label.trim(),
+                          key:
+                            formulaDraft.key.trim() ||
+                            slugifyCustomKey(formulaDraft.label),
+                          expression: formulaDraft.expression.trim(),
+                        };
+                        if (!candidate.label) {
+                          setFormulaError("El nombre es obligatorio.");
+                          return;
+                        }
+                        if (!candidate.key) {
+                          setFormulaError("La clave es obligatoria.");
+                          return;
+                        }
+                        if (
+                          customFormulas.some(
+                            (f) =>
+                              f.key === candidate.key &&
+                              f.key !== formulaEditingKey,
+                          )
+                        ) {
+                          setFormulaError("Ya existe un KPI con esa clave.");
+                          return;
+                        }
+                        if (!candidate.expression) {
+                          setFormulaError("La expresión es obligatoria.");
+                          return;
+                        }
+                        const test = evaluateBusinessFormula(
+                          candidate.expression,
+                          buildFormulaVariables(
+                            visibleRecords[0] ??
+                              state.records[0] ?? {
+                                id: "",
+                                month: "",
+                                ads: 0,
+                                closerCommissions: 0,
+                                carlaBonus: 0,
+                                newClients: 0,
+                                highTicketRevenue: 0,
+                                delinquencyRate: 0,
+                                highTicketClients: 0,
+                                activeStudents: 0,
+                                durationMonths: 1,
+                                churnRate: 0,
+                                operatingCostMonthly: 0,
+                                roicOperationalCost: 0,
+                                marketingSalesCost: 0,
+                              },
+                          ),
+                        );
+                        if (!test.ok) {
+                          setFormulaError(test.error);
+                          return;
+                        }
+                        setFormulaError(null);
+                        if (formulaEditingKey) {
+                          updateCustomFormula(formulaEditingKey, candidate);
+                        } else {
+                          addCustomFormula(candidate);
+                        }
+                        setFormulaDraft({
+                          key: "",
+                          label: "",
+                          expression: "",
+                          format: "currency",
+                          showInOverview: true,
+                        });
+                        setFormulaEditingKey(null);
+                      }}
+                    >
+                      {formulaEditingKey ? "Guardar cambios" : "Agregar KPI"}
+                    </Button>
+                    {formulaEditingKey && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setFormulaEditingKey(null);
+                          setFormulaError(null);
+                          setFormulaDraft({
+                            key: "",
+                            label: "",
+                            expression: "",
+                            format: "currency",
+                            showInOverview: true,
+                          });
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {formulaError && (
+                  <p className="text-sm text-red-500">{formulaError}</p>
+                )}
+
+                <Separator />
+
+                {customFormulas.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Aún no hay KPIs personalizados. Crea el primero arriba y
+                    aparecerá como tarjeta en la vista general.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Clave</TableHead>
+                        <TableHead>Expresión</TableHead>
+                        <TableHead>Formato</TableHead>
+                        <TableHead>Valor (periodo)</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {customFormulaSummaries.map(({ formula, result }) => (
+                        <TableRow key={`f-${formula.key}`}>
+                          <TableCell>{formula.label}</TableCell>
+                          <TableCell>
+                            <code className="text-xs">{formula.key}</code>
+                          </TableCell>
+                          <TableCell className="max-w-100 truncate">
+                            <code className="text-xs">
+                              {formula.expression}
+                            </code>
+                          </TableCell>
+                          <TableCell>{formula.format}</TableCell>
+                          <TableCell>
+                            {result.ok ? (
+                              formatFormulaValue(result.value, formula.format)
+                            ) : (
+                              <span className="text-red-500 text-xs">
+                                {result.error}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setFormulaDraft({ ...formula });
+                                  setFormulaEditingKey(formula.key);
+                                  setFormulaError(null);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeCustomFormula(formula.key)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
