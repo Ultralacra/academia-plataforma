@@ -3846,7 +3846,11 @@ function toDatetimeLocal(d?: Date): string {
 
 function TransferHistoryPanel({ coachCode }: { coachCode: string }) {
   const [records, setRecords] = useState<
-    Array<{ id: string | number; payload: TransferAuditPayload; created_at: string | null }>
+    Array<{
+      id: string | number;
+      payload: TransferAuditPayload;
+      created_at: string | null;
+    }>
   >([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -3906,7 +3910,9 @@ function TransferHistoryPanel({ coachCode }: { coachCode: string }) {
         }}
       >
         <span>Historial de transferencias</span>
-        <span className="text-muted-foreground text-xs">{open ? "▲ Cerrar" : "▼ Ver"}</span>
+        <span className="text-muted-foreground text-xs">
+          {open ? "▲ Cerrar" : "▼ Ver"}
+        </span>
       </button>
 
       {open && (
@@ -3915,13 +3921,20 @@ function TransferHistoryPanel({ coachCode }: { coachCode: string }) {
             <p className="text-xs text-muted-foreground">
               Registros en los que este coach aparece como origen o destino.
             </p>
-            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={load}
+              disabled={loading}
+            >
               {loading ? "Cargando…" : "Actualizar"}
             </Button>
           </div>
 
           {loading ? (
-            <div className="text-sm text-muted-foreground py-4 text-center">Cargando…</div>
+            <div className="text-sm text-muted-foreground py-4 text-center">
+              Cargando…
+            </div>
           ) : records.length === 0 ? (
             <div className="text-sm text-muted-foreground py-4 text-center">
               Sin transferencias registradas para este coach.
@@ -3931,33 +3944,60 @@ function TransferHistoryPanel({ coachCode }: { coachCode: string }) {
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Fecha</th>
-                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Alumno</th>
-                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Acción</th>
-                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Origen</th>
-                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">Destino</th>
-                    <th className="pb-2 font-medium whitespace-nowrap">Hecho por</th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">
+                      Fecha
+                    </th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">
+                      Alumno
+                    </th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">
+                      Acción
+                    </th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">
+                      Origen
+                    </th>
+                    <th className="pb-2 pr-4 font-medium whitespace-nowrap">
+                      Destino
+                    </th>
+                    <th className="pb-2 font-medium whitespace-nowrap">
+                      Hecho por
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {records.map((r) => (
-                    <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30">
+                    <tr
+                      key={r.id}
+                      className="border-b border-border/50 hover:bg-muted/30"
+                    >
                       <td className="py-2 pr-4 whitespace-nowrap text-muted-foreground">
                         {fmtDate(r.created_at ?? r.payload.fecha)}
                       </td>
                       <td className="py-2 pr-4">
-                        <div className="font-medium">{r.payload.alumno_nombre || "—"}</div>
-                        <div className="text-muted-foreground">{r.payload.alumno_codigo}</div>
-                      </td>
-                      <td className="py-2 pr-4">{accionBadge(r.payload.accion)}</td>
-                      <td className="py-2 pr-4 text-muted-foreground">
-                        {r.payload.coach_origen_nombre || r.payload.coach_origen_codigo || "—"}
+                        <div className="font-medium">
+                          {r.payload.alumno_nombre || "—"}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {r.payload.alumno_codigo}
+                        </div>
                       </td>
                       <td className="py-2 pr-4">
-                        {r.payload.coach_destino_nombre || r.payload.coach_destino_codigo || "—"}
+                        {accionBadge(r.payload.accion)}
+                      </td>
+                      <td className="py-2 pr-4 text-muted-foreground">
+                        {r.payload.coach_origen_nombre ||
+                          r.payload.coach_origen_codigo ||
+                          "—"}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {r.payload.coach_destino_nombre ||
+                          r.payload.coach_destino_codigo ||
+                          "—"}
                       </td>
                       <td className="py-2 text-muted-foreground">
-                        {r.payload.realizado_por_nombre || r.payload.realizado_por_codigo || "—"}
+                        {r.payload.realizado_por_nombre ||
+                          r.payload.realizado_por_codigo ||
+                          "—"}
                       </td>
                     </tr>
                   ))}
