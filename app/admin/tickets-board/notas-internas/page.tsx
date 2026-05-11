@@ -14,16 +14,16 @@ import {
   getInternalNotes,
   getTickets,
   type TicketBoardItem,
+  getNoteEtiquetasMeta,
+  type NoteEtiquetaEntry,
 } from "../api";
 import {
-  AlertCircle,
+  getEtiquetasTickets,
+  type EtiquetaTicket,
+} from "@/app/admin/opciones/api";
+import {
   Calendar,
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Clock,
   ExternalLink,
-  FileText,
   Filter,
   Lock,
   MessageSquare,
@@ -31,11 +31,9 @@ import {
   Search,
   Tag,
   User,
-  Users,
+  X,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { apiFetch } from "@/lib/api-config";
 
 function formatDate(date?: string | null) {
   if (!date) return "-";
@@ -88,16 +86,21 @@ function InternalNotesViewContent() {
   const [search, setSearch] = useState("");
   const [selectedTicketCode, setSelectedTicketCode] = useState("");
 
+  // Etiquetas
+  const [etiquetasCatalog, setEtiquetasCatalog] = useState<EtiquetaTicket[]>(
+    [],
+  );
+  const [noteEtiquetasMap, setNoteEtiquetasMap] = useState<
+    Map<string, NoteEtiquetaEntry>
+  >(new Map());
+  const [etiquetaFiltro, setEtiquetaFiltro] = useState<string>("");
+
   const [notes, setNotes] = useState<InternalNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const notesCacheRef = useRef<Record<string, InternalNote[]>>({});
-
-  // Detalle completo del ticket seleccionado
-  const [ticketDetail, setTicketDetail] = useState<any>(null);
-  const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
-  const [alumnoEtapa, setAlumnoEtapa] = useState<string | null>(null);
-  const [alumnoCodigo, setAlumnoCodigo] = useState<string | null>(null);
-  const [detailExpanded, setDetailExpanded] = useState(true);
+  const etiquetasMapCacheRef = useRef<
+    Record<string, Map<string, NoteEtiquetaEntry>>
+  >({});
 
   // Rango de fechas — por defecto últimos 30 días
   const todayStr = buildDateStr(new Date());
@@ -115,6 +118,7 @@ function InternalNotesViewContent() {
     setTicketsLoading(true);
     setTicketsError(null);
     notesCacheRef.current = {}; // limpiar caché al cambiar rango
+    etiquetasMapCacheRef.current = {};
     try {
       const res = await getTickets({
         page: 1,
@@ -177,104 +181,78 @@ function InternalNotesViewContent() {
     void loadTickets();
   }, [loadTickets]);
 
-  // Cargar detalle completo del ticket seleccionado
+  // Cargar catálogo de etiquetas una sola vez
   useEffect(() => {
-    if (!selectedTicketCode) {
-      setTicketDetail(null);
-      setAlumnoEtapa(null);
-      setAlumnoCodigo(null);
-      return;
-    }
-    let cancelled = false;
-    setTicketDetailLoading(true);
-    setTicketDetail(null);
-    setAlumnoEtapa(null);
-    setAlumnoCodigo(null);
-
     (async () => {
       try {
-        const json = await apiFetch<any>(
-          `/ticket/get/ticket/${encodeURIComponent(selectedTicketCode)}`,
-        );
-        const data = json?.data ?? json;
-        if (!cancelled) setTicketDetail(data ?? null);
-
-        // Buscar etapa del alumno
-        const alumnoNombre: string =
-          data?.alumno_nombre ?? data?.alumnoNombre ?? "";
-        if (alumnoNombre && !cancelled) {
-          try {
-            const res = await apiFetch<any>(
-              `/client/get/clients?search=${encodeURIComponent(alumnoNombre.trim())}`,
-            );
-            const rows: any[] = Array.isArray(res?.data) ? res.data : [];
-            const target = String(alumnoNombre).trim().toLowerCase();
-            const match = rows.find((r) => {
-              const n = String(r.nombre ?? r.name ?? "")
-                .trim()
-                .toLowerCase();
-              return n === target || n.includes(target);
-            });
-            if (!cancelled && match) {
-              setAlumnoEtapa(match.etapa ?? match.stage ?? null);
-              setAlumnoCodigo(String(match.codigo ?? match.code ?? "") || null);
-            }
-          } catch {
-            // etapa no disponible, no crítico
-          }
-        }
-      } catch {
-        if (!cancelled) setTicketDetail(null);
-      } finally {
-        if (!cancelled) setTicketDetailLoading(false);
-      }
+        const res = await getEtiquetasTickets(1, 200);
+        setEtiquetasCatalog(Array.isArray(res?.data) ? res.data : []);
+      } catch {}
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedTicketCode]);
+  }, []);
 
   useEffect(() => {
     if (!selectedTicketCode) {
       setNotes([]);
+      setNoteEtiquetasMap(new Map());
       return;
     }
 
-    const cachedNotes = notesCacheRef.current[selectedTicketCode];
-    if (cachedNotes) {
-      setNotes(
-        [...cachedNotes].sort((a, b) => {
-          const aDate = new Date(a.created_at ?? 0).getTime();
-          const bDate = new Date(b.created_at ?? 0).getTime();
-          return bDate - aDate;
-        }),
-      );
-      setNotesLoading(false);
-      return;
-    }
+    // Limpiar map inmediatamente para no mostrar chips del ticket anterior
+    setNoteEtiquetasMap(new Map());
 
     let isCancelled = false;
 
     const loadNotes = async () => {
-      setNotesLoading(true);
-      try {
-        const internal = await getInternalNotes(selectedTicketCode);
-        notesCacheRef.current[selectedTicketCode] = internal;
+      const cachedNotes = notesCacheRef.current[selectedTicketCode];
+      let sorted: InternalNote[];
+
+      if (cachedNotes) {
+        sorted = [...cachedNotes].sort((a, b) => {
+          const aDate = new Date(a.created_at ?? 0).getTime();
+          const bDate = new Date(b.created_at ?? 0).getTime();
+          return bDate - aDate;
+        });
         if (!isCancelled) {
-          setNotes(
-            [...internal].sort((a, b) => {
-              const aDate = new Date(a.created_at ?? 0).getTime();
-              const bDate = new Date(b.created_at ?? 0).getTime();
-              return bDate - aDate;
-            }),
-          );
+          setNotes(sorted);
+          setNotesLoading(false);
         }
-      } catch {
-        if (!isCancelled) setNotes([]);
-      } finally {
-        if (!isCancelled) setNotesLoading(false);
+      } else {
+        setNotesLoading(true);
+        try {
+          const internal = await getInternalNotes(selectedTicketCode);
+          if (isCancelled) return;
+          notesCacheRef.current[selectedTicketCode] = internal;
+          sorted = [...internal].sort((a, b) => {
+            const aDate = new Date(a.created_at ?? 0).getTime();
+            const bDate = new Date(b.created_at ?? 0).getTime();
+            return bDate - aDate;
+          });
+          setNotes(sorted);
+        } catch {
+          if (!isCancelled) setNotes([]);
+          setNotesLoading(false);
+          return;
+        } finally {
+          if (!isCancelled) setNotesLoading(false);
+        }
       }
+
+      // Cargar mapa de etiquetas (con caché)
+      const cachedMap = etiquetasMapCacheRef.current[selectedTicketCode];
+      if (cachedMap) {
+        if (!isCancelled) setNoteEtiquetasMap(cachedMap);
+        return;
+      }
+      const ids = sorted!.map((n) => String(n.id)).filter(Boolean);
+      if (!ids.length) return;
+      try {
+        const etMap = await getNoteEtiquetasMeta(ids);
+        if (!isCancelled) {
+          etiquetasMapCacheRef.current[selectedTicketCode] = etMap;
+          setNoteEtiquetasMap(etMap);
+        }
+      } catch {}
     };
 
     void loadNotes();
@@ -302,6 +280,15 @@ function InternalNotesViewContent() {
       return haystack.includes(q);
     });
   }, [search, tickets]);
+
+  // Notas filtradas por etiqueta seleccionada
+  const filteredNotes = useMemo(() => {
+    if (!etiquetaFiltro) return notes;
+    return notes.filter((note) => {
+      const entry = noteEtiquetasMap.get(String(note.id));
+      return entry?.etiqueta_codigos?.includes(etiquetaFiltro) ?? false;
+    });
+  }, [notes, noteEtiquetasMap, etiquetaFiltro]);
 
   const selectedTicket = useMemo(() => {
     return tickets.find(
@@ -487,208 +474,57 @@ function InternalNotesViewContent() {
               </div>
             ) : (
               <>
-                {/* ── Detalle del ticket ─────────────────────── */}
-                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setDetailExpanded((v) => !v)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 transition text-sm font-medium text-slate-700"
-                  >
-                    <span className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-slate-500" />
-                      Detalle del ticket
+                {/* ── Filtro por etiqueta ─────────────────────── */}
+                {etiquetasCatalog.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1">
+                      <Tag className="h-3 w-3" /> Filtrar:
                     </span>
-                    {detailExpanded ? (
-                      <ChevronUp className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    {etiquetasCatalog.map((et) => {
+                      const cod = String(et.codigo ?? "");
+                      const active = etiquetaFiltro === cod;
+                      return (
+                        <button
+                          key={cod}
+                          type="button"
+                          onClick={() =>
+                            setEtiquetaFiltro((prev) =>
+                              prev === cod ? "" : cod,
+                            )
+                          }
+                          className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium transition-opacity"
+                          style={{
+                            backgroundColor: active
+                              ? `${et.color}33`
+                              : `${et.color}11`,
+                            color: et.color ?? undefined,
+                            border: `1px solid ${
+                              active ? et.color : `${et.color}55`
+                            }`,
+                            opacity: active ? 1 : 0.6,
+                          }}
+                        >
+                          {et.nombre ?? cod}
+                        </button>
+                      );
+                    })}
+                    {etiquetaFiltro && (
+                      <button
+                        type="button"
+                        onClick={() => setEtiquetaFiltro("")}
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100"
+                      >
+                        <X className="h-3 w-3" /> Quitar filtro
+                      </button>
                     )}
-                  </button>
-
-                  {detailExpanded && (
-                    <div className="p-4 space-y-3">
-                      {ticketDetailLoading ? (
-                        <div className="flex items-center gap-2 text-sm text-slate-400">
-                          <Spinner className="h-4 w-4" /> Cargando detalle...
-                        </div>
-                      ) : ticketDetail ? (
-                        <>
-                          {/* Título + badges */}
-                          <div className="space-y-1">
-                            <p className="font-semibold text-slate-800">
-                              {ticketDetail.nombre ?? "Sin título"}
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-700">
-                                {statusLabel(
-                                  ticketDetail.estado ?? ticketDetail.status,
-                                )}
-                              </span>
-                              {(ticketDetail.tipo ?? ticketDetail.type) && (
-                                <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium bg-blue-50 text-blue-700 border-blue-200">
-                                  {ticketDetail.tipo ?? ticketDetail.type}
-                                </span>
-                              )}
-                              {Array.isArray(ticketDetail.etiquetas) &&
-                                ticketDetail.etiquetas.map((et: any) => (
-                                  <span
-                                    key={et.id ?? et.codigo}
-                                    className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium"
-                                    style={{
-                                      backgroundColor: `${et.color}22`,
-                                      color: et.color,
-                                      border: `1px solid ${et.color}55`,
-                                    }}
-                                  >
-                                    <Tag className="h-2.5 w-2.5 mr-1" />
-                                    {et.nombre ?? et.codigo}
-                                  </span>
-                                ))}
-                            </div>
-                          </div>
-
-                          <Separator />
-
-                          {/* Grid de info */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                            {/* Alumno */}
-                            <div className="flex items-start gap-2">
-                              <User className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                              <div>
-                                <p className="text-[11px] text-slate-400 uppercase tracking-wide">
-                                  Alumno
-                                </p>
-                                {alumnoCodigo ? (
-                                  <Link
-                                    href={`/admin/alumnos/${encodeURIComponent(alumnoCodigo)}/perfil`}
-                                    target="_blank"
-                                    className="font-medium text-sky-700 hover:underline underline-offset-2"
-                                  >
-                                    {ticketDetail.alumno_nombre ??
-                                      ticketDetail.alumnoNombre ??
-                                      "-"}
-                                  </Link>
-                                ) : (
-                                  <p className="font-medium text-slate-700">
-                                    {ticketDetail.alumno_nombre ??
-                                      ticketDetail.alumnoNombre ??
-                                      "-"}
-                                  </p>
-                                )}
-                                {alumnoEtapa && (
-                                  <span className="mt-0.5 inline-flex items-center rounded-full bg-violet-50 border border-violet-200 px-2 py-0.5 text-[11px] font-medium text-violet-700">
-                                    Fase: {alumnoEtapa}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Coaches */}
-                            {Array.isArray(ticketDetail.coaches) &&
-                              ticketDetail.coaches.length > 0 && (
-                                <div className="flex items-start gap-2">
-                                  <Users className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                  <div>
-                                    <p className="text-[11px] text-slate-400 uppercase tracking-wide">
-                                      Coaches
-                                    </p>
-                                    <div className="flex flex-wrap gap-1 mt-0.5">
-                                      {ticketDetail.coaches.map(
-                                        (c: any, i: number) => (
-                                          <span
-                                            key={i}
-                                            className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700"
-                                            title={
-                                              c.area
-                                                ? `${c.nombre} · ${c.area}`
-                                                : c.nombre
-                                            }
-                                          >
-                                            {c.nombre ?? "Coach"}
-                                            {c.area ? ` · ${c.area}` : ""}
-                                          </span>
-                                        ),
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                            {/* Fechas */}
-                            <div className="flex items-start gap-2">
-                              <Calendar className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                              <div>
-                                <p className="text-[11px] text-slate-400 uppercase tracking-wide">
-                                  Creación
-                                </p>
-                                <p className="text-slate-700">
-                                  {formatDate(
-                                    ticketDetail.creacion ??
-                                      ticketDetail.created_at,
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-
-                            {(ticketDetail.deadline || ticketDetail.plazo) && (
-                              <div className="flex items-start gap-2">
-                                <Clock className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                <div>
-                                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">
-                                    Fecha límite
-                                  </p>
-                                  <p className="text-slate-700">
-                                    {ticketDetail.deadline
-                                      ? formatDate(ticketDetail.deadline)
-                                      : ticketDetail.plazo}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {ticketDetail.informante_nombre && (
-                              <div className="flex items-start gap-2">
-                                <User className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                <div>
-                                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">
-                                    Informante
-                                  </p>
-                                  <p className="text-slate-700">
-                                    {ticketDetail.informante_nombre}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {ticketDetail.resuelto_por_nombre && (
-                              <div className="flex items-start gap-2">
-                                <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                                <div>
-                                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">
-                                    Resuelto por
-                                  </p>
-                                  <p className="text-slate-700">
-                                    {ticketDetail.resuelto_por_nombre}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-sm text-slate-400">
-                          No se pudo cargar el detalle.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
+                  </div>
+                )}
 
                 {/* ── Notas internas ─────────────────────────── */}
                 <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide flex items-center gap-1">
-                  <Lock className="h-3 w-3" /> Notas internas ({notes.length})
+                  <Lock className="h-3 w-3" /> Notas internas (
+                  {filteredNotes.length}
+                  {etiquetaFiltro ? ` de ${notes.length}` : ""})
                 </p>
 
                 {notesLoading ? (
@@ -696,32 +532,62 @@ function InternalNotesViewContent() {
                     <Spinner className="h-4 w-4" />
                     Cargando notas internas...
                   </div>
-                ) : notes.length === 0 ? (
+                ) : filteredNotes.length === 0 ? (
                   <div className="rounded-md border border-dashed border-amber-300 bg-white/70 p-4 text-sm text-amber-800">
-                    Este ticket no tiene notas internas todavía.
+                    {etiquetaFiltro
+                      ? "No hay notas con la etiqueta seleccionada."
+                      : "Este ticket no tiene notas internas todavía."}
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-                    {notes.map((note) => (
-                      <article
-                        key={note.id}
-                        className="rounded-lg border border-amber-200 bg-white p-4"
-                      >
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                          <span className="inline-flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {note.user_nombre || "Usuario"}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(note.created_at)}
-                          </span>
-                        </div>
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                          {note.contenido || "-"}
-                        </p>
-                      </article>
-                    ))}
+                    {filteredNotes.map((note) => {
+                      const entry = noteEtiquetasMap.get(String(note.id));
+                      const noteCodigos = entry?.etiqueta_codigos ?? [];
+                      return (
+                        <article
+                          key={note.id}
+                          className="rounded-lg border border-amber-200 bg-white p-4"
+                        >
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                            <span className="inline-flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {note.user_nombre || "Usuario"}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {formatDate(note.created_at)}
+                            </span>
+                          </div>
+                          {/* Chips de etiquetas */}
+                          {noteCodigos.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {noteCodigos.map((cod) => {
+                                const et = etiquetasCatalog.find(
+                                  (e) => e.codigo === cod,
+                                );
+                                if (!et) return null;
+                                return (
+                                  <span
+                                    key={cod}
+                                    className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium"
+                                    style={{
+                                      backgroundColor: `${et.color}22`,
+                                      color: et.color ?? undefined,
+                                      border: `1px solid ${et.color}55`,
+                                    }}
+                                  >
+                                    {et.nombre ?? cod}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                            {note.contenido || "-"}
+                          </p>
+                        </article>
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -733,7 +599,7 @@ function InternalNotesViewContent() {
       <div className="text-xs text-muted-foreground flex items-center gap-2">
         <MessageSquare className="h-3.5 w-3.5" />
         {selectedTicketCode
-          ? `Mostrando ${notes.length} nota(s) del ticket ${selectedTicketCode}.`
+          ? `Mostrando ${filteredNotes.length} nota(s) del ticket ${selectedTicketCode}.`
           : "No hay tickets con notas internas disponibles."}
       </div>
     </div>
@@ -742,7 +608,7 @@ function InternalNotesViewContent() {
 
 export default function InternalNotesPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "coach", "sales"]}>
       <DashboardLayout>
         <InternalNotesViewContent />
       </DashboardLayout>

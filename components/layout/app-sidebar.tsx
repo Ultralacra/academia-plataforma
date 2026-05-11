@@ -23,6 +23,7 @@ import {
   FileSignature,
   KeyRound,
   Lock,
+  Database,
 } from "lucide-react";
 import {
   Sidebar,
@@ -168,6 +169,11 @@ const adminItems: MenuItem[] = [
     ],
   },
   { title: "Opciones", url: "/admin/opciones", icon: Settings },
+  {
+    title: "Monitor Metadata",
+    url: "/admin/metadata-analytics",
+    icon: Database,
+  },
 ];
 
 /* Coach */
@@ -201,6 +207,11 @@ const salesItems: MenuItem[] = [
         icon: FileSignature,
       },
     ],
+  },
+  {
+    title: "Notas internas tickets",
+    url: "/admin/tickets-board/notas-internas",
+    icon: Lock,
   },
 ];
 
@@ -397,6 +408,11 @@ export function AppSidebar() {
                     title: "Usuarios sistema",
                     url: "/admin/users",
                     icon: Users,
+                  },
+                  {
+                    title: "Notas internas tickets",
+                    url: "/admin/tickets-board/notas-internas",
+                    icon: Lock,
                   },
                 ] as MenuItem[];
               })()

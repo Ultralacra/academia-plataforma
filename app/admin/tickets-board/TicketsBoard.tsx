@@ -21,6 +21,9 @@ import {
   updateInternalNote,
   deleteInternalNote,
   type InternalNote,
+  getNoteEtiquetasMeta,
+  setNoteEtiquetas,
+  type NoteEtiquetaEntry,
   deleteTicketLink,
   createTicketLink,
   assignEtiquetaToTicket,
@@ -686,6 +689,11 @@ function TicketsBoardContent({
     string | null
   >(null);
   const [editingInternalNoteText, setEditingInternalNoteText] = useState("");
+  // Etiquetas de notas internas
+  const [noteEtiquetasMap, setNoteEtiquetasMap] = useState<
+    Map<string, NoteEtiquetaEntry>
+  >(new Map());
+  const [newNoteEtiquetas, setNewNoteEtiquetas] = useState<string[]>([]);
 
   // Estados para etapa del alumno
   const [etapasOptions, setEtapasOptions] = useState<OpcionItem[]>([]);
@@ -1995,9 +2003,14 @@ function TicketsBoardContent({
       setInternalNotesLoading(true);
       const list = await getInternalNotes(codigo);
       setInternalNotes(list);
+      // Cargar mapa de etiquetas para estas notas
+      const noteIds = list.map((n) => String(n.id)).filter(Boolean);
+      const etMap = await getNoteEtiquetasMeta(noteIds);
+      setNoteEtiquetasMap(etMap);
     } catch (e) {
       console.error(e);
       setInternalNotes([]);
+      setNoteEtiquetasMap(new Map());
     } finally {
       setInternalNotesLoading(false);
     }
@@ -2008,8 +2021,18 @@ function TicketsBoardContent({
     if (!selectedTicket?.codigo || !newInternalNote.trim()) return;
     try {
       setAddingInternalNote(true);
-      await createInternalNote(selectedTicket.codigo, newInternalNote);
+      const res = await createInternalNote(
+        selectedTicket.codigo,
+        newInternalNote,
+      );
+      const noteId = String(res?.data?.id ?? res?.id ?? "").trim();
+      if (noteId && newNoteEtiquetas.length > 0) {
+        try {
+          await setNoteEtiquetas(noteId, newNoteEtiquetas);
+        } catch {}
+      }
       setNewInternalNote("");
+      setNewNoteEtiquetas([]);
       await loadInternalNotes(selectedTicket.codigo);
       toast({ title: "Nota interna agregada" });
     } catch (e) {
@@ -6349,9 +6372,42 @@ function TicketsBoardContent({
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="text-sm text-slate-700 whitespace-pre-wrap break-words pl-8">
-                                    {note.contenido}
-                                  </div>
+                                  <>
+                                    {/* Chips de etiquetas de la nota */}
+                                    {(() => {
+                                      const entry = noteEtiquetasMap.get(
+                                        String(note.id),
+                                      );
+                                      if (!entry?.etiqueta_codigos?.length)
+                                        return null;
+                                      return (
+                                        <div className="flex flex-wrap gap-1 pl-8">
+                                          {entry.etiqueta_codigos.map((cod) => {
+                                            const et = allEtiquetas.find(
+                                              (e) => e.codigo === cod,
+                                            );
+                                            if (!et) return null;
+                                            return (
+                                              <span
+                                                key={cod}
+                                                className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium"
+                                                style={{
+                                                  backgroundColor: `${et.color}22`,
+                                                  color: et.color ?? undefined,
+                                                  border: `1px solid ${et.color}55`,
+                                                }}
+                                              >
+                                                {et.nombre ?? cod}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    })()}
+                                    <div className="text-sm text-slate-700 whitespace-pre-wrap break-words pl-8">
+                                      {note.contenido}
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             ))
@@ -6360,24 +6416,61 @@ function TicketsBoardContent({
 
                         {/* Formulario nueva nota */}
                         {canEdit && (
-                          <div className="flex gap-2 items-start">
-                            <Textarea
-                              value={newInternalNote}
-                              onChange={(e) =>
-                                setNewInternalNote(e.target.value)
-                              }
-                              placeholder="Escribe una nota interna..."
-                              className="min-h-[80px] resize-none"
-                            />
-                            <Button
-                              onClick={handleAddInternalNote}
-                              disabled={
-                                addingInternalNote || !newInternalNote.trim()
-                              }
-                              className="shrink-0"
-                            >
-                              {addingInternalNote ? "..." : "Agregar"}
-                            </Button>
+                          <div className="space-y-2">
+                            {/* Selector de etiquetas */}
+                            {allEtiquetas.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {allEtiquetas.map((et) => {
+                                  const cod = String(et.codigo ?? "");
+                                  const active = newNoteEtiquetas.includes(cod);
+                                  return (
+                                    <button
+                                      key={cod}
+                                      type="button"
+                                      onClick={() =>
+                                        setNewNoteEtiquetas((prev) =>
+                                          active
+                                            ? prev.filter((c) => c !== cod)
+                                            : [...prev, cod],
+                                        )
+                                      }
+                                      className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium transition-opacity"
+                                      style={{
+                                        backgroundColor: active
+                                          ? `${et.color}33`
+                                          : `${et.color}11`,
+                                        color: et.color ?? undefined,
+                                        border: `1px solid ${
+                                          active ? et.color : `${et.color}55`
+                                        }`,
+                                        opacity: active ? 1 : 0.6,
+                                      }}
+                                    >
+                                      {et.nombre ?? cod}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div className="flex gap-2 items-start">
+                              <Textarea
+                                value={newInternalNote}
+                                onChange={(e) =>
+                                  setNewInternalNote(e.target.value)
+                                }
+                                placeholder="Escribe una nota interna..."
+                                className="min-h-[80px] resize-none"
+                              />
+                              <Button
+                                onClick={handleAddInternalNote}
+                                disabled={
+                                  addingInternalNote || !newInternalNote.trim()
+                                }
+                                className="shrink-0"
+                              >
+                                {addingInternalNote ? "..." : "Agregar"}
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>

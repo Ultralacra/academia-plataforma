@@ -2,6 +2,7 @@
 // API local para el tablero de tickets (usa apiFetch con Bearer)
 import { apiFetch } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
+import { listMetadata, createMetadata, updateMetadata } from "@/lib/metadata";
 
 async function internalFetchJson<T = any>(
   url: string,
@@ -499,6 +500,61 @@ export async function getDeletedTickets(opts: {
     return apiFetch<any>(path, {
       method: "DELETE",
     });
+  }
+
+  // --- Etiquetas de notas internas (pivot via /metadata) ---
+
+  export type NoteEtiquetaEntry = {
+    metaId: string | number;
+    etiqueta_codigos: string[];
+  };
+
+  /** Carga el mapa noteId → {metaId, etiqueta_codigos} para un conjunto de notas. */
+  export async function getNoteEtiquetasMeta(
+    noteIds: string[],
+  ): Promise<Map<string, NoteEtiquetaEntry>> {
+    const map = new Map<string, NoteEtiquetaEntry>();
+    if (!noteIds.length) return map;
+    try {
+      const { items } = await listMetadata();
+      for (const item of items) {
+        if (
+          item.entity === "nota_interna_etiqueta" &&
+          noteIds.includes(String(item.entity_id))
+        ) {
+          const codigos: string[] = Array.isArray(item.payload?.etiqueta_codigos)
+            ? item.payload.etiqueta_codigos
+            : [];
+          map.set(String(item.entity_id), {
+            metaId: item.id,
+            etiqueta_codigos: codigos,
+          });
+        }
+      }
+    } catch {}
+    return map;
+  }
+
+  /** Crea o actualiza el registro de metadata para las etiquetas de una nota. */
+  export async function setNoteEtiquetas(
+    noteId: string,
+    etiquetaCodigos: string[],
+    existingMetaId?: string | number,
+  ): Promise<void> {
+    if (existingMetaId !== undefined && existingMetaId !== null) {
+      await updateMetadata(existingMetaId, {
+        id: existingMetaId,
+        entity: "nota_interna_etiqueta",
+        entity_id: noteId,
+        payload: { etiqueta_codigos: etiquetaCodigos },
+      });
+    } else {
+      await createMetadata({
+        entity: "nota_interna_etiqueta",
+        entity_id: noteId,
+        payload: { etiqueta_codigos: etiquetaCodigos },
+      });
+    }
   }
 
   // --- Tareas (Links asociados al ticket) ---
