@@ -695,21 +695,32 @@ function extractLoomIds(text: string): string[] {
   return Array.from(ids);
 }
 
+// Claves donde Loom puede almacenar texto de transcripción (varía por versión de su app)
+const TRANSCRIPT_KEYS = new Set([
+  "transcript", "captions", "subtitles", "transcription",
+  "phrases", "caption_text", "transcripts",
+]);
+
+function extractTextFromLoomArray(arr: unknown[]): string | null {
+  if (!arr.length) return null;
+  const first = arr[0];
+  if (typeof first === "string") return arr.join(" ");
+  if (typeof first === "object" && first !== null) {
+    // { value: "..." }  o  { text: "..." }  o  { phrase: "..." }
+    const texts = (arr as Record<string, unknown>[])
+      .map((item) => String(item.value ?? item.text ?? item.phrase ?? item.caption ?? ""))
+      .filter(Boolean);
+    if (texts.length) return texts.join(" ");
+  }
+  return null;
+}
+
 function findTranscriptInObject(obj: unknown, depth = 0): string | null {
-  if (depth > 8 || obj === null || typeof obj !== "object") return null;
+  if (depth > 10 || obj === null || typeof obj !== "object") return null;
   if (Array.isArray(obj)) {
-    if (
-      obj.length > 0 &&
-      typeof obj[0] === "object" &&
-      obj[0] !== null &&
-      "value" in (obj[0] as object)
-    ) {
-      const text = (obj as Array<{ value?: string }>)
-        .map((t) => t.value ?? "")
-        .filter(Boolean)
-        .join(" ");
-      if (text.length > 20) return text;
-    }
+    // Primero intentar extraer texto directo de este array
+    const direct = extractTextFromLoomArray(obj);
+    if (direct && direct.length > 20) return direct;
     for (const item of obj) {
       const found = findTranscriptInObject(item, depth + 1);
       if (found) return found;
@@ -717,68 +728,175 @@ function findTranscriptInObject(obj: unknown, depth = 0): string | null {
     return null;
   }
   const record = obj as Record<string, unknown>;
-  if ("transcript" in record) {
-    const t = record.transcript;
-    if (Array.isArray(t) && t.length > 0) {
-      if (typeof t[0] === "object" && t[0] !== null && "value" in (t[0] as object)) {
-        return (t as Array<{ value?: string }>)
-          .map((item) => item.value ?? "")
-          .filter(Boolean)
-          .join(" ");
+  // Buscar en las claves conocidas de transcripción primero
+  for (const key of TRANSCRIPT_KEYS) {
+    if (key in record) {
+      const val = record[key];
+      if (Array.isArray(val) && val.length > 0) {
+        const text = extractTextFromLoomArray(val);
+        if (text && text.length > 20) return text;
       }
-      if (typeof t[0] === "string") return t.join(" ");
+      if (typeof val === "string" && val.length > 20) return val;
     }
-    if (typeof t === "string" && t.length > 20) return t;
   }
+  // Búsqueda recursiva en el resto del objeto
   for (const key of Object.keys(record)) {
+    if (TRANSCRIPT_KEYS.has(key)) continue; // ya revisada arriba
     const found = findTranscriptInObject(record[key], depth + 1);
     if (found) return found;
   }
   return null;
 }
 
+/** Convierte VTT a texto plano eliminando cabeceras y marcas de tiempo */
+function parseVttToText(vtt: string): string {
+  return vtt
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (!t || t === "WEBVTT" || /^NOTE\b/.test(t)) return false;
+      if (/^\d+$/.test(t)) return false; // índice numérico
+      if (/\d{2}:\d{2}[:.]\d{2,3}/.test(t)) return false; // timestamps
+      return true;
+    })
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 async function fetchLoomTranscript(videoId: string): Promise<string | null> {
   const t0 = Date.now();
   console.log(`[copy-agent][loom] ▶ fetching transcript for ${videoId}...`);
+
+  const defaultHeaders = {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
+    "Referer": `https://www.loom.com/share/${videoId}`,
+  };
+
+  // ── Estrategia 1: API pública /v1/videos/{id} ──────────────────────────────
+  // Devuelve sin autenticación para videos públicos: description (resumen IA),
+  // chapters, y active_video_transcript_guid para intentar el transcript completo.
+  let transcriptGuid: string | null = null;
   try {
-    const res = await fetch(`https://www.loom.com/share/${videoId}`, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-        Accept: "text/html",
-      },
+    const metaRes = await fetch(`https://www.loom.com/v1/videos/${videoId}`, {
+      headers: { ...defaultHeaders, Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) {
-      console.log(`[copy-agent][loom] ✗ ${videoId} HTTP ${res.status} (${Date.now() - t0}ms)`);
-      return null;
-    }
-    const html = await res.text();
-    const match = html.match(
-      /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/,
-    );
-    if (!match) {
-      console.log(`[copy-agent][loom] ✗ ${videoId} no __NEXT_DATA__ found in HTML (${html.length} chars, ${Date.now() - t0}ms)`);
-      return null;
-    }
-    let data: unknown;
-    try {
-      data = JSON.parse(match[1]);
-    } catch (parseErr) {
-      console.log(`[copy-agent][loom] ✗ ${videoId} JSON parse error:`, (parseErr as Error).message);
-      return null;
-    }
-    const transcript = findTranscriptInObject(data);
-    if (transcript) {
-      console.log(`[copy-agent][loom] ✓ ${videoId} transcript OK (${transcript.length} chars, ${Date.now() - t0}ms) preview:`, transcript.slice(0, 120).replace(/\s+/g, " "));
+    if (metaRes.ok) {
+      const meta = (await metaRes.json()) as Record<string, unknown>;
+      const description = typeof meta.description === "string" ? meta.description.trim() : "";
+      const chapters = typeof meta.chapters === "string" ? meta.chapters.trim() : "";
+      transcriptGuid = typeof meta.active_video_transcript_guid === "string"
+        ? meta.active_video_transcript_guid
+        : null;
+
+      const parts: string[] = [];
+      if (description) parts.push(`Resumen del video: ${description}`);
+      if (chapters) parts.push(`Capítulos: ${chapters}`);
+      const combined = parts.join("\n");
+      if (combined.length > 20) {
+        console.log(`[copy-agent][loom] ✓ ${videoId} via /v1/videos (desc=${description.length}c, chapters=${chapters.length}c, transcriptGuid=${transcriptGuid ?? "none"}, ${Date.now() - t0}ms)`);
+        // Si hay GUID intentamos el transcript real antes de retornar
+        if (transcriptGuid) {
+          const fullTranscript = await fetchLoomTranscriptByGuid(transcriptGuid, videoId, defaultHeaders, t0);
+          if (fullTranscript) return fullTranscript;
+        }
+        return combined;
+      }
     } else {
-      console.log(`[copy-agent][loom] ✗ ${videoId} __NEXT_DATA__ parsed pero NO se encontró campo transcript (probablemente video privado o sin transcripción) (${Date.now() - t0}ms)`);
+      console.log(`[copy-agent][loom] /v1/videos ${metaRes.status} para ${videoId}`);
     }
-    return transcript;
-  } catch (err) {
-    console.log(`[copy-agent][loom] ✗ ${videoId} exception:`, (err as Error).message, `(${Date.now() - t0}ms)`);
-    return null;
+  } catch (e) {
+    console.log(`[copy-agent][loom] /v1/videos error ${videoId}:`, (e as Error).message);
   }
+
+  // ── Estrategia 2: Captions VTT desde el CDN de Loom ───────────────────────
+  try {
+    const vttRes = await fetch(
+      `https://cdn.loom.com/sessions/captions/${videoId}.vtt`,
+      { headers: defaultHeaders, signal: AbortSignal.timeout(8000) },
+    );
+    if (vttRes.ok) {
+      const vttText = await vttRes.text();
+      if (vttText.includes("WEBVTT")) {
+        const text = parseVttToText(vttText);
+        if (text.length > 20) {
+          console.log(`[copy-agent][loom] ✓ ${videoId} via CDN VTT (${text.length}c, ${Date.now() - t0}ms)`);
+          return text;
+        }
+      }
+    } else {
+      console.log(`[copy-agent][loom] CDN VTT ${vttRes.status} para ${videoId}`);
+    }
+  } catch (e) {
+    console.log(`[copy-agent][loom] CDN VTT error ${videoId}:`, (e as Error).message);
+  }
+
+  // ── Estrategia 3: Scraping de __NEXT_DATA__ en la página share ─────────────
+  try {
+    const res = await fetch(`https://www.loom.com/share/${videoId}`, {
+      headers: { ...defaultHeaders, Accept: "text/html" },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const ndMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+      if (ndMatch) {
+        try {
+          const data = JSON.parse(ndMatch[1]);
+          const t = findTranscriptInObject(data);
+          if (t && t.length > 20) {
+            console.log(`[copy-agent][loom] ✓ ${videoId} via __NEXT_DATA__ (${t.length}c, ${Date.now() - t0}ms)`);
+            return t;
+          }
+        } catch { /* continúa */ }
+      }
+    }
+  } catch (err) {
+    console.log(`[copy-agent][loom] share-page exception ${videoId}:`, (err as Error).message);
+  }
+
+  console.log(`[copy-agent][loom] ✗ ${videoId} todas las estrategias fallaron (${Date.now() - t0}ms)`);
+  return null;
+}
+
+/** Intenta obtener el transcript completo usando el GUID devuelto por /v1/videos */
+async function fetchLoomTranscriptByGuid(
+  guid: string,
+  videoId: string,
+  headers: Record<string, string>,
+  t0: number,
+): Promise<string | null> {
+  // Loom expone el transcript en varios posibles endpoints según la versión
+  const candidateUrls = [
+    `https://www.loom.com/v1/video_transcripts/${guid}`,
+    `https://www.loom.com/v1/transcripts/${guid}`,
+    `https://www.loom.com/v1/video_transcripts/${guid}/phrases`,
+    `https://www.loom.com/api/v1/video_transcript/${guid}`,
+  ];
+  for (const url of candidateUrls) {
+    try {
+      const r = await fetch(url, {
+        headers: { ...headers, Accept: "application/json" },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (r.ok) {
+        const json = (await r.json()) as unknown;
+        const text = findTranscriptInObject(json);
+        if (text && text.length > 20) {
+          console.log(`[copy-agent][loom] ✓ ${videoId} transcript via ${url} (${text.length}c, ${Date.now() - t0}ms)`);
+          return text;
+        }
+        console.log(`[copy-agent][loom] ${url} OK pero sin texto (${Date.now() - t0}ms)`);
+      } else {
+        console.log(`[copy-agent][loom] ${url} → ${r.status}`);
+      }
+    } catch (e) {
+      console.log(`[copy-agent][loom] ${url} error:`, (e as Error).message);
+    }
+  }
+  return null;
 }
 
 async function fetchStudentTickets(
@@ -997,10 +1115,15 @@ async function buildStudentContext(
     `## HISTORIAL DEL ALUMNO: ${alumnoName} (código: ${alumnoCode})\n`,
   );
   lines.push(
-    "Los siguientes tickets son las consultas previas del alumno con la respuesta exacta que ya le dio el coach (campo \"Respuesta Coach\" del sistema). Tu trabajo es generar una respuesta que sea COHERENTE con el feedback previo: si el coach ya corrigió algo, mantén esa corrección; si ya dio una recomendación, refuérzala; nunca contradigas el feedback histórico.",
-  );
-  lines.push(
-    "Cuando tu respuesta se base en alguno de estos tickets, AÑADE el formato exacto [TICKET:CODIGO] al final de la frase, párrafo o bullet correspondiente. CODIGO debe ser el id_externo del ticket tal como aparece en el listado. Si usaste varios tickets, incluye varios badges. NO inventes códigos.\n",
+    `INSTRUCCIONES DE USO DEL HISTORIAL:
+1. Cada ticket muestra lo que el alumno entregó ("Consulta del alumno") y lo que el coach respondió exactamente ("Respuesta Coach").
+2. Si hay un video Loom asociado, el campo "Feedback en video" contiene el resumen y capítulos del contenido del video. Ese feedback es CONCRETO y específico a la tarea de ESTE alumno — úsalo como fuente primaria para entender qué se le pidió corregir.
+3. REGLAS DE COHERENCIA:
+   - Si el coach ya señaló un error en un Loom o en su respuesta escrita, NO lo pases por alto — refuérzalo.
+   - Si el coach ya aprobó algo, no lo vuelvas a cuestionar.
+   - Si le indicaron una acción pendiente (ej. rehacer investigación, dejar link público, agendar sesión), verifica si ya la completó y menciona el estado.
+   - Nunca contradigas el feedback histórico del coach.
+4. Cuando tu respuesta esté basada en algún ticket, añade [TICKET:CODIGO] al final de esa frase o bullet. Usa el código exacto del ticket. No inventes códigos.\n`,
   );
 
   for (const { codigo, data: t, comments } of detailedTickets) {
@@ -1080,14 +1203,16 @@ async function buildStudentContext(
       if (transcript) {
         loomCount++;
         lines.push(
-          `Loom del coach (loom.com/share/${loomId}) — transcripción: ${transcript.slice(0, 1500)}`,
+          `Feedback en video del coach (loom.com/share/${loomId}):\n${transcript.slice(0, 2000)}`,
         );
       } else {
-        lines.push(`Loom del coach (loom.com/share/${loomId}) — sin transcripción disponible`);
+        lines.push(`Feedback en video del coach (loom.com/share/${loomId}) — sin transcripción disponible`);
       }
     }
 
-    if (respuesta) lines.push(`Respuesta Coach (texto exacto): ${respuesta}`);
+    // Primero el feedback en video (Loom), luego la respuesta escrita del coach,
+    // para que el LLM entienda el contexto completo de lo que se le dijo al alumno.
+    if (respuesta) lines.push(`Respuesta Coach (texto exacto del coach, incluye acciones pedidas):\n${respuesta}`);
     lines.push("");
 
     // Guardar preview para enviar al frontend (debug visible)
@@ -1220,7 +1345,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const reinforcement = studentCtx.block
-      ? `\n\n[INSTRUCCIÓN CRÍTICA]\nTienes acceso al historial real de tickets del alumno ${alumnoName ?? alumnoCode}. DEBES usar ese contexto para que tu respuesta sea coherente con el feedback previo del coach. Cada vez que tu respuesta esté basada o influenciada por un ticket específico, AÑADE el formato exacto [TICKET:CODIGO] al final de la frase, párrafo o bullet correspondiente. Usa el código tal como aparece en el listado (id_externo). Si usaste varios tickets, incluye varios badges. NO inventes códigos.`
+      ? `\n\n[INSTRUCCIÓN CRÍTICA — LEE ANTES DE RESPONDER]\nTienes acceso al historial COMPLETO de tickets del alumno ${alumnoName ?? alumnoCode}, incluyendo los feedbacks en video (Loom) que el coach le dio en sesiones anteriores.\n\nANTES de responder:\n• Revisa los tickets más recientes para entender en qué fase está y qué se le pidió hacer.\n• Si hay feedbacks en video (campo "Feedback en video"), extrae las correcciones concretas que el coach indicó — esas son las instrucciones más específicas y deben guiar tu respuesta.\n• Si el alumno pregunta sobre su tarea, di exactamente qué le falta según el feedback más reciente del coach (no hagas una revisión genérica).\n• Sé coherente: si el coach ya corrigió algo, refuérzalo; si ya aprobó algo, no lo cuestiones.\n• Cita los tickets relevantes con [TICKET:CODIGO] al final de cada punto donde apliques ese contexto.`
       : "";
     const systemPrompt = studentCtx.block
       ? `${basePrompt}\n\n${studentCtx.block}${reinforcement}`
