@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Bot,
+  Clapperboard,
   FileText,
   Layers,
   Megaphone,
@@ -85,6 +86,35 @@ Estoy especializado en la creación y revisión de guiones de Video Sales Letter
 • Asegurar la lógica de solución y el cierre de oferta.
 
 ¿En qué parte de tu VSL estás trabajando?`,
+  },
+  {
+    id: "hotwriter-vsl-largo",
+    label: "Revisor VSL Largo",
+    description: "Revisión completa VSL Fase 2 (hasta 18 min)",
+    icon: Clapperboard,
+    color: "text-purple-400",
+    badgeColor: "bg-purple-400/20",
+    suggestions: [
+      "Revisa mi VSL completo de Fase 2",
+      "¿Mi Hook cumple los criterios?",
+      "Revisa el MUP y MUS de mi guión",
+    ],
+    welcome: `¡Hola! Soy el **Agente Revisor de VSL Largo** de HotSelling.
+
+Mi función es revisar cada bloque de tu guión de VSL largo (Fase 2) verificando que cada sección cumple su objetivo estratégico dentro de la metodología HotSelling.
+
+**Para iniciar la revisión necesito:**
+• Tu documento de **Fase 1 aprobado** (escalera de valor, promesa, mecanismo, alternativas del MUP).
+• El **guión completo** de tu VSL (o la sección que quieras revisar).
+• Si tu formato es **EN VIVO o PREGRABADO**.
+
+**Puedo ayudarte con:**
+• Revisar los 6 bloques: Hook, Background Story, MUP, MUS, Construcción del producto y Close.
+• Verificar tiempos y extensión (el VSL completo debe durar máximo 18 minutos).
+• Detectar open loops sin cerrar e incoherencias narrativas.
+• Señalar qué resumir si el VSL es muy extenso (sin sacrificar los mecanismos).
+
+Comparte tu guión y empezamos bloque por bloque.`,
   },
   {
     id: "hotwriter-mini-vsl",
