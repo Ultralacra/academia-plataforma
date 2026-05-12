@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api-config";
+import { ProtectedRoute } from "@/components/auth/protected-route";
 import {
   CONTRACT_EXPIRY_TEMPLATES,
   type ContractExpiryKey,
@@ -157,10 +158,10 @@ function formatDaysLeft(daysLeft: number) {
   return `Vence en ${daysLeft} dias`;
 }
 
-export default function AccesosPage() {
+function AccesosPageContent() {
   const { user } = useAuth();
   const router = useRouter();
-  const enabled = canSeeAccesos(user);
+  const enabled = true; // La guarda de roles la hace ProtectedRoute
 
   // Ventana: hasta el último día del 3er mes calendario completo
   const MONTHS_WINDOW = 3;
@@ -439,16 +440,6 @@ export default function AccesosPage() {
     } finally {
       setMailSending(false);
     }
-  }
-
-  if (!enabled) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
-          No tenes permisos para ver esta seccion.
-        </div>
-      </DashboardLayout>
-    );
   }
 
   const renderItem = (
@@ -1224,5 +1215,13 @@ export default function AccesosPage() {
         </DialogContent>
       </Dialog>
     </DashboardLayout>
+  );
+}
+
+export default function AccesosPage() {
+  return (
+    <ProtectedRoute allowedRoles={["admin", "equipo", "coach", "atc", "sales"]}>
+      <AccesosPageContent />
+    </ProtectedRoute>
   );
 }

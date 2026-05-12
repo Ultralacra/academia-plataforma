@@ -234,483 +234,538 @@ export function AppSidebar() {
     const userRole = (user?.role || "").toLowerCase();
 
     // Debug: verificar el rol del usuario
-    /* console.log("User role:", user?.role, "Normalized:", userRole); */
+    console.log("[Sidebar] User:", {
+      role: user?.role,
+      tipo: (user as any)?.tipo,
+      area: (user as any)?.area,
+      normalized: userRole,
+    });
 
-    switch (userRole) {
-      case "sales":
-      case "ventas":
-      case "venta":
-        return salesItems;
-      case "admin": {
-        // Filtrar ítems para admins que son de equipo con área específica
-        const adminTipo = ((user as any)?.tipo || "").toLowerCase();
-        const adminArea = (user?.area || "").toUpperCase();
-        const isAdminAtc =
-          adminTipo === "equipo" && adminArea === "ATENCION_AL_CLIENTE";
-        const baseAdmin = (
-          isAdminAtc
-            ? adminItems.filter(
-                (item) =>
-                  !["Opciones", "Roles", "Usuarios sistema", "Pagos"].includes(
-                    item.title,
-                  ),
-              )
-            : adminItems
-        ).map((item) =>
-          item.title === "Alumnos"
-            ? ({
-                title: "Alumnos",
-                icon: GraduationCap,
-                children: [
+    const computedItems: MenuItem[] = (() => {
+      switch (userRole) {
+        case "sales":
+        case "ventas":
+        case "venta":
+          return salesItems;
+        case "admin": {
+          // Filtrar ítems para admins que son de equipo con área específica
+          const adminTipo = ((user as any)?.tipo || "").toLowerCase();
+          const adminArea = (user?.area || "").toUpperCase();
+          const isAdminAtc =
+            adminTipo === "equipo" && adminArea === "ATENCION_AL_CLIENTE";
+          const baseAdmin = (
+            isAdminAtc
+              ? adminItems.filter(
+                  (item) =>
+                    ![
+                      "Opciones",
+                      "Roles",
+                      "Usuarios sistema",
+                      "Pagos",
+                    ].includes(item.title),
+                )
+              : adminItems
+          ).map((item) =>
+            item.title === "Alumnos"
+              ? ({
+                  title: "Alumnos",
+                  icon: GraduationCap,
+                  children: [
+                    {
+                      title: "Listado",
+                      url: "/admin/alumnos",
+                      icon: GraduationCap,
+                    },
+                    {
+                      title: "Vista Mariana",
+                      url: "/admin/alumnos/vista-enriquecida",
+                      icon: Sparkles,
+                    },
+                    {
+                      title: "Accesos",
+                      url: "/admin/accesos",
+                      icon: KeyRound,
+                    },
+                  ],
+                } as MenuItem)
+              : item,
+          );
+
+          // Para usuarios equipo+ATC que tienen role=admin cacheado,
+          // añadir "Accesos" como ítem de primer nivel (no solo en el submenú de Alumnos)
+          const baseAdminWithAccesos = isAdminAtc
+            ? [
+                ...baseAdmin.slice(
+                  0,
+                  baseAdmin.findIndex((i) => i.title === "Alumnos") + 1,
+                ),
+                {
+                  title: "Accesos",
+                  url: "/admin/accesos",
+                  icon: KeyRound,
+                } as MenuItem,
+                ...baseAdmin.slice(
+                  baseAdmin.findIndex((i) => i.title === "Alumnos") + 1,
+                ),
+              ]
+            : baseAdmin;
+
+          const adminWithConfidentialModule = canAccessBusinessMetrics(user)
+            ? [...baseAdminWithAccesos, businessMetricsMenuItem]
+            : baseAdminWithAccesos;
+
+          return (
+            alumnoCodeInPath
+              ? [
+                  ...adminWithConfidentialModule,
+                  { title: "Vista Alumno", isSeparator: true },
                   {
-                    title: "Listado",
-                    url: "/admin/alumnos",
+                    title: "Inicio",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
+                    icon: Home,
+                  },
+                  {
+                    title: "Mi perfil",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
                     icon: GraduationCap,
                   },
                   {
-                    title: "Vista Mariana",
-                    url: "/admin/alumnos/vista-enriquecida",
-                    icon: Sparkles,
-                  },
-                  {
-                    title: "Accesos",
-                    url: "/admin/accesos",
-                    icon: KeyRound,
-                  },
-                ],
-              } as MenuItem)
-            : item,
-        );
-
-        const adminWithConfidentialModule = canAccessBusinessMetrics(user)
-          ? [...baseAdmin, businessMetricsMenuItem]
-          : baseAdmin;
-
-        return (
-          alumnoCodeInPath
-            ? [
-                ...adminWithConfidentialModule,
-                { title: "Vista Alumno", isSeparator: true },
-                {
-                  title: "Inicio",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
-                  icon: Home,
-                },
-                {
-                  title: "Mi perfil",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
-                  icon: GraduationCap,
-                },
-                {
-                  title: "Chat soporte",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  icon: MessageSquare,
-                },
-                {
-                  title: "Feedback",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
-                  icon: ThumbsUp,
-                },
-                {
-                  title: "Métricas ADS",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
-                  icon: BarChart3,
-                },
-                {
-                  title: "Sesiones",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
-                  icon: CalendarClock,
-                },
-                {
-                  title: "Bonos",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
-                  icon: Users,
-                },
-                {
-                  title: "Seguimiento de pagos",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
-                  icon: CreditCard,
-                },
-              ]
-            : adminWithConfidentialModule
-        ) as MenuItem[];
-      }
-      case "coach":
-        return (
-          alumnoCodeInPath
-            ? [
-                ...coachItems,
-                { title: "Vista Alumno", isSeparator: true },
-                {
-                  title: "Inicio",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
-                  icon: Home,
-                },
-                {
-                  title: "Mi perfil",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
-                  icon: GraduationCap,
-                },
-                {
-                  title: "Chat soporte",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  icon: MessageSquare,
-                },
-                {
-                  title: "Feedback",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
-                  icon: ThumbsUp,
-                },
-                {
-                  title: "Métricas ADS",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
-                  icon: BarChart3,
-                },
-                {
-                  title: "Sesiones",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
-                  icon: CalendarClock,
-                },
-                {
-                  title: "Bonos",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
-                  icon: Users,
-                },
-                {
-                  title: "Seguimiento de pagos",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
-                  icon: CreditCard,
-                },
-              ]
-            : (() => {
-                const code = (user as any)?.codigo || "";
-                const chatUrl = code
-                  ? `/admin/teamsv2/${code}/chat`
-                  : "/admin/teamsv2";
-                // Chat debe ir justo arriba de Tickets
-                return [
-                  { title: "Dashboard", url: "/coach", icon: Home },
-                  {
-                    title: "Alumnos",
-                    url: "/coach/students",
-                    icon: GraduationCap,
-                  },
-                  { title: "Chat", url: chatUrl, icon: MessageSquare },
-                  {
-                    title: "Tickets",
-                    url: "/coach/tickets",
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
                     icon: MessageSquare,
                   },
-                  { title: "Bonos", url: "/admin/bonos", icon: Users },
-                  { title: "Pagos", url: "/admin/payments", icon: CreditCard },
-                  { title: "CRM", url: "/admin/crm", icon: Users },
                   {
-                    title: "Usuarios sistema",
-                    url: "/admin/users",
+                    title: "Feedback",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
+                    icon: ThumbsUp,
+                  },
+                  {
+                    title: "Métricas ADS",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
+                    icon: BarChart3,
+                  },
+                  {
+                    title: "Sesiones",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
+                    icon: CalendarClock,
+                  },
+                  {
+                    title: "Bonos",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
                     icon: Users,
                   },
                   {
-                    title: "Notas internas tickets",
-                    url: "/admin/tickets-board/notas-internas",
-                    icon: Lock,
+                    title: "Seguimiento de pagos",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
+                    icon: CreditCard,
                   },
-                  { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
-                ] as MenuItem[];
-              })()
-        ) as MenuItem[];
-      case "equipo": {
-        const code = (user as any)?.codigo || "";
-        const base = code
-          ? [
-              {
-                title: "Coachs",
-                url: "/admin/teamsv2",
-                icon: Users,
-              },
-              {
-                title: "Alumnos",
-                url: "/admin/alumnos",
-                icon: GraduationCap,
-              },
-              { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
-              {
-                title: "Mi equipo",
-                url: `/admin/teamsv2/${code}`,
-                icon: Users,
-              },
-              agentsMenuItem,
-              {
-                title: "Métricas",
-                icon: BarChart3,
-                children: [
+                ]
+              : adminWithConfidentialModule
+          ) as MenuItem[];
+        }
+        case "coach":
+          return (
+            alumnoCodeInPath
+              ? [
+                  ...coachItems,
+                  { title: "Vista Alumno", isSeparator: true },
                   {
-                    title: "Alumnos",
-                    url: "/admin/students",
+                    title: "Inicio",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
+                    icon: Home,
+                  },
+                  {
+                    title: "Mi perfil",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
                     icon: GraduationCap,
                   },
-                  { title: "Coachs", url: "/admin/teams", icon: Users },
                   {
-                    title: "Tickets",
-                    url: "/admin/tickets",
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
                     icon: MessageSquare,
                   },
                   {
-                    title: "Métrica Nueva",
-                    url: "/admin/metrics/nueva",
+                    title: "Feedback",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
+                    icon: ThumbsUp,
+                  },
+                  {
+                    title: "Métricas ADS",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
                     icon: BarChart3,
                   },
-                ],
-              },
-              {
-                title: "Chat",
-                url: `/admin/teamsv2/${code}/chat`,
-                icon: MessageSquare,
-              },
-              {
-                title: "Chat general",
-                url: "/chat/beta",
-                icon: MessageSquare,
-              },
-              {
-                title: "Tickets",
-                url: "/admin/tickets-board",
-                icon: MessageSquare,
-              },
-              {
-                title: "Notas internas tickets",
-                url: "/admin/tickets-board/notas-internas",
-                icon: Lock,
-              },
-              { title: "Bonos", url: "/admin/bonos", icon: Users },
-              {
-                title: "Solicitud de bonos",
-                url: "/admin/solicitud-bonos",
-                icon: ClipboardList,
-              },
-              { title: "Pagos", url: "/admin/payments", icon: CreditCard },
-              { title: "CRM", url: "/admin/crm", icon: Users },
-              { title: "Usuarios sistema", url: "/admin/users", icon: Users },
-              {
-                title: "Estado correos",
-                url: "/admin/brevo/events",
-                icon: Mail,
-              },
-              {
-                title: "Plantillas de mails",
-                url: "/admin/plantillas-mails",
-                icon: FileText,
-              },
-              {
-                title: "Mensajes seguimiento",
-                url: "/admin/mensajes-seguimiento",
-                icon: MessageSquare,
-              },
-              {
-                title: "Preguntas frecuentes",
-                url: "/admin/preguntas-frecuentes",
-                icon: CircleHelp,
-              },
-            ]
-          : [
-              {
-                title: "Coachs",
-                url: "/admin/teamsv2",
-                icon: Users,
-              },
-              {
-                title: "Alumnos",
-                url: "/admin/alumnos",
-                icon: GraduationCap,
-              },
-              { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
-              agentsMenuItem,
-              {
-                title: "Métricas",
-                icon: BarChart3,
-                children: [
                   {
-                    title: "Alumnos",
-                    url: "/admin/students",
-                    icon: GraduationCap,
-                  },
-                  { title: "Coachs", url: "/admin/teams", icon: Users },
-                  {
-                    title: "Tickets",
-                    url: "/admin/tickets",
-                    icon: MessageSquare,
+                    title: "Sesiones",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
+                    icon: CalendarClock,
                   },
                   {
-                    title: "Métrica Nueva",
-                    url: "/admin/metrics/nueva",
-                    icon: BarChart3,
+                    title: "Bonos",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
+                    icon: Users,
                   },
-                ],
-              },
-              {
-                title: "Chat general",
-                url: "/chat/beta",
-                icon: MessageSquare,
-              },
-              {
-                title: "Tickets",
-                url: "/admin/tickets-board",
-                icon: MessageSquare,
-              },
-              {
-                title: "Notas internas tickets",
-                url: "/admin/tickets-board/notas-internas",
-                icon: Lock,
-              },
-              { title: "Bonos", url: "/admin/bonos", icon: Users },
-              {
-                title: "Solicitud de bonos",
-                url: "/admin/solicitud-bonos",
-                icon: ClipboardList,
-              },
-              { title: "Pagos", url: "/admin/payments", icon: CreditCard },
-              { title: "CRM", url: "/admin/crm", icon: Users },
-              { title: "Usuarios sistema", url: "/admin/users", icon: Users },
-              {
-                title: "Estado correos",
-                url: "/admin/brevo/events",
-                icon: Mail,
-              },
-              {
-                title: "Plantillas de mails",
-                url: "/admin/plantillas-mails",
-                icon: FileText,
-              },
-              {
-                title: "Mensajes seguimiento",
-                url: "/admin/mensajes-seguimiento",
-                icon: MessageSquare,
-              },
-              {
-                title: "Preguntas frecuentes",
-                url: "/admin/preguntas-frecuentes",
-                icon: CircleHelp,
-              },
-            ];
+                  {
+                    title: "Seguimiento de pagos",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
+                    icon: CreditCard,
+                  },
+                ]
+              : (() => {
+                  const code = (user as any)?.codigo || "";
+                  const chatUrl = code
+                    ? `/admin/teamsv2/${code}/chat`
+                    : "/admin/teamsv2";
+                  // Chat debe ir justo arriba de Tickets
+                  return [
+                    { title: "Dashboard", url: "/coach", icon: Home },
+                    {
+                      title: "Alumnos",
+                      url: "/coach/students",
+                      icon: GraduationCap,
+                    },
+                    { title: "Chat", url: chatUrl, icon: MessageSquare },
+                    {
+                      title: "Tickets",
+                      url: "/coach/tickets",
+                      icon: MessageSquare,
+                    },
+                    { title: "Bonos", url: "/admin/bonos", icon: Users },
+                    {
+                      title: "Pagos",
+                      url: "/admin/payments",
+                      icon: CreditCard,
+                    },
+                    { title: "CRM", url: "/admin/crm", icon: Users },
+                    {
+                      title: "Usuarios sistema",
+                      url: "/admin/users",
+                      icon: Users,
+                    },
+                    {
+                      title: "Notas internas tickets",
+                      url: "/admin/tickets-board/notas-internas",
+                      icon: Lock,
+                    },
+                    { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
+                  ] as MenuItem[];
+                })()
+          ) as MenuItem[];
+        case "equipo": {
+          const code = (user as any)?.codigo || "";
+          const base = code
+            ? [
+                {
+                  title: "Coachs",
+                  url: "/admin/teamsv2",
+                  icon: Users,
+                },
+                {
+                  title: "Alumnos",
+                  url: "/admin/alumnos",
+                  icon: GraduationCap,
+                },
+                { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
+                {
+                  title: "Mi equipo",
+                  url: `/admin/teamsv2/${code}`,
+                  icon: Users,
+                },
+                agentsMenuItem,
+                {
+                  title: "Métricas",
+                  icon: BarChart3,
+                  children: [
+                    {
+                      title: "Alumnos",
+                      url: "/admin/students",
+                      icon: GraduationCap,
+                    },
+                    { title: "Coachs", url: "/admin/teams", icon: Users },
+                    {
+                      title: "Tickets",
+                      url: "/admin/tickets",
+                      icon: MessageSquare,
+                    },
+                    {
+                      title: "Métrica Nueva",
+                      url: "/admin/metrics/nueva",
+                      icon: BarChart3,
+                    },
+                  ],
+                },
+                {
+                  title: "Chat",
+                  url: `/admin/teamsv2/${code}/chat`,
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Chat general",
+                  url: "/chat/beta",
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Tickets",
+                  url: "/admin/tickets-board",
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Notas internas tickets",
+                  url: "/admin/tickets-board/notas-internas",
+                  icon: Lock,
+                },
+                { title: "Bonos", url: "/admin/bonos", icon: Users },
+                {
+                  title: "Solicitud de bonos",
+                  url: "/admin/solicitud-bonos",
+                  icon: ClipboardList,
+                },
+                { title: "Pagos", url: "/admin/payments", icon: CreditCard },
+                { title: "CRM", url: "/admin/crm", icon: Users },
+                { title: "Usuarios sistema", url: "/admin/users", icon: Users },
+                {
+                  title: "Estado correos",
+                  url: "/admin/brevo/events",
+                  icon: Mail,
+                },
+                {
+                  title: "Plantillas de mails",
+                  url: "/admin/plantillas-mails",
+                  icon: FileText,
+                },
+                {
+                  title: "Mensajes seguimiento",
+                  url: "/admin/mensajes-seguimiento",
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Preguntas frecuentes",
+                  url: "/admin/preguntas-frecuentes",
+                  icon: CircleHelp,
+                },
+              ]
+            : [
+                {
+                  title: "Coachs",
+                  url: "/admin/teamsv2",
+                  icon: Users,
+                },
+                {
+                  title: "Alumnos",
+                  url: "/admin/alumnos",
+                  icon: GraduationCap,
+                },
+                { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
+                agentsMenuItem,
+                {
+                  title: "Métricas",
+                  icon: BarChart3,
+                  children: [
+                    {
+                      title: "Alumnos",
+                      url: "/admin/students",
+                      icon: GraduationCap,
+                    },
+                    { title: "Coachs", url: "/admin/teams", icon: Users },
+                    {
+                      title: "Tickets",
+                      url: "/admin/tickets",
+                      icon: MessageSquare,
+                    },
+                    {
+                      title: "Métrica Nueva",
+                      url: "/admin/metrics/nueva",
+                      icon: BarChart3,
+                    },
+                  ],
+                },
+                {
+                  title: "Chat general",
+                  url: "/chat/beta",
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Tickets",
+                  url: "/admin/tickets-board",
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Notas internas tickets",
+                  url: "/admin/tickets-board/notas-internas",
+                  icon: Lock,
+                },
+                { title: "Bonos", url: "/admin/bonos", icon: Users },
+                {
+                  title: "Solicitud de bonos",
+                  url: "/admin/solicitud-bonos",
+                  icon: ClipboardList,
+                },
+                { title: "Pagos", url: "/admin/payments", icon: CreditCard },
+                { title: "CRM", url: "/admin/crm", icon: Users },
+                { title: "Usuarios sistema", url: "/admin/users", icon: Users },
+                {
+                  title: "Estado correos",
+                  url: "/admin/brevo/events",
+                  icon: Mail,
+                },
+                {
+                  title: "Plantillas de mails",
+                  url: "/admin/plantillas-mails",
+                  icon: FileText,
+                },
+                {
+                  title: "Mensajes seguimiento",
+                  url: "/admin/mensajes-seguimiento",
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Preguntas frecuentes",
+                  url: "/admin/preguntas-frecuentes",
+                  icon: CircleHelp,
+                },
+              ];
 
-        // Filtrar ítems según el área del usuario equipo
-        const userArea = (user?.area || "").toUpperCase();
-        const filteredBase =
-          userArea === "ADS" || userArea === "COPY" || userArea === "TECNICO"
-            ? base.filter(
-                (item) =>
-                  ![
-                    "CRM",
-                    "Usuarios sistema",
-                    "Estado correos",
-                    "Plantillas de mails",
-                    "Pagos",
-                  ].includes(item.title),
-              )
-            : userArea === "VSL"
+          // Filtrar ítems según el área del usuario equipo
+          const userArea = (user?.area || "").toUpperCase();
+          const filteredBase =
+            userArea === "ADS" || userArea === "COPY" || userArea === "TECNICO"
               ? base.filter(
                   (item) =>
                     ![
-                      "Bonos",
-                      "Solicitud de bonos",
-                      "Pagos",
                       "CRM",
                       "Usuarios sistema",
                       "Estado correos",
                       "Plantillas de mails",
-                      "Mensajes seguimiento",
+                      "Pagos",
                     ].includes(item.title),
                 )
-              : base;
+              : userArea === "VSL"
+                ? base.filter(
+                    (item) =>
+                      ![
+                        "Bonos",
+                        "Solicitud de bonos",
+                        "Pagos",
+                        "CRM",
+                        "Usuarios sistema",
+                        "Estado correos",
+                        "Plantillas de mails",
+                        "Mensajes seguimiento",
+                      ].includes(item.title),
+                  )
+                : base;
 
-        // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
-        return (
-          alumnoCodeInPath
-            ? [
-                ...filteredBase,
-                { title: "Vista Alumno", isSeparator: true },
-                {
-                  title: "Inicio",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
-                  icon: Home,
-                },
-                {
-                  title: "Mi perfil",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
-                  icon: GraduationCap,
-                },
-                {
-                  title: "Chat soporte",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  icon: MessageSquare,
-                },
-                {
-                  title: "Feedback",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
-                  icon: ThumbsUp,
-                },
-                {
-                  title: "Métricas ADS",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
-                  icon: BarChart3,
-                },
-                {
-                  title: "Sesiones",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
-                  icon: CalendarClock,
-                },
-                {
-                  title: "Bonos",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
-                  icon: Users,
-                },
-                {
-                  title: "Seguimiento de pagos",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
-                  icon: CreditCard,
-                },
-              ]
-            : filteredBase
-        ) as MenuItem[];
+          // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
+          return (
+            alumnoCodeInPath
+              ? [
+                  ...filteredBase,
+                  { title: "Vista Alumno", isSeparator: true },
+                  {
+                    title: "Inicio",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
+                    icon: Home,
+                  },
+                  {
+                    title: "Mi perfil",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
+                    icon: GraduationCap,
+                  },
+                  {
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                    icon: MessageSquare,
+                  },
+                  {
+                    title: "Feedback",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
+                    icon: ThumbsUp,
+                  },
+                  {
+                    title: "Métricas ADS",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
+                    icon: BarChart3,
+                  },
+                  {
+                    title: "Sesiones",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
+                    icon: CalendarClock,
+                  },
+                  {
+                    title: "Bonos",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
+                    icon: Users,
+                  },
+                  {
+                    title: "Seguimiento de pagos",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
+                    icon: CreditCard,
+                  },
+                ]
+              : filteredBase
+          ) as MenuItem[];
+        }
+        case "student": {
+          const code = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
+          return [
+            {
+              title: "Inicio",
+              url: `/admin/alumnos/${code}/inicio`,
+              icon: Home,
+            },
+            {
+              title: "Mi perfil",
+              url: `/admin/alumnos/${code}/perfil`,
+              icon: GraduationCap,
+            },
+            {
+              title: "Chat soporte",
+              url: `/admin/alumnos/${code}/chat`,
+              icon: MessageSquare,
+            },
+            {
+              title: "Feedback",
+              url: `/admin/alumnos/${code}/feedback`,
+              icon: ThumbsUp,
+            },
+            {
+              title: "Métricas ADS",
+              url: `/admin/alumnos/${code}/ads`,
+              icon: BarChart3,
+            },
+            {
+              title: "Bonos",
+              url: `/admin/alumnos/${code}/bonos`,
+              icon: Users,
+            },
+            {
+              title: "Agentes IA",
+              url: "/alumno/agentes",
+              icon: Sparkles,
+            },
+          ] as MenuItem[];
+        }
+        default:
+          return [] as MenuItem[];
       }
-      case "student": {
-        const code = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
-        return [
-          { title: "Inicio", url: `/admin/alumnos/${code}/inicio`, icon: Home },
-          {
-            title: "Mi perfil",
-            url: `/admin/alumnos/${code}/perfil`,
-            icon: GraduationCap,
-          },
-          {
-            title: "Chat soporte",
-            url: `/admin/alumnos/${code}/chat`,
-            icon: MessageSquare,
-          },
-          {
-            title: "Feedback",
-            url: `/admin/alumnos/${code}/feedback`,
-            icon: ThumbsUp,
-          },
-          {
-            title: "Métricas ADS",
-            url: `/admin/alumnos/${code}/ads`,
-            icon: BarChart3,
-          },
-          {
-            title: "Bonos",
-            url: `/admin/alumnos/${code}/bonos`,
-            icon: Users,
-          },
-          {
-            title: "Agentes IA",
-            url: "/alumno/agentes",
-            icon: Sparkles,
-          },
-        ] as MenuItem[];
+    })();
+
+    // Garantía defensiva: cualquier rol que NO sea student debe ver "Accesos"
+    if (userRole && userRole !== "student") {
+      const hasAccesos = computedItems.some(
+        (it) =>
+          it.url === "/admin/accesos" ||
+          (it.submenu && it.submenu.some((s) => s.url === "/admin/accesos")),
+      );
+      if (!hasAccesos) {
+        computedItems.push({
+          title: "Accesos",
+          url: "/admin/accesos",
+          icon: KeyRound,
+        });
       }
-      default:
-        return [] as MenuItem[];
     }
+
+    return computedItems;
   }, [user, pathname]);
 
   const userRoleForLabel = (user?.role || "").toLowerCase();
