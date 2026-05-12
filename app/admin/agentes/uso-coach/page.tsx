@@ -64,9 +64,24 @@ function coerceList(res: any): UsageRecord[] {
       if (Array.isArray(data.items)) return data.items;
       if (Array.isArray(data.data)) return data.data;
       if (Array.isArray(data.rows)) return data.rows;
+      if (Array.isArray(data.result)) return data.result;
+      if (Array.isArray(data.records)) return data.records;
     }
   }
   return [];
+}
+
+/** Extrae el total de registros disponibles en la respuesta paginada de la API */
+function extractTotal(res: any): number | null {
+  if (!res || typeof res !== "object") return null;
+  const candidates = [res, res.data];
+  for (const obj of candidates) {
+    if (!obj || typeof obj !== "object") continue;
+    for (const key of ["total", "totalCount", "total_count", "count"]) {
+      if (typeof obj[key] === "number") return obj[key] as number;
+    }
+  }
+  return null;
 }
 
 function formatDate(s?: string | null) {
@@ -161,13 +176,36 @@ function AgentesUsoCoachContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch<any>(
-        "/metadata?entity=agente_uso_coach&pageSize=5000",
-      );
-      const items = coerceList(res).filter(
-        (r) => r?.entity === "agente_uso_coach",
-      );
-      setRecords(items);
+      const allItems: UsageRecord[] = [];
+      const seenIds = new Set<string | number>();
+      const PAGE_SIZE = 500;
+      let page = 1;
+
+      // Paginamos hasta obtener TODOS los registros.
+      // - Si la API respeta "pageSize" y devuelve un "total", usamos eso para saber cuándo parar.
+      // - Si no lo respeta, el deduplicado por ID detiene el bucle cuando no aparecen registros nuevos.
+      // - Límite de 40 páginas (20 000 registros) como tope de seguridad.
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const res = await apiFetch<any>(
+          `/metadata?entity=agente_uso_coach&page=${page}&pageSize=${PAGE_SIZE}`,
+        );
+        const pageItems = coerceList(res).filter(
+          (r) => r?.entity === "agente_uso_coach" && !seenIds.has(r.id),
+        );
+
+        if (pageItems.length === 0) break; // sin registros nuevos → terminamos
+
+        for (const item of pageItems) seenIds.add(item.id);
+        allItems.push(...pageItems);
+
+        const total = extractTotal(res);
+        if (total !== null && allItems.length >= total) break;
+        if (pageItems.length < PAGE_SIZE) break; // última página (incompleta)
+
+        page++;
+      }
+
+      setRecords(allItems);
     } catch (e: any) {
       setError(e?.message ?? "Error al cargar el uso");
     } finally {

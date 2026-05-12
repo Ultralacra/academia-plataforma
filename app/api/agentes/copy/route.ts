@@ -1423,30 +1423,65 @@ async function buildStudentContext(
   return { block: lines.join("\n"), ticketIds, loomCount, ticketCount: ticketIds.length, previews };
 }
 
+/** Decodifica el payload de un JWT sin verificar firma (solo para lectura de claims). */
+function decodeJwtPayload(authorization: string): Record<string, unknown> | null {
+  try {
+    const token = authorization.replace(/^Bearer\s+/i, "").trim();
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    // base64url → base64 estándar
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = Buffer.from(b64, "base64").toString("utf-8");
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchCoachInfo(
   authorization: string,
 ): Promise<{ id: unknown; codigo: string; nombre: string } | null> {
+  // Intentar desde la API primero
   try {
     const res = await fetch(`${API_HOST_INTERNAL}/auth/me`, {
       headers: { Authorization: authorization },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    const json = (await res.json()) as unknown;
-    const user =
-      json && typeof json === "object" && "data" in (json as object)
-        ? (json as Record<string, unknown>).data
-        : json;
-    if (!user || typeof user !== "object") return null;
-    const u = user as Record<string, unknown>;
-    return {
-      id: u.id ?? u.user_id ?? null,
-      codigo: String(u.codigo ?? u.username ?? u.email ?? "unknown"),
-      nombre: String(u.nombre ?? u.name ?? u.email ?? "Coach"),
-    };
+    if (res.ok) {
+      const json = (await res.json()) as unknown;
+      const user =
+        json && typeof json === "object" && "data" in (json as object)
+          ? (json as Record<string, unknown>).data
+          : json;
+      if (user && typeof user === "object") {
+        const u = user as Record<string, unknown>;
+        return {
+          id: u.id ?? u.user_id ?? null,
+          codigo: String(u.codigo ?? u.username ?? u.email ?? "unknown"),
+          nombre: String(u.nombre ?? u.name ?? u.email ?? "Coach"),
+        };
+      }
+    }
   } catch {
-    return null;
+    // Caído el endpoint o timeout → fallback al JWT
   }
+
+  // Fallback: extraer claims directamente del JWT para no perder la autoría
+  const claims = decodeJwtPayload(authorization);
+  if (claims) {
+    const codigo = String(
+      claims.codigo ?? claims.username ?? claims.email ?? claims.sub ?? "unknown",
+    );
+    if (codigo && codigo !== "unknown") {
+      return {
+        id: claims.id ?? claims.user_id ?? claims.sub ?? null,
+        codigo,
+        nombre: String(claims.nombre ?? claims.name ?? claims.email ?? "Coach"),
+      };
+    }
+  }
+
+  return null;
 }
 
 async function logCoachAgentUsage(
@@ -1466,7 +1501,7 @@ async function logCoachAgentUsage(
   },
 ): Promise<void> {
   try {
-    await fetch(`${API_HOST_INTERNAL}/metadata`, {
+    const res = await fetch(`${API_HOST_INTERNAL}/metadata`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1480,8 +1515,15 @@ async function logCoachAgentUsage(
         payload,
       }),
     });
-  } catch {
-    // Non-critical
+    if (!res.ok) {
+      console.warn(
+        "[copy-agent] No se pudo guardar uso en metadata:",
+        res.status,
+        await res.text().catch(() => ""),
+      );
+    }
+  } catch (err) {
+    console.warn("[copy-agent] Error al guardar uso en metadata:", err);
   }
 }
 
