@@ -76,6 +76,32 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  LineChart as RechartsLineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { CalendarIcon, X } from "lucide-react";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import { es } from "date-fns/locale";
+import type { DateRange } from "react-day-picker";
 
 const EMPTY_MONTH_FORM: BusinessMonthRecord = {
   id: "",
@@ -147,13 +173,15 @@ function BusinessMetricsContent() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [fromMonth, setFromMonth] = useState("");
   const [toMonth, setToMonth] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [monthForm, setMonthForm] =
     useState<BusinessMonthRecord>(EMPTY_MONTH_FORM);
   const [expenseForm, setExpenseForm] =
     useState<BusinessExpenseEntry>(EMPTY_EXPENSE_FORM);
   const [editingMonthId, setEditingMonthId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("graficos");
   const [secondaryAuthed, setSecondaryAuthed] = useState(false);
   const [pwInput, setPwInput] = useState("");
   const [pwError, setPwError] = useState(false);
@@ -372,11 +400,32 @@ function BusinessMetricsContent() {
     return map;
   }, [state.expenses]);
 
+  // ── Datos para gráficos ──────────────────────────────────────────────────
+  const chartData = useMemo(() => {
+    return derivedRows.map(({ record, kpis }) => ({
+      mes: formatMonthLabel(record.month),
+      revenue: record.highTicketRevenue,
+      cac: kpis.cac,
+      ltgp: kpis.ltgpExcel,
+      roic: Math.round(kpis.roic * 10000) / 100,
+      activeStudents: record.activeStudents,
+      newClients: record.newClients,
+      entryVsExit: Math.round(kpis.entryVsExit * 100) / 100,
+      acquisitionCost: kpis.acquisitionCost,
+      operatingCost: record.operatingCostMonthly,
+      marketingCost: record.marketingSalesCost,
+      benefitPerClient: kpis.benefitPerClient,
+      grossValueGenerated: kpis.grossValueGenerated,
+      paybackMonths: Math.round(kpis.paybackMonths * 100) / 100,
+      cacRatio: Math.round(kpis.cacRatio * 100) / 100,
+    }));
+  }, [derivedRows]);
+
   // ── Fase 3: datos de cohorte ──────────────────────────────────────────────
   // Agrupa alumnos (desde los registros mensuales) por mes de ingreso y
   // calcula retención relativa usando newClients de cada mes.
   const cohortData = useMemo(() => {
-    const sorted = sortBusinessRecords(state.records);
+    const sorted = sortBusinessRecords(visibleRecords);
     if (sorted.length === 0) return [];
 
     // Mapa de activos por mes para calcular retención
@@ -423,7 +472,7 @@ function BusinessMetricsContent() {
         expensesVentas: expenseAutoTotals.get(record.month)?.ventas ?? 0,
       };
     });
-  }, [state.records, expenseAutoTotals]);
+  }, [visibleRecords, expenseAutoTotals]);
 
   const importSnapshot = async (month: string) => {
     if (!month) return;
@@ -794,70 +843,181 @@ function BusinessMetricsContent() {
                 Sincronizado
               </Badge>
             )}
-            <div className="flex items-center gap-1">
-              <Label className="text-xs text-muted-foreground shrink-0">
-                Desde
-              </Label>
-              <Input
-                type="month"
-                value={fromMonth}
-                onChange={(e) => setFromMonth(e.target.value)}
-                className="w-36 h-8 text-sm"
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              <Label className="text-xs text-muted-foreground shrink-0">
-                Hasta
-              </Label>
-              <Input
-                type="month"
-                value={toMonth}
-                onChange={(e) => setToMonth(e.target.value)}
-                className="w-36 h-8 text-sm"
-              />
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const now = new Date();
-                const m3 = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-                setFromMonth(
-                  `${m3.getFullYear()}-${String(m3.getMonth() + 1).padStart(2, "0")}`,
-                );
-                setToMonth(
-                  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
-                );
-              }}
-            >
-              Últ. 3m
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const now = new Date();
-                const m6 = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-                setFromMonth(
-                  `${m6.getFullYear()}-${String(m6.getMonth() + 1).padStart(2, "0")}`,
-                );
-                setToMonth(
-                  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
-                );
-              }}
-            >
-              Últ. 6m
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFromMonth("");
-                setToMonth("");
-              }}
-            >
-              Todo
-            </Button>
+            {/* ── Date range picker estilo vuelo ───────────────── */}
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={[
+                    "inline-flex items-center gap-0 rounded-xl border bg-background shadow-sm",
+                    "text-sm ring-offset-background transition-colors",
+                    "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    calendarOpen ? "ring-2 ring-ring" : "",
+                  ].join(" ")}
+                >
+                  {/* Desde */}
+                  <div className="flex flex-col items-start px-4 py-2 border-r">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Desde
+                    </span>
+                    <span
+                      className={`font-medium ${
+                        dateRange?.from
+                          ? "text-foreground"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {dateRange?.from
+                        ? format(dateRange.from, "MMM yyyy", { locale: es })
+                        : "Seleccionar"}
+                    </span>
+                  </div>
+                  {/* Hasta */}
+                  <div className="flex flex-col items-start px-4 py-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Hasta
+                    </span>
+                    <span
+                      className={`font-medium ${
+                        dateRange?.to
+                          ? "text-foreground"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {dateRange?.to
+                        ? format(dateRange.to, "MMM yyyy", { locale: es })
+                        : "Seleccionar"}
+                    </span>
+                  </div>
+                  <div className="flex items-center px-2 border-l">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-auto p-0 shadow-2xl rounded-2xl overflow-hidden"
+                align="end"
+                sideOffset={8}
+              >
+                {/* Cabecera del popover */}
+                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b bg-muted/40">
+                  <p className="text-sm font-semibold">
+                    Selecciona el rango de meses
+                  </p>
+                  {dateRange?.from && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDateRange(undefined);
+                        setFromMonth("");
+                        setToMonth("");
+                      }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Atajos rápidos */}
+                <div className="flex gap-2 px-4 py-3 border-b bg-background">
+                  {[
+                    { label: "Últ. 3 meses", months: 2 },
+                    { label: "Últ. 6 meses", months: 5 },
+                    { label: "Últ. 12 meses", months: 11 },
+                  ].map(({ label, months }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        const from = new Date(
+                          now.getFullYear(),
+                          now.getMonth() - months,
+                          1,
+                        );
+                        const to = endOfMonth(now);
+                        setDateRange({ from, to });
+                        setFromMonth(
+                          `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}`,
+                        );
+                        setToMonth(
+                          `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, "0")}`,
+                        );
+                        setCalendarOpen(false);
+                      }}
+                      className="rounded-full border px-3 py-1 text-xs font-medium hover:bg-muted transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateRange(undefined);
+                      setFromMonth("");
+                      setToMonth("");
+                      setCalendarOpen(false);
+                    }}
+                    className="rounded-full border px-3 py-1 text-xs font-medium hover:bg-muted transition-colors ml-auto"
+                  >
+                    Todo
+                  </button>
+                </div>
+
+                {/* Calendario de 2 meses */}
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={(range) => {
+                    setDateRange(range);
+                    if (range?.from) {
+                      const from = startOfMonth(range.from);
+                      setFromMonth(
+                        `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}`,
+                      );
+                    } else {
+                      setFromMonth("");
+                    }
+                    if (range?.to) {
+                      const to = range.to;
+                      setToMonth(
+                        `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, "0")}`,
+                      );
+                    } else {
+                      setToMonth("");
+                    }
+                    // Cerrar solo cuando ambas fechas estén elegidas
+                    if (range?.from && range?.to) {
+                      setCalendarOpen(false);
+                    }
+                  }}
+                  numberOfMonths={2}
+                  locale={es}
+                  className="p-4"
+                />
+
+                {/* Pie: resumen de selección */}
+                <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/30 text-xs text-muted-foreground">
+                  <span>
+                    {dateRange?.from && dateRange?.to
+                      ? `${format(dateRange.from, "d MMM yyyy", { locale: es })} → ${format(dateRange.to, "d MMM yyyy", { locale: es })}`
+                      : dateRange?.from
+                        ? `Desde ${format(dateRange.from, "d MMM yyyy", { locale: es })} — elige fecha fin`
+                        : "Haz clic en el mes de inicio"}
+                  </span>
+                  {dateRange?.from && dateRange?.to && (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setCalendarOpen(false)}
+                    >
+                      Aplicar
+                    </Button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
@@ -1124,6 +1284,13 @@ function BusinessMetricsContent() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex-wrap h-auto bg-muted/70 gap-1 p-1">
             <TabsTrigger
+              value="graficos"
+              className="data-[state=active]:bg-linear-to-r data-[state=active]:from-violet-600 data-[state=active]:to-blue-600 data-[state=active]:text-white"
+            >
+              <BarChart2 className="mr-1 h-3 w-3" />
+              Gráficos
+            </TabsTrigger>
+            <TabsTrigger
               value="overview"
               className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
             >
@@ -1192,6 +1359,630 @@ function BusinessMetricsContent() {
               Auto-admin
             </TabsTrigger>
           </TabsList>
+
+          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* TAB GRÁFICOS                                                    */}
+          {/* ═══════════════════════════════════════════════════════════════ */}
+          <TabsContent value="graficos" className="space-y-6">
+            {chartData.length === 0 ? (
+              <Card>
+                <CardContent className="pt-10 pb-10 text-center text-muted-foreground text-sm">
+                  Sin datos. Agrega registros mensuales en la pestaña{" "}
+                  <strong>CRUD mensual</strong> para ver los gráficos.
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* ── Fila 1: Revenue + ROIC ─────────────────────────────── */}
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <Card className="border-t-4 border-t-emerald-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Revenue HT por mes
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Evolución de ingresos high-ticket filtrada por el rango
+                        seleccionado.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <AreaChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id="gradRevenue"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor="#10b981"
+                                stopOpacity={0.35}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor="#10b981"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                            width={52}
+                          />
+                          <Tooltip
+                            formatter={(v: number) => [
+                              formatCurrency(v),
+                              "Revenue HT",
+                            ]}
+                            contentStyle={{
+                              borderRadius: 8,
+                              fontSize: 12,
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="revenue"
+                            stroke="#10b981"
+                            strokeWidth={2.5}
+                            fill="url(#gradRevenue)"
+                            dot={{ r: 4, fill: "#10b981" }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-t-4 border-t-purple-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-2">
+                        <Zap className="h-4 w-4" />
+                        ROIC (%) por mes
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Zona verde ≥ 30 %. Zona amarilla ≥ 0 %. Rojo: negativo.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <ComposedChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `${v}%`}
+                            width={44}
+                          />
+                          <Tooltip
+                            formatter={(v: number) => [
+                              `${v.toFixed(2)}%`,
+                              "ROIC",
+                            ]}
+                            contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                          />
+                          <ReferenceLine
+                            y={30}
+                            stroke="#10b981"
+                            strokeDasharray="4 2"
+                            label={{
+                              value: "30%",
+                              position: "insideTopRight",
+                              fontSize: 10,
+                              fill: "#10b981",
+                            }}
+                          />
+                          <ReferenceLine
+                            y={0}
+                            stroke="#ef4444"
+                            strokeDasharray="4 2"
+                          />
+                          <Bar
+                            dataKey="roic"
+                            radius={[4, 4, 0, 0]}
+                            fill="#a855f7"
+                            opacity={0.85}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="roic"
+                            stroke="#7c3aed"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* ── Fila 2: CAC vs LTGP ────────────────────────────────── */}
+                <Card className="border-t-4 border-t-orange-400">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold text-orange-700 dark:text-orange-300 flex items-center gap-2">
+                      <Calculator className="h-4 w-4" />
+                      CAC vs LTGP por mes
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      El LTGP debe superar al CAC (ratio sano ≥ 3x). Beneficio
+                      neto = LTGP − CAC.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <ComposedChart
+                        data={chartData}
+                        margin={{ top: 8, right: 16, bottom: 0, left: 8 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          className="stroke-muted"
+                        />
+                        <XAxis
+                          dataKey="mes"
+                          tick={{ fontSize: 11 }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(v) => `$${v.toFixed(0)}`}
+                          width={56}
+                        />
+                        <Tooltip
+                          formatter={(v: number, name: string) => [
+                            formatCurrency(v),
+                            name === "cac"
+                              ? "CAC"
+                              : name === "ltgp"
+                                ? "LTGP"
+                                : "Beneficio",
+                          ]}
+                          contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                        />
+                        <Legend
+                          formatter={(v) =>
+                            v === "cac"
+                              ? "CAC"
+                              : v === "ltgp"
+                                ? "LTGP Excel"
+                                : "Beneficio/cliente"
+                          }
+                        />
+                        <Bar
+                          dataKey="cac"
+                          fill="#f97316"
+                          radius={[4, 4, 0, 0]}
+                          opacity={0.85}
+                        />
+                        <Bar
+                          dataKey="ltgp"
+                          fill="#10b981"
+                          radius={[4, 4, 0, 0]}
+                          opacity={0.85}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="benefitPerClient"
+                          stroke="#6366f1"
+                          strokeWidth={2.5}
+                          dot={{ r: 4, fill: "#6366f1" }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* ── Fila 3: Alumnos activos + Nuevos clientes ───────────── */}
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <Card className="border-t-4 border-t-blue-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        Alumnos activos
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Evolución de la base de alumnos activos mes a mes.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <AreaChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id="gradStudents"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor="#3b82f6"
+                                stopOpacity={0.35}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor="#3b82f6"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis tick={{ fontSize: 11 }} width={36} />
+                          <Tooltip
+                            formatter={(v: number) => [v, "Alumnos activos"]}
+                            contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="activeStudents"
+                            stroke="#3b82f6"
+                            strokeWidth={2.5}
+                            fill="url(#gradStudents)"
+                            dot={{ r: 4, fill: "#3b82f6" }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-t-4 border-t-sky-400">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-sky-700 dark:text-sky-300 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Nuevos clientes por mes
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Ventas cerradas y clientes high-ticket por mes.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis tick={{ fontSize: 11 }} width={30} />
+                          <Tooltip
+                            formatter={(v: number, name: string) => [
+                              v,
+                              name === "newClients"
+                                ? "Nuevos clientes"
+                                : "Clientes HT",
+                            ]}
+                            contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                          />
+                          <Legend
+                            formatter={(v) =>
+                              v === "newClients"
+                                ? "Nuevos clientes"
+                                : "Clientes HT"
+                            }
+                          />
+                          <Bar
+                            dataKey="newClients"
+                            fill="#0ea5e9"
+                            radius={[4, 4, 0, 0]}
+                            opacity={0.85}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* ── Fila 4: Entrada vs Salida + Desglose costos ────────── */}
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <Card className="border-t-4 border-t-teal-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-teal-700 dark:text-teal-300 flex items-center gap-2">
+                        <BarChart2 className="h-4 w-4" />
+                        Entrada vs Salida (crecimiento)
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Línea verde = 1.0 (punto de equilibrio). Por encima →
+                        crecimiento.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <ComposedChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `${v}x`}
+                            width={36}
+                          />
+                          <Tooltip
+                            formatter={(v: number) => [
+                              `${v.toFixed(2)}x`,
+                              "Entrada/Salida",
+                            ]}
+                            contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                          />
+                          <ReferenceLine
+                            y={1}
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            strokeDasharray="4 2"
+                            label={{
+                              value: "Equilibrio",
+                              position: "insideTopRight",
+                              fontSize: 10,
+                              fill: "#10b981",
+                            }}
+                          />
+                          <Bar
+                            dataKey="entryVsExit"
+                            radius={[4, 4, 0, 0]}
+                            fill="#14b8a6"
+                            opacity={0.8}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="entryVsExit"
+                            stroke="#0f766e"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-t-4 border-t-rose-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                        <Receipt className="h-4 w-4" />
+                        Desglose de costos por mes
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Costo de adquisición + costo operativo mensual.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                            width={48}
+                          />
+                          <Tooltip
+                            formatter={(v: number, name: string) => [
+                              formatCurrency(v),
+                              name === "acquisitionCost"
+                                ? "Adquisición"
+                                : "Operativo",
+                            ]}
+                            contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                          />
+                          <Legend
+                            formatter={(v) =>
+                              v === "acquisitionCost"
+                                ? "Adquisición"
+                                : "Operativo"
+                            }
+                          />
+                          <Bar
+                            dataKey="acquisitionCost"
+                            stackId="costos"
+                            fill="#f43f5e"
+                            radius={[0, 0, 0, 0]}
+                            opacity={0.85}
+                          />
+                          <Bar
+                            dataKey="operatingCost"
+                            stackId="costos"
+                            fill="#fb923c"
+                            radius={[4, 4, 0, 0]}
+                            opacity={0.85}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* ── Fila 5: Payback + Valor bruto ──────────────────────── */}
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <Card className="border-t-4 border-t-indigo-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+                        <LineChart className="h-4 w-4" />
+                        Payback en meses
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Cuántos meses tarda en recuperarse el CAC. Menor =
+                        mejor.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <RechartsLineChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `${v}m`}
+                            width={36}
+                          />
+                          <Tooltip
+                            formatter={(v: number) => [
+                              `${v.toFixed(2)} meses`,
+                              "Payback",
+                            ]}
+                            contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="paybackMonths"
+                            stroke="#6366f1"
+                            strokeWidth={2.5}
+                            dot={{ r: 4, fill: "#6366f1" }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </RechartsLineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-t-4 border-t-emerald-600">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Valor bruto generado
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Clientes HT × LTGP. Valor total generado por las ventas
+                        del mes.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <AreaChart
+                          data={chartData}
+                          margin={{ top: 8, right: 12, bottom: 0, left: 8 }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id="gradGross"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor="#059669"
+                                stopOpacity={0.4}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor="#059669"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            className="stroke-muted"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            tick={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                            width={52}
+                          />
+                          <Tooltip
+                            formatter={(v: number) => [
+                              formatCurrency(v),
+                              "Valor bruto",
+                            ]}
+                            contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="grossValueGenerated"
+                            stroke="#059669"
+                            strokeWidth={2.5}
+                            fill="url(#gradGross)"
+                            dot={{ r: 4, fill: "#059669" }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            )}
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-4">
             <Card>
