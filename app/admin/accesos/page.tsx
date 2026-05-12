@@ -50,14 +50,9 @@ function canSeeAccesos(
   user: { role?: string | null; area?: string | null } | null | undefined,
 ) {
   if (!user) return false;
-  if (user.role === "admin") return true;
-  if (user.role === "atc") return true;
-  const area = String(user.area ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "_");
-  if (user.role === "equipo" && area === "ATENCION_AL_CLIENTE") return true;
-  return false;
+  const role = String(user.role ?? "").toLowerCase();
+  // Todos los roles internos pueden ver accesos; solo los alumnos no.
+  return role !== "student" && role !== "";
 }
 
 const MONTH_NAMES = [

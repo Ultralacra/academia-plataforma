@@ -414,6 +414,7 @@ export function AppSidebar() {
                     url: "/admin/tickets-board/notas-internas",
                     icon: Lock,
                   },
+                  { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
                 ] as MenuItem[];
               })()
         ) as MenuItem[];
@@ -431,6 +432,7 @@ export function AppSidebar() {
                 url: "/admin/alumnos",
                 icon: GraduationCap,
               },
+              { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
               {
                 title: "Mi equipo",
                 url: `/admin/teamsv2/${code}`,
@@ -520,6 +522,7 @@ export function AppSidebar() {
                 url: "/admin/alumnos",
                 icon: GraduationCap,
               },
+              { title: "Accesos", url: "/admin/accesos", icon: KeyRound },
               agentsMenuItem,
               {
                 title: "Métricas",

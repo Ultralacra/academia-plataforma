@@ -131,6 +131,8 @@ function ProtectedRouteContent({
     const isAdminRoot = segments[0] === "admin" && segments.length === 1;
     // Permitir sección de alumnos (lista y detalle)
     const isAlumnosPath = segments[0] === "admin" && segments[1] === "alumnos";
+    // Permitir vista de accesos
+    const isAccesosPath = segments[0] === "admin" && segments[1] === "accesos";
     // Permitir métricas de alumnos
     const isStudentsMetrics =
       segments[0] === "admin" &&
@@ -179,6 +181,7 @@ function ProtectedRouteContent({
       !isTeamsV2Root &&
       !isAdminRoot &&
       !isAlumnosPath &&
+      !isAccesosPath &&
       !isTicketsBoard &&
       !isTickets &&
       !isPayments &&

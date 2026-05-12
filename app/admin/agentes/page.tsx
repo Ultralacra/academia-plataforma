@@ -15,6 +15,7 @@ import {
   Megaphone,
   MessageCircle,
   Monitor,
+  Receipt,
   Sparkles,
   TrendingUp,
   Zap,
@@ -247,6 +248,13 @@ function AgentsHome() {
         >
           <BarChart3 className="h-4 w-4" />
           Ver uso del agente Copy (coachs)
+        </Link>
+        <Link
+          href="/admin/agentes/uso-tickets"
+          className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-100"
+        >
+          <Receipt className="h-4 w-4" />
+          Uso agente tickets
         </Link>
       </div>
 
