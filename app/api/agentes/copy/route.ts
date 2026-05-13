@@ -1673,6 +1673,37 @@ async function fetchCoachInfo(
   return null;
 }
 
+// ─── Cálculo de costo en USD ──────────────────────────────────────────────────
+
+const PRICE_PER_MTok: Record<string, { input: number; output: number }> = {
+  default:              { input: 3,    output: 15   },
+  "claude-sonnet-4-5":  { input: 3,    output: 15   },
+  "claude-sonnet-4-0":  { input: 3,    output: 15   },
+  "claude-3-5-sonnet":  { input: 3,    output: 15   },
+  "claude-3-5-haiku":   { input: 0.8,  output: 4    },
+  "claude-3-haiku":     { input: 0.25, output: 1.25 },
+  "claude-3-opus":      { input: 15,   output: 75   },
+  "gpt-5":              { input: 10,   output: 40   },
+  "gpt-4.5":            { input: 75,   output: 150  },
+  "gpt-4o":             { input: 2.5,  output: 10   },
+  "gpt-4o-mini":        { input: 0.15, output: 0.6  },
+  "gpt-4-turbo":        { input: 10,   output: 30   },
+  "gpt-4":              { input: 30,   output: 60   },
+  "gpt-3.5-turbo":      { input: 0.5,  output: 1.5  },
+  o3:                   { input: 10,   output: 40   },
+  "o4-mini":            { input: 1.1,  output: 4.4  },
+};
+
+function computeCostUSD(model: string, inputTokens: number, outputTokens: number): number {
+  const key = model.toLowerCase();
+  const prices =
+    Object.entries(PRICE_PER_MTok).find(([k]) => k !== "default" && key.includes(k))?.[1] ??
+    PRICE_PER_MTok.default;
+  return (inputTokens / 1_000_000) * prices.input + (outputTokens / 1_000_000) * prices.output;
+}
+
+// ─── Logging de uso ───────────────────────────────────────────────────────────
+
 async function logCoachAgentUsage(
   authorization: string,
   payload: {
@@ -1683,6 +1714,7 @@ async function logCoachAgentUsage(
     model: string;
     input_tokens: number;
     output_tokens: number;
+    cost_usd: number;
     user_message_chars: number;
     alumno_codigo?: string;
     alumno_nombre?: string;
@@ -1854,6 +1886,7 @@ export async function POST(request: NextRequest) {
                 model: modelId,
                 input_tokens: anthropicInputTokens,
                 output_tokens: anthropicOutputTokens,
+                cost_usd: computeCostUSD(modelId, anthropicInputTokens, anthropicOutputTokens),
                 user_message_chars: userMsg.length,
                 alumno_codigo: alumnoCode,
                 alumno_nombre: alumnoName,
@@ -1967,6 +2000,7 @@ export async function POST(request: NextRequest) {
               model: modelId,
               input_tokens: openaiInputTokens,
               output_tokens: openaiOutputTokens,
+              cost_usd: computeCostUSD(modelId, openaiInputTokens, openaiOutputTokens),
               user_message_chars: userMsg.length,
               alumno_codigo: alumnoCode,
               alumno_nombre: alumnoName,

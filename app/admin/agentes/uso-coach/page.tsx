@@ -27,6 +27,7 @@ type AgenteUsoCoachPayload = {
   model?: string;
   input_tokens?: number;
   output_tokens?: number;
+  cost_usd?: number;
   user_message_chars?: number;
   created_at?: string;
 };
@@ -210,11 +211,6 @@ function AgentesUsoCoachContent() {
       const seenIds = new Set<string | number>();
       const PAGE_SIZE = 500;
       let page = 1;
-
-      // Paginamos hasta obtener TODOS los registros.
-      // - Si la API respeta "pageSize" y devuelve un "total", usamos eso para saber cuándo parar.
-      // - Si no lo respeta, el deduplicado por ID detiene el bucle cuando no aparecen registros nuevos.
-      // - Límite de 40 páginas (20 000 registros) como tope de seguridad.
       for (let attempt = 0; attempt < 40; attempt++) {
         const res = await apiFetch<any>(
           `/metadata?entity=agente_uso_coach&page=${page}&pageSize=${PAGE_SIZE}`,
@@ -222,19 +218,14 @@ function AgentesUsoCoachContent() {
         const pageItems = coerceList(res).filter(
           (r) => r?.entity === "agente_uso_coach" && !seenIds.has(r.id),
         );
-
-        if (pageItems.length === 0) break; // sin registros nuevos → terminamos
-
+        if (pageItems.length === 0) break;
         for (const item of pageItems) seenIds.add(item.id);
         allItems.push(...pageItems);
-
         const total = extractTotal(res);
         if (total !== null && allItems.length >= total) break;
-        if (pageItems.length < PAGE_SIZE) break; // última página (incompleta)
-
+        if (pageItems.length < PAGE_SIZE) break;
         page++;
       }
-
       setRecords(allItems);
     } catch (e: any) {
       setError(e?.message ?? "Error al cargar el uso");
@@ -259,7 +250,11 @@ function AgentesUsoCoachContent() {
       const created = String(p.created_at ?? r.created_at ?? "");
       const inTok = Number(p.input_tokens ?? 0);
       const outTok = Number(p.output_tokens ?? 0);
-      const cost = calcCost(p.model, inTok, outTok);
+      // Usar cost_usd guardado si existe, sino calcular desde tokens
+      const cost =
+        typeof p.cost_usd === "number"
+          ? p.cost_usd
+          : calcCost(p.model, inTok, outTok);
       const alumnoKey = String(p.alumno_codigo ?? "").trim();
       if (existing) {
         existing.total_usos += 1;
@@ -337,18 +332,18 @@ function AgentesUsoCoachContent() {
           </Link>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <BarChart3 className="h-6 w-6 text-violet-500" />
-            Uso del Agente Copy (coachs)
+            Uso del Agente Copy (equipo)
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Registro de consumo del agente por coach, agentes usados y alumnos
-            en contexto.
+            Registro de consumo del agente por usuario del equipo, agentes
+            usados y alumnos en contexto.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Buscar coach..."
+              placeholder="Buscar usuario..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
               className="h-9 w-64 pl-8"
@@ -367,7 +362,7 @@ function AgentesUsoCoachContent() {
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
-          label="Coachs únicos"
+          label="Usuarios del equipo"
           value={formatNumber(aggregates.length)}
           icon={<User className="h-5 w-5 text-violet-500" />}
         />
@@ -405,7 +400,7 @@ function AgentesUsoCoachContent() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Coach</th>
+                <th className="px-4 py-3 text-left font-medium">Usuario</th>
                 <th className="px-4 py-3 text-right font-medium">Mensajes</th>
                 <th className="px-4 py-3 text-right font-medium">
                   Tokens entrada
