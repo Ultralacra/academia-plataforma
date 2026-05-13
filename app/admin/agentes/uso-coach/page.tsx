@@ -52,7 +52,43 @@ const AGENT_LABEL: Record<string, string> = {
   "hotwriter-mini-vsl": "Hooks y Mini VSL",
   "hotwriter-carnada": "Copy de Carnada",
   "hotwriter-ads": "Anuncios Ads",
+  "hotwriter-vsl-largo": "Revisor VSL Largo",
+  "hotwriter-vsl-corto": "Revisor VSL Corto",
 };
+
+function modelProvider(
+  model: string | null | undefined,
+): "anthropic" | "openai" | null {
+  const m = String(model ?? "").toLowerCase();
+  if (m.startsWith("claude")) return "anthropic";
+  if (
+    m.startsWith("gpt") ||
+    m.startsWith("o3") ||
+    m.startsWith("o4") ||
+    m.startsWith("o1")
+  )
+    return "openai";
+  return null;
+}
+
+function ProviderBadge({ model }: { model?: string | null }) {
+  const provider = modelProvider(model);
+  if (provider === "anthropic") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+        Anthropic
+      </span>
+    );
+  }
+  if (provider === "openai") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+        OpenAI
+      </span>
+    );
+  }
+  return <span className="text-slate-300 text-[10px]">{model ?? "—"}</span>;
+}
 
 function coerceList(res: any): UsageRecord[] {
   if (Array.isArray(res)) return res;
@@ -497,6 +533,7 @@ function AgentesUsoCoachContent() {
                     <th className="px-3 py-2 text-right font-medium">
                       Tokens out
                     </th>
+                    <th className="px-3 py-2 text-left font-medium">Modelo</th>
                     <th className="px-3 py-2 text-right font-medium">
                       Costo (USD)
                     </th>
@@ -542,6 +579,14 @@ function AgentesUsoCoachContent() {
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
                           {formatNumber(Number(r.payload?.output_tokens ?? 0))}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-0.5">
+                            <ProviderBadge model={r.payload?.model} />
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {r.payload?.model ?? "—"}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-3 py-2 text-right font-medium text-rose-700">
                           {formatUSD(
