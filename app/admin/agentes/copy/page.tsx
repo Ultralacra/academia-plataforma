@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Bot,
+  ChevronDown,
+  ChevronRight,
   Clapperboard,
   FileText,
   Layers,
@@ -34,6 +36,7 @@ type SubAgent = {
   icon: React.ElementType;
   color: string;
   badgeColor: string;
+  phase: 1 | 2;
   suggestions: string[];
   welcome: string;
 };
@@ -46,6 +49,7 @@ const SUB_AGENTS: SubAgent[] = [
     icon: Layers,
     color: "text-amber-400",
     badgeColor: "bg-amber-400/20",
+    phase: 2,
     suggestions: [
       "Subir documento de Fase 1 para revisión completa",
       "Revisa mi promesa de carnada",
@@ -69,6 +73,7 @@ Mi función es revisar tu documento de Fase 1 aplicando los criterios y estánda
     icon: Video,
     color: "text-violet-400",
     badgeColor: "bg-violet-400/20",
+    phase: 2,
     suggestions: [
       "Revisa mi hook y epifanía",
       "¿Mi mecanismo único está bien construido?",
@@ -94,6 +99,7 @@ Estoy especializado en la creación y revisión de guiones de Video Sales Letter
     icon: Clapperboard,
     color: "text-purple-400",
     badgeColor: "bg-purple-400/20",
+    phase: 2,
     suggestions: [
       "Revisa mi VSL completo de Fase 2",
       "¿Mi Hook cumple los criterios?",
@@ -117,12 +123,46 @@ Mi función es revisar cada bloque de tu guión de VSL largo (Fase 2) verificand
 Comparte tu guión y empezamos bloque por bloque.`,
   },
   {
+    id: "hotwriter-vsl-corto",
+    label: "Revisor VSL Corto",
+    description: "Revisión completa VSL Corto Fase 2",
+    icon: Clapperboard,
+    color: "text-fuchsia-400",
+    badgeColor: "bg-fuchsia-400/20",
+    phase: 2,
+    suggestions: [
+      "Revisa mi VSL corto de Fase 2",
+      "¿Mi Hook cumple los criterios del VSL corto?",
+      "Revisa el MUP y MUS de mi guión corto",
+    ],
+    welcome: `¡Hola! Soy el **Agente Revisor de VSL Corto** de HotSelling.
+
+Mi función es revisar cada bloque de tu guión de VSL Corto (Fase 2) con sus partes y subpartes, verificando que cada sección cumple su objetivo estratégico dentro de la metodología HotSelling.
+
+**Para iniciar la revisión necesito:**
+• Tu documento de **Fase 1 aprobado** (escalera de valor, promesa, mecanismo, alternativas del MUP).
+• Tu documento de **Fase 2 con el VSL** (guión completo o sección a revisar).
+• Si el evento será **EN VIVO o PREGRABADO**.
+
+**Reviso los 5 bloques del VSL Corto:**
+• Hook / Lead — generar curiosidad y vender el video.
+• Background Story — identificación y vínculo emocional.
+• MUP — mecanismo único del problema.
+• MUS — mecanismo único de la solución.
+• Close / Oferta + FAQs — escasez, urgencia y oferta irresistible.
+
+**También verifico:** tiempos por bloque, coherencia global, cierre de open loops, tono conversacional y dónde resumir sin sacrificar MUP/MUS.
+
+Comparte tus documentos y empezamos bloque por bloque.`,
+  },
+  {
     id: "hotwriter-mini-vsl",
     label: "Hotwriter Mini VSL",
     description: "Script de Mini VSL y Hooks",
     icon: TvMinimalPlay,
     color: "text-sky-400",
     badgeColor: "bg-sky-400/20",
+    phase: 2,
     suggestions: [
       "Necesito 5 variaciones de hook para mi carnada",
       "Revisa este mini VSL de 2 minutos",
@@ -147,6 +187,7 @@ Comparte el contexto de tu carnada (avatar, dolor, promesa) y empezamos.`,
     icon: FileText,
     color: "text-emerald-400",
     badgeColor: "bg-emerald-400/20",
+    phase: 2,
     suggestions: [
       "Revisa el headline de mi página de ventas",
       "¿Mi sección de módulos está bien estructurada?",
@@ -172,6 +213,7 @@ Sube tu página o comparte el contenido para empezar.`,
     icon: Megaphone,
     color: "text-rose-400",
     badgeColor: "bg-rose-400/20",
+    phase: 2,
     suggestions: [
       "Necesito 3 copies de ad para tráfico frío",
       "Revisa este copy de ad que ya tengo",
@@ -465,6 +507,10 @@ function saveStoredMessages(data: Record<string, ChatMessage[]>) {
 
 function CopyAgentWorkspace() {
   const [selectedAgentId, setSelectedAgentId] = useState(SUB_AGENTS[0].id);
+  const [expandedPhases, setExpandedPhases] = useState<Record<1 | 2, boolean>>({
+    1: true,
+    2: true,
+  });
   const [messagesByAgent, setMessagesByAgent] = useState<
     Record<string, ChatMessage[]>
   >(() => loadStoredMessages());
@@ -824,39 +870,76 @@ function CopyAgentWorkspace() {
           <p className="mb-2 px-2 text-[10px] font-medium uppercase tracking-widest text-white/30">
             Selecciona el agente
           </p>
-          <div className="space-y-1">
-            {SUB_AGENTS.map((agent) => {
-              const Icon = agent.icon;
-              const isActive = agent.id === selectedAgentId;
+          <div className="space-y-3">
+            {([1, 2] as const).map((phase) => {
+              const phaseAgents = SUB_AGENTS.filter((a) => a.phase === phase);
+              if (phaseAgents.length === 0) return null;
+              const isOpen = expandedPhases[phase];
               return (
-                <button
-                  key={agent.id}
-                  type="button"
-                  onClick={() => handleAgentChange(agent.id)}
-                  className={`w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
-                    isActive
-                      ? "bg-white/10 text-white"
-                      : "text-white/55 hover:bg-white/6 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${agent.badgeColor}`}
-                    >
-                      <Icon className={`h-3.5 w-3.5 ${agent.color}`} />
+                <div key={phase}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedPhases((prev) => ({
+                        ...prev,
+                        [phase]: !prev[phase],
+                      }))
+                    }
+                    className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/60 transition hover:bg-white/5 hover:text-white"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {isOpen ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      )}
+                      Fase {phase}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-white/60">
+                      {phaseAgents.length}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="mt-1 space-y-1">
+                      {phaseAgents.map((agent) => {
+                        const Icon = agent.icon;
+                        const isActive = agent.id === selectedAgentId;
+                        return (
+                          <button
+                            key={agent.id}
+                            type="button"
+                            onClick={() => handleAgentChange(agent.id)}
+                            className={`w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
+                              isActive
+                                ? "bg-white/10 text-white"
+                                : "text-white/55 hover:bg-white/6 hover:text-white"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${agent.badgeColor}`}
+                              >
+                                <Icon
+                                  className={`h-3.5 w-3.5 ${agent.color}`}
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <div
+                                  className={`text-sm font-medium ${isActive ? "text-white" : ""}`}
+                                >
+                                  {agent.label}
+                                </div>
+                                <div className="truncate text-[10px] text-white/40">
+                                  {agent.description}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div className="min-w-0">
-                      <div
-                        className={`text-sm font-medium ${isActive ? "text-white" : ""}`}
-                      >
-                        {agent.label}
-                      </div>
-                      <div className="truncate text-[10px] text-white/40">
-                        {agent.description}
-                      </div>
-                    </div>
-                  </div>
-                </button>
+                  )}
+                </div>
               );
             })}
           </div>
