@@ -64,32 +64,21 @@ Mi función es revisar tu documento de Fase 1 aplicando los criterios y estánda
 
 ¿Qué necesitas revisar hoy?`,
   },
-  {
-    id: "hotwriter-vsl",
-    label: "Hotwriter VSL",
-    description: "Script de VSL Long Form",
-    icon: Video,
-    color: "text-violet-400",
-    badgeColor: "bg-violet-400/20",
-    phase: 2,
-    suggestions: [
-      "Revisa mi hook y epifanía",
-      "¿Mi mecanismo único está bien construido?",
-      "Ayúdame a estructurar el bloque de alternativas fallidas",
-    ],
-    welcome: `¡Hola! Soy el **Agente Hotwriter VSL** de HotSelling.
-
-Estoy especializado en la creación y revisión de guiones de Video Sales Letter de formato largo para tu embudo de ventas.
-
-**Puedo ayudarte con:**
-• Revisar tu guión VSL completo (pégalo o sube el archivo).
-• Estructurar el mecanismo único del problema.
-• Construir hooks y variaciones de inicio.
-• Optimizar la epifanía y la historia del experto.
-• Asegurar la lógica de solución y el cierre de oferta.
-
-¿En qué parte de tu VSL estás trabajando?`,
-  },
+  // {
+  //   id: "hotwriter-vsl",
+  //   label: "Hotwriter VSL",
+  //   description: "Script de VSL Long Form",
+  //   icon: Video,
+  //   color: "text-violet-400",
+  //   badgeColor: "bg-violet-400/20",
+  //   phase: 2,
+  //   suggestions: [
+  //     "Revisa mi hook y epifanía",
+  //     "¿Mi mecanismo único está bien construido?",
+  //     "Ayúdame a estructurar el bloque de alternativas fallidas",
+  //   ],
+  //   welcome: `¡Hola! Soy el Agente Hotwriter VSL de HotSelling.`,
+  // },
   {
     id: "hotwriter-vsl-largo",
     label: "Revisor VSL Largo",
@@ -153,31 +142,21 @@ Mi función es revisar cada bloque de tu guión de VSL Corto (Fase 2) con sus pa
 
 Comparte tus documentos y empezamos bloque por bloque.`,
   },
-  {
-    id: "hotwriter-mini-vsl",
-    label: "Hotwriter Mini VSL",
-    description: "Script de Mini VSL y Hooks",
-    icon: TvMinimalPlay,
-    color: "text-sky-400",
-    badgeColor: "bg-sky-400/20",
-    phase: 2,
-    suggestions: [
-      "Necesito 5 variaciones de hook para mi carnada",
-      "Revisa este mini VSL de 2 minutos",
-      "¿Cómo agitar el dolor en solo 30 segundos?",
-    ],
-    welcome: `¡Hola! Soy el **Agente Hotwriter Mini VSL** de HotSelling.
-
-Estoy especializado en guiones cortos, hooks de alto impacto y variaciones de inicio para tus videos.
-
-**Puedo ayudarte con:**
-• Crear variaciones de hooks para tu VSL principal.
-• Estructurar mini VSLs de retargeting (2-3 min).
-• Clips cortos para redes sociales.
-• Agitar el dolor del avatar en los primeros 15 segundos.
-
-Comparte el contexto de tu carnada (avatar, dolor, promesa) y empezamos.`,
-  },
+  // {
+  //   id: "hotwriter-mini-vsl",
+  //   label: "Hotwriter Mini VSL",
+  //   description: "Script de Mini VSL y Hooks",
+  //   icon: TvMinimalPlay,
+  //   color: "text-sky-400",
+  //   badgeColor: "bg-sky-400/20",
+  //   phase: 2,
+  //   suggestions: [
+  //     "Necesito 5 variaciones de hook para mi carnada",
+  //     "Revisa este mini VSL de 2 minutos",
+  //     "¿Cómo agitar el dolor en solo 30 segundos?",
+  //   ],
+  //   welcome: `¡Hola! Soy el Agente Hotwriter Mini VSL de HotSelling.`,
+  // },
   {
     id: "hotwriter-carnada",
     label: "Hotwriter Carnada",
