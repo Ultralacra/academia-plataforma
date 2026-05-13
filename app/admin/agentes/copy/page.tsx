@@ -5,8 +5,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Bot,
-  ChevronDown,
-  ChevronRight,
   Clapperboard,
   FileText,
   Layers,
@@ -507,10 +505,6 @@ function saveStoredMessages(data: Record<string, ChatMessage[]>) {
 
 function CopyAgentWorkspace() {
   const [selectedAgentId, setSelectedAgentId] = useState(SUB_AGENTS[0].id);
-  const [expandedPhases, setExpandedPhases] = useState<Record<1 | 2, boolean>>({
-    1: true,
-    2: true,
-  });
   const [messagesByAgent, setMessagesByAgent] = useState<
     Record<string, ChatMessage[]>
   >(() => loadStoredMessages());
@@ -870,76 +864,39 @@ function CopyAgentWorkspace() {
           <p className="mb-2 px-2 text-[10px] font-medium uppercase tracking-widest text-white/30">
             Selecciona el agente
           </p>
-          <div className="space-y-3">
-            {([1, 2] as const).map((phase) => {
-              const phaseAgents = SUB_AGENTS.filter((a) => a.phase === phase);
-              if (phaseAgents.length === 0) return null;
-              const isOpen = expandedPhases[phase];
+          <div className="space-y-1">
+            {SUB_AGENTS.map((agent) => {
+              const Icon = agent.icon;
+              const isActive = agent.id === selectedAgentId;
               return (
-                <div key={phase}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedPhases((prev) => ({
-                        ...prev,
-                        [phase]: !prev[phase],
-                      }))
-                    }
-                    className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/60 transition hover:bg-white/5 hover:text-white"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      {isOpen ? (
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      )}
-                      Fase {phase}
-                    </span>
-                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-white/60">
-                      {phaseAgents.length}
-                    </span>
-                  </button>
-                  {isOpen && (
-                    <div className="mt-1 space-y-1">
-                      {phaseAgents.map((agent) => {
-                        const Icon = agent.icon;
-                        const isActive = agent.id === selectedAgentId;
-                        return (
-                          <button
-                            key={agent.id}
-                            type="button"
-                            onClick={() => handleAgentChange(agent.id)}
-                            className={`w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
-                              isActive
-                                ? "bg-white/10 text-white"
-                                : "text-white/55 hover:bg-white/6 hover:text-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <div
-                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${agent.badgeColor}`}
-                              >
-                                <Icon
-                                  className={`h-3.5 w-3.5 ${agent.color}`}
-                                />
-                              </div>
-                              <div className="min-w-0">
-                                <div
-                                  className={`text-sm font-medium ${isActive ? "text-white" : ""}`}
-                                >
-                                  {agent.label}
-                                </div>
-                                <div className="truncate text-[10px] text-white/40">
-                                  {agent.description}
-                                </div>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
+                <button
+                  key={agent.id}
+                  type="button"
+                  onClick={() => handleAgentChange(agent.id)}
+                  className={`w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
+                    isActive
+                      ? "bg-white/10 text-white"
+                      : "text-white/55 hover:bg-white/6 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${agent.badgeColor}`}
+                    >
+                      <Icon className={`h-3.5 w-3.5 ${agent.color}`} />
                     </div>
-                  )}
-                </div>
+                    <div className="min-w-0">
+                      <div
+                        className={`text-sm font-medium ${isActive ? "text-white" : ""}`}
+                      >
+                        {agent.label}
+                      </div>
+                      <div className="truncate text-[10px] text-white/40">
+                        {agent.description}
+                      </div>
+                    </div>
+                  </div>
+                </button>
               );
             })}
           </div>
