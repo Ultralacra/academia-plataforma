@@ -71,6 +71,42 @@ async function fetchMe(authorization: string): Promise<MeUser | null> {
   return payload as MeUser;
 }
 
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get("authorization") ?? "";
+  if (!auth.trim()) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const me = await fetchMe(auth);
+  if (me) {
+    const role = normalizeRole(me.role, me.tipo);
+    if (role === "student") {
+      return NextResponse.json({ error: "Prohibido" }, { status: 403 });
+    }
+  }
+
+  const { searchParams } = new URL(req.url);
+  const query = searchParams.toString();
+  const upstreamUrl = buildUrl(query ? `/metadata?${query}` : "/metadata");
+
+  const upstream = await fetch(upstreamUrl, {
+    method: "GET",
+    headers: { Authorization: auth, Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!upstream.ok) {
+    const text = await upstream.text().catch(() => "");
+    return NextResponse.json(
+      { error: text || `HTTP ${upstream.status}` },
+      { status: upstream.status },
+    );
+  }
+
+  const json = await upstream.json().catch(() => null);
+  return NextResponse.json(json, { status: 200 });
+}
+
 export async function POST(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   if (!auth.trim()) {

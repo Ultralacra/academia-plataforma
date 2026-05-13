@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -69,6 +69,7 @@ import {
   Pencil,
   Plus,
   Receipt,
+  RefreshCw,
   Settings,
   Sigma,
   TrendingDown,
@@ -82,10 +83,16 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Legend,
   Line,
   LineChart as RechartsLineChart,
+  Pie,
+  PieChart,
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -243,10 +250,13 @@ function BusinessMetricsContent() {
       setLoadingMeta(true);
       try {
         const token = getAuthToken();
-        const res = await fetch("/api/metadata-v2", {
-          headers: { Authorization: `Bearer ${token ?? ""}` },
-          cache: "no-store",
-        });
+        const res = await fetch(
+          "/api/metadata?entity=business_metrics_state&entity_id=global",
+          {
+            headers: { Authorization: `Bearer ${token ?? ""}` },
+            cache: "no-store",
+          },
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json().catch(() => null);
         const items: any[] = Array.isArray(json)
@@ -255,7 +265,9 @@ function BusinessMetricsContent() {
             ? json.data
             : Array.isArray(json?.items)
               ? json.items
-              : [];
+              : json
+                ? [json]
+                : [];
         const found = items.find(
           (m: any) =>
             m?.entity === "business_metrics_state" &&
@@ -268,31 +280,9 @@ function BusinessMetricsContent() {
           skipSaveRef.current = true;
           setState(next);
           setMetaId(String(found.id));
-        } else {
-          // Primera vez: guardar seed en backend
-          const seed = buildBusinessSeedState();
-          const postRes = await fetch("/api/metadata-v2", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token ?? ""}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              entity: "business_metrics_state",
-              entity_id: "global",
-              payload: seed,
-            }),
-          });
-          if (cancelled) return;
-          if (postRes.ok) {
-            const postJson = await postRes.json().catch(() => null);
-            const newId = postJson?.id ?? null;
-            if (newId) {
-              skipSaveRef.current = true;
-              setMetaId(String(newId));
-            }
-          }
         }
+        // Si no existe: no se crea nada automáticamente.
+        // El usuario debe pulsar "Sincronizar" para crear el registro.
       } catch {
         // fallback silencioso — state ya tiene seed
       } finally {
@@ -305,21 +295,41 @@ function BusinessMetricsContent() {
     };
   }, [user?.id]);
 
-  // Guardado automático con debounce de 1.5s
-  useEffect(() => {
-    if (skipSaveRef.current) {
-      skipSaveRef.current = false;
-      return;
-    }
-    if (!metaId) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  // Sincronización manual: crea el registro si no existe o fuerza un PUT si ya existe.
+  const handleManualSync = useCallback(async () => {
+    if (savingMeta) return;
     setSavingMeta(true);
-    const id = metaId;
-    const snapshot = state;
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        const token = getAuthToken();
-        await fetch(`/api/metadata-v2/${encodeURIComponent(id)}`, {
+    try {
+      const token = getAuthToken();
+      if (!metaId) {
+        // POST — crear por primera vez con TODO el state actual
+        const res = await fetch("/api/metadata", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token ?? ""}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            entity: "business_metrics_state",
+            entity_id: "global",
+            payload: state,
+          }),
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+        const json = await res.json().catch(() => null);
+        const newId = json?.id ?? json?.data?.id ?? null;
+        if (newId) {
+          skipSaveRef.current = true;
+          setMetaId(String(newId));
+        } else {
+          throw new Error("Respuesta sin ID");
+        }
+      } else {
+        // PUT — forzar guardado inmediato
+        const res = await fetch(`/api/metadata/${encodeURIComponent(metaId)}`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${token ?? ""}`,
@@ -328,9 +338,93 @@ function BusinessMetricsContent() {
           body: JSON.stringify({
             entity: "business_metrics_state",
             entity_id: "global",
-            payload: snapshot,
+            payload: state,
           }),
         });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+      }
+    } catch (err) {
+      console.error("[metricas-negocio] sync failed:", err);
+      if (typeof window !== "undefined") {
+        window.alert(
+          `No se pudo sincronizar el metadata. ${
+            err instanceof Error ? err.message : ""
+          }`,
+        );
+      }
+    } finally {
+      setSavingMeta(false);
+    }
+  }, [metaId, state, savingMeta]);
+
+  // Guardado automático con debounce de 1.5s
+  // Siempre actualiza el metadata existente (PUT). Si metaId aún no está
+  // cargado, lo busca primero y luego hace PUT. Nunca crea duplicados.
+  useEffect(() => {
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSavingMeta(true);
+    const snapshot = state;
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const token = getAuthToken();
+        let id = metaId;
+
+        // Si aún no tenemos el ID, buscamos el registro existente
+        if (!id) {
+          const res = await fetch(
+            "/api/metadata?entity=business_metrics_state&entity_id=global",
+            {
+              headers: { Authorization: `Bearer ${token ?? ""}` },
+              cache: "no-store",
+            },
+          );
+          if (res.ok) {
+            const json = await res.json().catch(() => null);
+            const items: any[] = Array.isArray(json)
+              ? json
+              : Array.isArray(json?.data)
+                ? json.data
+                : Array.isArray(json?.items)
+                  ? json.items
+                  : json
+                    ? [json]
+                    : [];
+            const found = items.find(
+              (m: any) =>
+                m?.entity === "business_metrics_state" &&
+                String(m?.entity_id ?? "") === "global",
+            );
+            if (found) {
+              id = String(found.id);
+              setMetaId(id);
+            }
+          }
+        }
+
+        if (id) {
+          // Actualizar el metadata existente
+          await fetch(`/api/metadata/${encodeURIComponent(id)}`, {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token ?? ""}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              entity: "business_metrics_state",
+              entity_id: "global",
+              payload: snapshot,
+            }),
+          });
+        }
+        // Si no existe el metadata (id === null), no se hace nada — el usuario
+        // debe crear el registro manualmente antes de que el autosave funcione.
       } finally {
         setSavingMeta(false);
       }
@@ -420,6 +514,67 @@ function BusinessMetricsContent() {
       cacRatio: Math.round(kpis.cacRatio * 100) / 100,
     }));
   }, [derivedRows]);
+
+  // ── Paleta cohesiva para gráficos de distribución ────────────────────────
+  const CHART_PIE_COLORS = [
+    "#f43f5e", // rose — ADS
+    "#f97316", // orange — comisiones closer
+    "#a855f7", // purple — Carla / bonos
+    "#0ea5e9", // sky — operativo
+    "#10b981", // emerald — beneficio
+    "#6366f1", // indigo — marketing
+  ];
+
+  // Composición del costo total acumulado en el rango filtrado
+  const costCompositionData = useMemo(() => {
+    const acc = visibleRecords.reduce(
+      (a, r) => {
+        a.ads += r.ads || 0;
+        a.closerCommissions += r.closerCommissions || 0;
+        a.carlaBonus += r.carlaBonus || 0;
+        a.operating += r.operatingCostMonthly || 0;
+        return a;
+      },
+      { ads: 0, closerCommissions: 0, carlaBonus: 0, operating: 0 },
+    );
+    const items = [
+      { name: "ADS", value: acc.ads, color: CHART_PIE_COLORS[0] },
+      {
+        name: "Comisiones closer",
+        value: acc.closerCommissions,
+        color: CHART_PIE_COLORS[1],
+      },
+      {
+        name: "Carla / bonos",
+        value: acc.carlaBonus,
+        color: CHART_PIE_COLORS[2],
+      },
+      { name: "Operativo", value: acc.operating, color: CHART_PIE_COLORS[3] },
+    ];
+    return items.filter((it) => it.value > 0);
+  }, [visibleRecords]);
+
+  // Asignación del revenue: adquisición vs operativo vs beneficio neto
+  const revenueAllocationData = useMemo(() => {
+    const revenue = summary.totalRevenue;
+    const acquisition = summary.totalAcquisitionCost;
+    const operating = summary.totalOperatingCost;
+    const profit = Math.max(revenue - acquisition - operating, 0);
+    const items = [
+      { name: "Adquisición", value: acquisition, color: CHART_PIE_COLORS[0] },
+      { name: "Operativo", value: operating, color: CHART_PIE_COLORS[3] },
+      { name: "Beneficio", value: profit, color: CHART_PIE_COLORS[4] },
+    ];
+    return items.filter((it) => it.value > 0);
+  }, [summary]);
+
+  // Gauge ROIC: valor actual vs objetivo 30 %
+  const roicGaugeData = useMemo(() => {
+    const value = Math.round(summary.weightedRoic * 10000) / 100; // %
+    const clamped = Math.max(-50, Math.min(100, value));
+    const color = value >= 30 ? "#10b981" : value >= 0 ? "#f59e0b" : "#ef4444";
+    return { value, clamped, color };
+  }, [summary]);
 
   // ── Fase 3: datos de cohorte ──────────────────────────────────────────────
   // Agrupa alumnos (desde los registros mensuales) por mes de ingreso y
@@ -829,6 +984,18 @@ function BusinessMetricsContent() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">Confidencial</Badge>
+            {metaId && (
+              <Badge
+                variant="outline"
+                className="font-mono text-[10px] text-muted-foreground cursor-pointer hover:bg-muted"
+                title="ID del registro metadata-v2 donde se guarda toda la inteligencia de negocio. Click para copiar."
+                onClick={() => {
+                  navigator.clipboard?.writeText(metaId).catch(() => {});
+                }}
+              >
+                meta: {metaId}
+              </Badge>
+            )}
             {savingMeta && (
               <Badge variant="outline" className="text-muted-foreground">
                 Guardando…
@@ -871,6 +1038,12 @@ function BusinessMetricsContent() {
                         ? format(dateRange.from, "MMM yyyy", { locale: es })
                         : "Seleccionar"}
                     </span>
+                    {/* Primer mes con datos reales */}
+                    {visibleRecords.length > 0 && (
+                      <span className="text-[9px] text-muted-foreground/70 mt-0.5">
+                        datos: {formatMonthLabel(visibleRecords[0].month)}
+                      </span>
+                    )}
                   </div>
                   {/* Hasta */}
                   <div className="flex flex-col items-start px-4 py-2">
@@ -888,6 +1061,15 @@ function BusinessMetricsContent() {
                         ? format(dateRange.to, "MMM yyyy", { locale: es })
                         : "Seleccionar"}
                     </span>
+                    {/* Último mes con datos reales */}
+                    {visibleRecords.length > 0 && (
+                      <span className="text-[9px] text-muted-foreground/70 mt-0.5">
+                        datos:{" "}
+                        {formatMonthLabel(
+                          visibleRecords[visibleRecords.length - 1].month,
+                        )}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center px-2 border-l">
                     <CalendarIcon className="h-4 w-4 text-muted-foreground" />
@@ -1979,6 +2161,187 @@ function BusinessMetricsContent() {
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
+                </div>
+
+                {/* ── Sección: Distribución y composición ───────────────── */}
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Distribución y composición
+                    </span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-3">
+                    {/* Donut 1: Composición de costos */}
+                    <Card className="border-t-4 border-t-rose-500">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                          <Receipt className="h-4 w-4" />
+                          Composición del costo
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Distribución total del periodo seleccionado.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {costCompositionData.length === 0 ? (
+                          <div className="h-65 flex items-center justify-center text-xs text-muted-foreground">
+                            Sin costos registrados en el rango.
+                          </div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height={260}>
+                            <PieChart>
+                              <Tooltip
+                                formatter={(v: number, n: string) => [
+                                  formatCurrency(v),
+                                  n,
+                                ]}
+                                contentStyle={{
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                }}
+                              />
+                              <Legend
+                                verticalAlign="bottom"
+                                height={28}
+                                wrapperStyle={{ fontSize: 11 }}
+                              />
+                              <Pie
+                                data={costCompositionData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="45%"
+                                innerRadius={55}
+                                outerRadius={85}
+                                paddingAngle={2}
+                                strokeWidth={2}
+                              >
+                                {costCompositionData.map((item) => (
+                                  <Cell key={item.name} fill={item.color} />
+                                ))}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Donut 2: Asignación del revenue */}
+                    <Card className="border-t-4 border-t-emerald-500">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />A dónde va cada
+                          dólar
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Reparto del revenue HT en el rango.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {revenueAllocationData.length === 0 ? (
+                          <div className="h-65 flex items-center justify-center text-xs text-muted-foreground">
+                            Sin revenue registrado.
+                          </div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height={260}>
+                            <PieChart>
+                              <Tooltip
+                                formatter={(v: number, n: string) => [
+                                  formatCurrency(v),
+                                  n,
+                                ]}
+                                contentStyle={{
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                }}
+                              />
+                              <Legend
+                                verticalAlign="bottom"
+                                height={28}
+                                wrapperStyle={{ fontSize: 11 }}
+                              />
+                              <Pie
+                                data={revenueAllocationData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="45%"
+                                innerRadius={55}
+                                outerRadius={85}
+                                paddingAngle={2}
+                                strokeWidth={2}
+                                label={(entry: { percent?: number }) =>
+                                  `${((entry.percent ?? 0) * 100).toFixed(0)}%`
+                                }
+                                labelLine={false}
+                              >
+                                {revenueAllocationData.map((item) => (
+                                  <Cell key={item.name} fill={item.color} />
+                                ))}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Gauge ROIC */}
+                    <Card className="border-t-4 border-t-purple-500">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-2">
+                          <Zap className="h-4 w-4" />
+                          ROIC medio del periodo
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Objetivo ≥ 30 %. Verde sano · ámbar OK · rojo crítico.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="relative">
+                          <ResponsiveContainer width="100%" height={260}>
+                            <RadialBarChart
+                              innerRadius="65%"
+                              outerRadius="95%"
+                              data={[
+                                {
+                                  name: "ROIC",
+                                  value: roicGaugeData.clamped,
+                                  fill: roicGaugeData.color,
+                                },
+                              ]}
+                              startAngle={210}
+                              endAngle={-30}
+                            >
+                              <PolarAngleAxis
+                                type="number"
+                                domain={[-50, 100]}
+                                tick={false}
+                              />
+                              <RadialBar
+                                background={{ fill: "rgba(148,163,184,0.18)" }}
+                                dataKey="value"
+                                cornerRadius={10}
+                              />
+                            </RadialBarChart>
+                          </ResponsiveContainer>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span
+                              className="text-3xl font-bold"
+                              style={{ color: roicGaugeData.color }}
+                            >
+                              {roicGaugeData.value.toFixed(1)}%
+                            </span>
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground mt-1">
+                              ROIC ponderado
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               </>
             )}
@@ -3294,7 +3657,7 @@ function BusinessMetricsContent() {
                           {formatPercent(kpis.roic)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          Por cada €1 invertido, generas €
+                          Por cada $1 invertido, generas $
                           {Math.max(0, kpis.roic).toFixed(2)} adicional
                         </TableCell>
                       </TableRow>
@@ -3565,9 +3928,9 @@ function BusinessMetricsContent() {
                           </TableHead>
                           <TableHead className="text-right">Payback</TableHead>
                           <TableHead className="text-right">ROIC</TableHead>
-                          <TableHead className="text-right">Op. (€)</TableHead>
+                          <TableHead className="text-right">Op. ($)</TableHead>
                           <TableHead className="text-right">
-                            Ventas (€)
+                            Ventas ($)
                           </TableHead>
                         </TableRow>
                       </TableHeader>
