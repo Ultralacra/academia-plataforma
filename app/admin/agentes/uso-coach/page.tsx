@@ -15,12 +15,6 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api-config";
 
 type AgenteUsoCoachPayload = {
@@ -510,31 +504,64 @@ function AgentesUsoCoachContent() {
         </div>
       </div>
 
-      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              Historial · {detail?.coach_nombre || detail?.coach_codigo}
-            </DialogTitle>
-          </DialogHeader>
-          {detail && (
-            <div className="max-h-[60vh] overflow-y-auto">
+      {/* ── Modal de detalle ─────────────────────────────────────────── */}
+      {detail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDetail(null)}
+        >
+          <div
+            className="relative flex flex-col w-full max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+            style={{ maxHeight: "90vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 shrink-0">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">
+                  Historial · {detail.coach_nombre || detail.coach_codigo}
+                </h2>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  {detail.total_usos} mensajes ·{" "}
+                  <span className="font-medium text-rose-600">
+                    {formatUSD(detail.costo_usd)}
+                  </span>{" "}
+                  costo total
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetail(null)}
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-slate-600 sticky top-0">
+                <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium">Fecha</th>
-                    <th className="px-3 py-2 text-left font-medium">Agente</th>
-                    <th className="px-3 py-2 text-left font-medium">
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap border-b border-slate-200">
+                      Fecha
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap border-b border-slate-200">
+                      Agente
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap border-b border-slate-200">
                       Alumno contexto
                     </th>
-                    <th className="px-3 py-2 text-right font-medium">
+                    <th className="px-4 py-3 text-right font-medium whitespace-nowrap border-b border-slate-200">
                       Tokens in
                     </th>
-                    <th className="px-3 py-2 text-right font-medium">
+                    <th className="px-4 py-3 text-right font-medium whitespace-nowrap border-b border-slate-200">
                       Tokens out
                     </th>
-                    <th className="px-3 py-2 text-left font-medium">Modelo</th>
-                    <th className="px-3 py-2 text-right font-medium">
+                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap border-b border-slate-200">
+                      Modelo
+                    </th>
+                    <th className="px-4 py-3 text-right font-medium whitespace-nowrap border-b border-slate-200">
                       Costo (USD)
                     </th>
                   </tr>
@@ -551,44 +578,47 @@ function AgentesUsoCoachContent() {
                       return da < db ? 1 : -1;
                     })
                     .map((r) => (
-                      <tr key={String(r.id)}>
-                        <td className="px-3 py-2 text-slate-700">
+                      <tr
+                        key={String(r.id)}
+                        className="hover:bg-slate-50 transition-colors"
+                      >
+                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap text-xs">
                           {formatDate(
                             r.payload?.created_at ?? r.created_at ?? null,
                           )}
                         </td>
-                        <td className="px-3 py-2 text-slate-700">
+                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                           {AGENT_LABEL[r.payload?.agent_type ?? ""] ??
                             r.payload?.agent_type ??
                             "—"}
                         </td>
-                        <td className="px-3 py-2 text-slate-600">
+                        <td className="px-4 py-3 text-slate-600">
                           {r.payload?.alumno_nombre ? (
-                            <span>
-                              {r.payload.alumno_nombre}
-                              <span className="text-slate-400 font-mono text-[10px] ml-1">
+                            <div>
+                              <div className="font-medium text-slate-800">
+                                {r.payload.alumno_nombre}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">
                                 {r.payload.alumno_codigo}
-                              </span>
-                            </span>
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
+                        <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap tabular-nums">
                           {formatNumber(Number(r.payload?.input_tokens ?? 0))}
                         </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
+                        <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap tabular-nums">
                           {formatNumber(Number(r.payload?.output_tokens ?? 0))}
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-col gap-0.5">
-                            <ProviderBadge model={r.payload?.model} />
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {r.payload?.model ?? "—"}
-                            </span>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <ProviderBadge model={r.payload?.model} />
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                            {r.payload?.model ?? "—"}
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-right font-medium text-rose-700">
+                        <td className="px-4 py-3 text-right font-semibold text-rose-700 whitespace-nowrap tabular-nums">
                           {formatUSD(
                             calcCost(
                               r.payload?.model,
@@ -602,9 +632,9 @@ function AgentesUsoCoachContent() {
                 </tbody>
               </table>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
