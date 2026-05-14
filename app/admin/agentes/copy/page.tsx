@@ -42,7 +42,7 @@ type SubAgent = {
 const SUB_AGENTS: SubAgent[] = [
   {
     id: "hotsystem",
-    label: "Hotsystem",
+    label: "Revisor de Fase 1",
     description: "Revisor de Fase 1 – Escalera de valor",
     icon: Layers,
     color: "text-amber-400",
@@ -81,7 +81,7 @@ Mi función es revisar tu documento de Fase 1 aplicando los criterios y estánda
   // },
   {
     id: "hotwriter-vsl-largo",
-    label: "Revisor VSL Largo",
+    label: "Revisor de VSL Largo",
     description: "Revisión completa VSL Fase 2 (hasta 18 min)",
     icon: Clapperboard,
     color: "text-purple-400",
@@ -111,7 +111,7 @@ Comparte tu guión y empezamos bloque por bloque.`,
   },
   {
     id: "hotwriter-vsl-corto",
-    label: "Revisor VSL Corto",
+    label: "Revisor de VSL Corto",
     description: "Revisión completa VSL Corto Fase 2",
     icon: Clapperboard,
     color: "text-fuchsia-400",
@@ -159,7 +159,7 @@ Comparte tus documentos y empezamos bloque por bloque.`,
   // },
   {
     id: "hotwriter-carnada",
-    label: "Hotwriter Carnada",
+    label: "Revisor de Copy de Páginas",
     description: "Copy de página del carnada",
     icon: FileText,
     color: "text-emerald-400",
@@ -185,7 +185,7 @@ Sube tu página o comparte el contenido para empezar.`,
   },
   {
     id: "hotwriter-ads",
-    label: "Hotwriter Ads",
+    label: "Revisor de Ads",
     description: "Scripts para anuncios",
     icon: Megaphone,
     color: "text-rose-400",
@@ -870,9 +870,6 @@ function CopyAgentWorkspace() {
                       >
                         {agent.label}
                       </div>
-                      <div className="truncate text-[10px] text-white/40">
-                        {agent.description}
-                      </div>
                     </div>
                   </div>
                 </button>
@@ -899,9 +896,6 @@ function CopyAgentWorkspace() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-900">
               {selectedAgent.label}
-            </p>
-            <p className="text-xs text-slate-500">
-              {selectedAgent.description}
             </p>
           </div>
           <div className="flex items-center gap-2">
