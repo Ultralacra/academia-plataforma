@@ -116,6 +116,7 @@ const EMPTY_MONTH_FORM: BusinessMonthRecord = {
   ads: 0,
   closerCommissions: 0,
   carlaBonus: 0,
+  bonos: 0,
   newClients: 0,
   highTicketRevenue: 0,
   delinquencyRate: 0.1,
@@ -170,6 +171,162 @@ function parseNumericInput(value: string) {
 const BM_SESSION_KEY = "bm-vault-auth";
 const BM_VAULT_PASSWORD_DEFAULT = "JJWEPNTLDIJE";
 
+// ── Componentes auxiliares: edición inline de cabeceras y celdas ─────────
+function EditableHeader({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const trimmed = draft.trim();
+          if (trimmed && trimmed !== value) onChange(trimmed);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        className="h-7 text-xs font-medium"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      title="Click para editar el título"
+      className="inline-flex items-center gap-1 w-full text-left hover:underline decoration-dotted underline-offset-2 group"
+    >
+      <span>{value}</span>
+      <Pencil className="h-3 w-3 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
+    </button>
+  );
+}
+
+function EditableCurrencyCell({
+  value,
+  onChange,
+  format,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  format: (n: number) => string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value || 0));
+  useEffect(() => {
+    setDraft(String(value || 0));
+  }, [value]);
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        type="number"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const next = Number(draft.replace(/,/g, "."));
+          const safe = Number.isFinite(next) ? next : 0;
+          if (safe !== value) onChange(safe);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === "Escape") {
+            setDraft(String(value || 0));
+            setEditing(false);
+          }
+        }}
+        className="h-7 w-28 text-sm"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      title="Click para editar el valor"
+      className="inline-flex items-center gap-1 text-left hover:underline decoration-dotted underline-offset-2 group"
+    >
+      <span>{format(value || 0)}</span>
+      <Pencil className="h-3 w-3 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
+    </button>
+  );
+}
+
+function EditableNumberCell({
+  value,
+  onChange,
+  format,
+  step,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  format?: (n: number) => string;
+  step?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? 0));
+  useEffect(() => {
+    setDraft(String(value ?? 0));
+  }, [value]);
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        type="number"
+        step={step}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const next = Number(draft.replace(/,/g, "."));
+          const safe = Number.isFinite(next) ? next : 0;
+          if (safe !== value) onChange(safe);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === "Escape") {
+            setDraft(String(value ?? 0));
+            setEditing(false);
+          }
+        }}
+        className="h-7 w-24 text-sm"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      title="Click para editar el valor"
+      className="inline-flex items-center gap-1 text-left hover:underline decoration-dotted underline-offset-2 group"
+    >
+      <span>{format ? format(value ?? 0) : String(value ?? 0)}</span>
+      <Pencil className="h-3 w-3 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
+    </button>
+  );
+}
+
 function BusinessMetricsContent() {
   const { user, isLoading } = useAuth();
   const [state, setState] = useState<BusinessMetricsState>(() =>
@@ -223,6 +380,30 @@ function BusinessMetricsContent() {
 
   const [vaultDraft, setVaultDraft] = useState("");
   const [vaultSavedFlash, setVaultSavedFlash] = useState(false);
+
+  // ── Edición inline de etiquetas de columnas y campos numéricos ──────────
+  const columnLabels = state.columnLabels ?? {};
+  const getColumnLabel = useCallback(
+    (key: string, fallback: string) => columnLabels[key] ?? fallback,
+    [columnLabels],
+  );
+  const setColumnLabel = useCallback((key: string, label: string) => {
+    setState((current) => ({
+      ...current,
+      columnLabels: { ...(current.columnLabels ?? {}), [key]: label },
+    }));
+  }, []);
+  const updateRecordField = useCallback(
+    (recordId: string, patch: Partial<BusinessMonthRecord>) => {
+      setState((current) => ({
+        ...current,
+        records: current.records.map((r) =>
+          r.id === recordId ? { ...r, ...patch } : r,
+        ),
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     if (sessionStorage.getItem(BM_SESSION_KEY) === "1") {
@@ -2360,19 +2541,75 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>CAC</TableHead>
-                      <TableHead>Ingreso / cliente</TableHead>
-                      <TableHead>3. Costo operativo por cliente</TableHead>
                       <TableHead>
-                        Costo operativo por cliente (4 meses)
+                        <EditableHeader
+                          value={getColumnLabel("th.1", "Mes")}
+                          onChange={(v) => setColumnLabel("th.1", v)}
+                        />
                       </TableHead>
-                      <TableHead>Margen op.</TableHead>
-                      <TableHead>LTGP Excel</TableHead>
-                      <TableHead>LTGP proyectado</TableHead>
-                      <TableHead>Payback</TableHead>
-                      <TableHead>ROIC</TableHead>
-                      <TableHead>Valor bruto</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.2", "CAC")}
+                          onChange={(v) => setColumnLabel("th.2", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.3", "Ingreso / cliente")}
+                          onChange={(v) => setColumnLabel("th.3", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.4",
+                            "3. Costo operativo por cliente",
+                          )}
+                          onChange={(v) => setColumnLabel("th.4", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.5",
+                            "Costo operativo por cliente (4 meses)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.5", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.6", "Margen op.")}
+                          onChange={(v) => setColumnLabel("th.6", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.7", "LTGP Excel")}
+                          onChange={(v) => setColumnLabel("th.7", v)}
+                        />
+                      </TableHead>
+                      {/* Columna LTGP proyectado ocultada por petición.
+                      <TableHead><EditableHeader value={getColumnLabel("th.8", "LTGP proyectado")} onChange={(v) => setColumnLabel("th.8", v)} /></TableHead>
+                      */}
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.9", "Payback")}
+                          onChange={(v) => setColumnLabel("th.9", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.10", "ROIC")}
+                          onChange={(v) => setColumnLabel("th.10", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.11", "Valor bruto")}
+                          onChange={(v) => setColumnLabel("th.11", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2393,9 +2630,11 @@ function BusinessMetricsContent() {
                           {formatCurrency(kpis.operatingMarginPerClient)}
                         </TableCell>
                         <TableCell>{formatCurrency(kpis.ltgpExcel)}</TableCell>
+                        {/* Celda LTGP proyectado ocultada por petición.
                         <TableCell>
                           {formatCurrency(kpis.ltgpProjected)}
                         </TableCell>
+                        */}
                         <TableCell>{kpis.paybackMonths.toFixed(2)} m</TableCell>
                         <TableCell
                           className={`font-bold ${
@@ -2430,11 +2669,36 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Operativo maestro</TableHead>
-                      <TableHead>Operativo partidas</TableHead>
-                      <TableHead>Ventas maestro</TableHead>
-                      <TableHead>Ventas partidas</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.12", "Mes")}
+                          onChange={(v) => setColumnLabel("th.12", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.13", "Operativo maestro")}
+                          onChange={(v) => setColumnLabel("th.13", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.14", "Operativo partidas")}
+                          onChange={(v) => setColumnLabel("th.14", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.15", "Ventas maestro")}
+                          onChange={(v) => setColumnLabel("th.15", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.16", "Ventas partidas")}
+                          onChange={(v) => setColumnLabel("th.16", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2449,13 +2713,29 @@ function BusinessMetricsContent() {
                             {formatMonthLabel(record.month)}
                           </TableCell>
                           <TableCell>
-                            {formatCurrency(record.roicOperationalCost)}
+                            <EditableCurrencyCell
+                              value={record.roicOperationalCost}
+                              format={formatCurrency}
+                              onChange={(v) =>
+                                updateRecordField(record.id, {
+                                  roicOperationalCost: v,
+                                })
+                              }
+                            />
                           </TableCell>
                           <TableCell>
                             {formatCurrency(totals.operativo)}
                           </TableCell>
                           <TableCell>
-                            {formatCurrency(record.marketingSalesCost)}
+                            <EditableCurrencyCell
+                              value={record.marketingSalesCost}
+                              format={formatCurrency}
+                              onChange={(v) =>
+                                updateRecordField(record.id, {
+                                  marketingSalesCost: v,
+                                })
+                              }
+                            />
                           </TableCell>
                           <TableCell>{formatCurrency(totals.ventas)}</TableCell>
                         </TableRow>
@@ -2576,7 +2856,7 @@ function BusinessMetricsContent() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Carla + bonos</Label>
+                      <Label>Carla</Label>
                       <Input
                         type="number"
                         value={monthForm.carlaBonus}
@@ -2589,10 +2869,23 @@ function BusinessMetricsContent() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label>Bonos</Label>
+                      <Input
+                        type="number"
+                        value={monthForm.bonos ?? 0}
+                        onChange={(e) =>
+                          setMonthForm((current) => ({
+                            ...current,
+                            bonos: parseNumericInput(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label className="flex items-center gap-1">
                         Ventas + marketing
                         <Badge variant="outline" className="ml-1 text-xs">
-                          = ADS + Comisiones + Carla
+                          = ADS + Comisiones + Carla + Bonos
                         </Badge>
                       </Label>
                       <Input
@@ -2602,7 +2895,8 @@ function BusinessMetricsContent() {
                             ? monthForm.marketingSalesCost
                             : monthForm.ads +
                               monthForm.closerCommissions +
-                              monthForm.carlaBonus
+                              monthForm.carlaBonus +
+                              (monthForm.bonos || 0)
                         }
                         onChange={(e) =>
                           setMonthForm((current) => ({
@@ -2862,40 +3156,141 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>ADS</TableHead>
-                      <TableHead>Revenue HT</TableHead>
-                      <TableHead>Nuevos</TableHead>
-                      <TableHead>Activos</TableHead>
-                      <TableHead>Costo op.</TableHead>
-                      <TableHead>ROIC op.</TableHead>
-                      <TableHead>Ventas</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.17", "Mes")}
+                          onChange={(v) => setColumnLabel("th.17", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.18", "ADS")}
+                          onChange={(v) => setColumnLabel("th.18", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.19", "Revenue HT")}
+                          onChange={(v) => setColumnLabel("th.19", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.20", "Nuevos")}
+                          onChange={(v) => setColumnLabel("th.20", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.21", "Activos")}
+                          onChange={(v) => setColumnLabel("th.21", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.22", "Costo op.")}
+                          onChange={(v) => setColumnLabel("th.22", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.23", "ROIC op.")}
+                          onChange={(v) => setColumnLabel("th.23", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.24", "Ventas")}
+                          onChange={(v) => setColumnLabel("th.24", v)}
+                        />
+                      </TableHead>
                       {recordCustomFields
                         .filter((f) => f.showInTable)
                         .map((f) => (
                           <TableHead key={`th-${f.key}`}>{f.label}</TableHead>
                         ))}
-                      <TableHead className="text-right">Acciones</TableHead>
+                      <TableHead className="text-right">
+                        <EditableHeader
+                          value={getColumnLabel("th.25", "Acciones")}
+                          onChange={(v) => setColumnLabel("th.25", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sortBusinessRecords(state.records).map((record) => (
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
-                        <TableCell>{formatCurrency(record.ads)}</TableCell>
                         <TableCell>
-                          {formatCurrency(record.highTicketRevenue)}
-                        </TableCell>
-                        <TableCell>{record.newClients}</TableCell>
-                        <TableCell>{record.activeStudents}</TableCell>
-                        <TableCell>
-                          {formatCurrency(record.operatingCostMonthly)}
-                        </TableCell>
-                        <TableCell>
-                          {formatCurrency(record.roicOperationalCost)}
+                          <EditableCurrencyCell
+                            value={record.ads}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { ads: v })
+                            }
+                          />
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(record.marketingSalesCost)}
+                          <EditableCurrencyCell
+                            value={record.highTicketRevenue}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                highTicketRevenue: v,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.newClients}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { newClients: v })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.activeStudents}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                activeStudents: v,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableCurrencyCell
+                            value={record.operatingCostMonthly}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                operatingCostMonthly: v,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableCurrencyCell
+                            value={record.roicOperationalCost}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                roicOperationalCost: v,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableCurrencyCell
+                            value={record.marketingSalesCost}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                marketingSalesCost: v,
+                              })
+                            }
+                          />
                         </TableCell>
                         {recordCustomFields
                           .filter((f) => f.showInTable)
@@ -3097,17 +3492,47 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Scope</TableHead>
-                      <TableHead>Categoría</TableHead>
-                      <TableHead>Monto</TableHead>
-                      <TableHead>Nota</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.26", "Mes")}
+                          onChange={(v) => setColumnLabel("th.26", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.27", "Scope")}
+                          onChange={(v) => setColumnLabel("th.27", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.28", "Categoría")}
+                          onChange={(v) => setColumnLabel("th.28", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.29", "Monto")}
+                          onChange={(v) => setColumnLabel("th.29", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.30", "Nota")}
+                          onChange={(v) => setColumnLabel("th.30", v)}
+                        />
+                      </TableHead>
                       {expenseCustomFields
                         .filter((f) => f.showInTable)
                         .map((f) => (
                           <TableHead key={`exth-${f.key}`}>{f.label}</TableHead>
                         ))}
-                      <TableHead className="text-right">Acciones</TableHead>
+                      <TableHead className="text-right">
+                        <EditableHeader
+                          value={getColumnLabel("th.31", "Acciones")}
+                          onChange={(v) => setColumnLabel("th.31", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3196,30 +3621,122 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>ADS</TableHead>
-                      <TableHead>Comisiones closers</TableHead>
-                      <TableHead>Carla + bonos</TableHead>
-                      <TableHead>Total adquisición</TableHead>
-                      <TableHead>Nuevos clientes</TableHead>
-                      <TableHead>CAC</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("cac.mes", "Mes")}
+                          onChange={(v) => setColumnLabel("cac.mes", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("cac.ads", "ADS")}
+                          onChange={(v) => setColumnLabel("cac.ads", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "cac.closerCommissions",
+                            "Comisiones closers",
+                          )}
+                          onChange={(v) =>
+                            setColumnLabel("cac.closerCommissions", v)
+                          }
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("cac.carla", "Carla")}
+                          onChange={(v) => setColumnLabel("cac.carla", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("cac.bonos", "Bonos")}
+                          onChange={(v) => setColumnLabel("cac.bonos", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "cac.totalAdquisicion",
+                            "Total adquisición",
+                          )}
+                          onChange={(v) =>
+                            setColumnLabel("cac.totalAdquisicion", v)
+                          }
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "cac.newClients",
+                            "Nuevos clientes",
+                          )}
+                          onChange={(v) => setColumnLabel("cac.newClients", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("cac.cac", "CAC")}
+                          onChange={(v) => setColumnLabel("cac.cac", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {derivedRows.map(({ record, kpis }) => (
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
-                        <TableCell>{formatCurrency(record.ads)}</TableCell>
                         <TableCell>
-                          {formatCurrency(record.closerCommissions)}
+                          <EditableCurrencyCell
+                            value={record.ads}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { ads: v })
+                            }
+                          />
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(record.carlaBonus)}
+                          <EditableCurrencyCell
+                            value={record.closerCommissions}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                closerCommissions: v,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableCurrencyCell
+                            value={record.carlaBonus}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { carlaBonus: v })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableCurrencyCell
+                            value={record.bonos || 0}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { bonos: v })
+                            }
+                          />
                         </TableCell>
                         <TableCell className="font-medium">
                           {formatCurrency(kpis.acquisitionCost)}
                         </TableCell>
-                        <TableCell>{record.newClients}</TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.newClients}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { newClients: v })
+                            }
+                          />
+                        </TableCell>
                         <TableCell className="font-bold">
                           {formatCurrency(kpis.cac)}
                         </TableCell>
@@ -3245,12 +3762,42 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Ingresos HT</TableHead>
-                      <TableHead>% Morosidad</TableHead>
-                      <TableHead>Pérdida morosidad</TableHead>
-                      <TableHead>Clientes HT</TableHead>
-                      <TableHead>Ingreso por cliente</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.32", "Mes")}
+                          onChange={(v) => setColumnLabel("th.32", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.33", "Ingresos HT")}
+                          onChange={(v) => setColumnLabel("th.33", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.34", "% Morosidad")}
+                          onChange={(v) => setColumnLabel("th.34", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.35", "Pérdida morosidad")}
+                          onChange={(v) => setColumnLabel("th.35", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.36", "Clientes HT")}
+                          onChange={(v) => setColumnLabel("th.36", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.37", "Ingreso por cliente")}
+                          onChange={(v) => setColumnLabel("th.37", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3258,15 +3805,41 @@ function BusinessMetricsContent() {
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
                         <TableCell>
-                          {formatCurrency(record.highTicketRevenue)}
+                          <EditableCurrencyCell
+                            value={record.highTicketRevenue}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                highTicketRevenue: v,
+                              })
+                            }
+                          />
                         </TableCell>
                         <TableCell>
-                          {formatPercent(record.delinquencyRate)}
+                          <EditableNumberCell
+                            value={record.delinquencyRate}
+                            step="0.01"
+                            format={formatPercent}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                delinquencyRate: v,
+                              })
+                            }
+                          />
                         </TableCell>
                         <TableCell className="text-destructive">
                           {formatCurrency(kpis.delinquencyLoss)}
                         </TableCell>
-                        <TableCell>{record.highTicketClients}</TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.highTicketClients}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                highTicketClients: v,
+                              })
+                            }
+                          />
+                        </TableCell>
                         <TableCell className="font-bold">
                           {formatCurrency(kpis.incomePerClient)}
                         </TableCell>
@@ -3311,12 +3884,51 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Costos mensuales</TableHead>
-                      <TableHead>Alumnos activos</TableHead>
-                      <TableHead>Clientes HT (nuevos)</TableHead>
-                      <TableHead>Costo / cliente (mensual)</TableHead>
-                      <TableHead>Costo total / cliente (4 meses)</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.38", "Mes")}
+                          onChange={(v) => setColumnLabel("th.38", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.39", "Costos mensuales")}
+                          onChange={(v) => setColumnLabel("th.39", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.40", "Alumnos activos")}
+                          onChange={(v) => setColumnLabel("th.40", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.41",
+                            "Clientes HT (nuevos)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.41", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.42",
+                            "Costo / cliente (mensual)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.42", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.43",
+                            "Costo total / cliente (4 meses)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.43", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3324,10 +3936,36 @@ function BusinessMetricsContent() {
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
                         <TableCell>
-                          {formatCurrency(record.operatingCostMonthly)}
+                          <EditableCurrencyCell
+                            value={record.operatingCostMonthly}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                operatingCostMonthly: v,
+                              })
+                            }
+                          />
                         </TableCell>
-                        <TableCell>{record.activeStudents}</TableCell>
-                        <TableCell>{record.highTicketClients}</TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.activeStudents}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                activeStudents: v,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.highTicketClients}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                highTicketClients: v,
+                              })
+                            }
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">
                           {formatCurrency(kpis.costPerClient)}
                         </TableCell>
@@ -3355,13 +3993,48 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Partida</TableHead>
-                      <TableHead>Importe</TableHead>
-                      <TableHead>Alumnos activos</TableHead>
-                      <TableHead>Costo / cliente</TableHead>
-                      <TableHead>Nota</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.44", "Mes")}
+                          onChange={(v) => setColumnLabel("th.44", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.45", "Tipo")}
+                          onChange={(v) => setColumnLabel("th.45", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.46", "Partida")}
+                          onChange={(v) => setColumnLabel("th.46", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.47", "Importe")}
+                          onChange={(v) => setColumnLabel("th.47", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.48", "Alumnos activos")}
+                          onChange={(v) => setColumnLabel("th.48", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.49", "Costo / cliente")}
+                          onChange={(v) => setColumnLabel("th.49", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.50", "Nota")}
+                          onChange={(v) => setColumnLabel("th.50", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3426,12 +4099,45 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Ingreso / cliente</TableHead>
-                      <TableHead>Costo op. / cliente</TableHead>
-                      <TableHead>Margen op. / cliente (H4)</TableHead>
-                      <TableHead>LTGP Excel (H5)</TableHead>
-                      <TableHead>LTGP proyectado</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.51", "Mes")}
+                          onChange={(v) => setColumnLabel("th.51", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.52", "Ingreso / cliente")}
+                          onChange={(v) => setColumnLabel("th.52", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.53", "Costo op. / cliente")}
+                          onChange={(v) => setColumnLabel("th.53", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.54",
+                            "Margen op. / cliente (H4)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.54", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.55", "LTGP Excel (H5)")}
+                          onChange={(v) => setColumnLabel("th.55", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.56", "LTGP proyectado")}
+                          onChange={(v) => setColumnLabel("th.56", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3475,11 +4181,39 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>LTGP</TableHead>
-                      <TableHead>CAC</TableHead>
-                      <TableHead>CAC Ratio (LTGP ÷ CAC)</TableHead>
-                      <TableHead>Evaluación</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.57", "Mes")}
+                          onChange={(v) => setColumnLabel("th.57", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.58", "LTGP")}
+                          onChange={(v) => setColumnLabel("th.58", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.59", "CAC")}
+                          onChange={(v) => setColumnLabel("th.59", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.60",
+                            "CAC Ratio (LTGP ÷ CAC)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.60", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.61", "Evaluación")}
+                          onChange={(v) => setColumnLabel("th.61", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3540,10 +4274,33 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>LTGP</TableHead>
-                      <TableHead>CAC</TableHead>
-                      <TableHead>Beneficio por cliente</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.62", "Mes")}
+                          onChange={(v) => setColumnLabel("th.62", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.63", "LTGP")}
+                          onChange={(v) => setColumnLabel("th.63", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.64", "CAC")}
+                          onChange={(v) => setColumnLabel("th.64", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.65",
+                            "Beneficio por cliente",
+                          )}
+                          onChange={(v) => setColumnLabel("th.65", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3579,11 +4336,42 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>CAC</TableHead>
-                      <TableHead>Ingreso / cliente real</TableHead>
-                      <TableHead>Ing. ÷ Duración (mensual)</TableHead>
-                      <TableHead>Payback en meses</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.66", "Mes")}
+                          onChange={(v) => setColumnLabel("th.66", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.67", "CAC")}
+                          onChange={(v) => setColumnLabel("th.67", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.68",
+                            "Ingreso / cliente real",
+                          )}
+                          onChange={(v) => setColumnLabel("th.68", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.69",
+                            "Ing. ÷ Duración (mensual)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.69", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.70", "Payback en meses")}
+                          onChange={(v) => setColumnLabel("th.70", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3626,13 +4414,48 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Ingresos HT</TableHead>
-                      <TableHead>Gastos operativos</TableHead>
-                      <TableHead>Costos ventas/mkt</TableHead>
-                      <TableHead>Profit</TableHead>
-                      <TableHead>ROIC</TableHead>
-                      <TableHead>Observación</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.71", "Mes")}
+                          onChange={(v) => setColumnLabel("th.71", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.72", "Ingresos HT")}
+                          onChange={(v) => setColumnLabel("th.72", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.73", "Gastos operativos")}
+                          onChange={(v) => setColumnLabel("th.73", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.74", "Costos ventas/mkt")}
+                          onChange={(v) => setColumnLabel("th.74", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.75", "Profit")}
+                          onChange={(v) => setColumnLabel("th.75", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.76", "ROIC")}
+                          onChange={(v) => setColumnLabel("th.76", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.77", "Observación")}
+                          onChange={(v) => setColumnLabel("th.77", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3640,13 +4463,37 @@ function BusinessMetricsContent() {
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
                         <TableCell>
-                          {formatCurrency(record.highTicketRevenue)}
+                          <EditableCurrencyCell
+                            value={record.highTicketRevenue}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                highTicketRevenue: v,
+                              })
+                            }
+                          />
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(record.roicOperationalCost)}
+                          <EditableCurrencyCell
+                            value={record.roicOperationalCost}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                roicOperationalCost: v,
+                              })
+                            }
+                          />
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(record.marketingSalesCost)}
+                          <EditableCurrencyCell
+                            value={record.marketingSalesCost}
+                            format={formatCurrency}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                marketingSalesCost: v,
+                              })
+                            }
+                          />
                         </TableCell>
                         <TableCell
                           className={`font-medium ${kpis.roicProfit >= 0 ? "" : "text-destructive"}`}
@@ -3682,10 +4529,30 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Categoría</TableHead>
-                      <TableHead>Importe</TableHead>
-                      <TableHead>Nota</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.78", "Mes")}
+                          onChange={(v) => setColumnLabel("th.78", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.79", "Categoría")}
+                          onChange={(v) => setColumnLabel("th.79", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.80", "Importe")}
+                          onChange={(v) => setColumnLabel("th.80", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.81", "Nota")}
+                          onChange={(v) => setColumnLabel("th.81", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3728,17 +4595,44 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Clientes mensuales</TableHead>
-                      <TableHead>Ingreso / cliente</TableHead>
-                      <TableHead>Velocidad de ventas</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.82", "Mes")}
+                          onChange={(v) => setColumnLabel("th.82", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.83", "Clientes mensuales")}
+                          onChange={(v) => setColumnLabel("th.83", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.84", "Ingreso / cliente")}
+                          onChange={(v) => setColumnLabel("th.84", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.85", "Velocidad de ventas")}
+                          onChange={(v) => setColumnLabel("th.85", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {derivedRows.map(({ record, kpis }) => (
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
-                        <TableCell>{record.newClients}</TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.newClients}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { newClients: v })
+                            }
+                          />
+                        </TableCell>
                         <TableCell>
                           {formatCurrency(kpis.incomePerClient)}
                         </TableCell>
@@ -3768,18 +4662,59 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Clientes activos</TableHead>
-                      <TableHead>Churn estructural</TableHead>
-                      <TableHead>Clientes que rotan (salidas)</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.86", "Mes")}
+                          onChange={(v) => setColumnLabel("th.86", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.87", "Clientes activos")}
+                          onChange={(v) => setColumnLabel("th.87", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.88", "Churn estructural")}
+                          onChange={(v) => setColumnLabel("th.88", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.89",
+                            "Clientes que rotan (salidas)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.89", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {derivedRows.map(({ record, kpis }) => (
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
-                        <TableCell>{record.activeStudents}</TableCell>
-                        <TableCell>{formatPercent(record.churnRate)}</TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.activeStudents}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                activeStudents: v,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.churnRate}
+                            step="0.01"
+                            format={formatPercent}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { churnRate: v })
+                            }
+                          />
+                        </TableCell>
                         <TableCell className="font-bold">
                           {kpis.structuralChurn.toFixed(1)}
                         </TableCell>
@@ -3805,18 +4740,53 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Ventas (entradas)</TableHead>
-                      <TableHead>Rotación estructural (salidas)</TableHead>
-                      <TableHead>Entrada vs salida</TableHead>
-                      <TableHead>Tendencia</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.90", "Mes")}
+                          onChange={(v) => setColumnLabel("th.90", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.91", "Ventas (entradas)")}
+                          onChange={(v) => setColumnLabel("th.91", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.92",
+                            "Rotación estructural (salidas)",
+                          )}
+                          onChange={(v) => setColumnLabel("th.92", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.93", "Entrada vs salida")}
+                          onChange={(v) => setColumnLabel("th.93", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.94", "Tendencia")}
+                          onChange={(v) => setColumnLabel("th.94", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {derivedRows.map(({ record, kpis }) => (
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
-                        <TableCell>{record.newClients}</TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.newClients}
+                            onChange={(v) =>
+                              updateRecordField(record.id, { newClients: v })
+                            }
+                          />
+                        </TableCell>
                         <TableCell>{kpis.structuralChurn.toFixed(1)}</TableCell>
                         <TableCell className="font-bold">
                           {kpis.entryVsExit.toFixed(2)}x
@@ -3862,17 +4832,49 @@ function BusinessMetricsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead>Clientes HT</TableHead>
-                      <TableHead>LTGP</TableHead>
-                      <TableHead>Valor bruto generado</TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.95", "Mes")}
+                          onChange={(v) => setColumnLabel("th.95", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.96", "Clientes HT")}
+                          onChange={(v) => setColumnLabel("th.96", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel("th.97", "LTGP")}
+                          onChange={(v) => setColumnLabel("th.97", v)}
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <EditableHeader
+                          value={getColumnLabel(
+                            "th.98",
+                            "Valor bruto generado",
+                          )}
+                          onChange={(v) => setColumnLabel("th.98", v)}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {derivedRows.map(({ record, kpis }) => (
                       <TableRow key={record.id}>
                         <TableCell>{formatMonthLabel(record.month)}</TableCell>
-                        <TableCell>{record.highTicketClients}</TableCell>
+                        <TableCell>
+                          <EditableNumberCell
+                            value={record.highTicketClients}
+                            onChange={(v) =>
+                              updateRecordField(record.id, {
+                                highTicketClients: v,
+                              })
+                            }
+                          />
+                        </TableCell>
                         <TableCell>{formatCurrency(kpis.ltgpExcel)}</TableCell>
                         <TableCell className="font-bold">
                           {formatCurrency(kpis.grossValueGenerated)}
@@ -3908,29 +4910,89 @@ function BusinessMetricsContent() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Mes</TableHead>
-                          <TableHead className="text-right">Nuevos</TableHead>
-                          <TableHead className="text-right">HT</TableHead>
-                          <TableHead className="text-right">Activos</TableHead>
-                          <TableHead className="text-right">
-                            Retención
-                          </TableHead>
-                          <TableHead className="text-right">Revenue</TableHead>
-                          <TableHead className="text-right">
-                            Rev/cliente
-                          </TableHead>
-                          <TableHead className="text-right">CAC</TableHead>
-                          <TableHead className="text-right">
-                            LTGP real
+                          <TableHead>
+                            <EditableHeader
+                              value={getColumnLabel("th.99", "Mes")}
+                              onChange={(v) => setColumnLabel("th.99", v)}
+                            />
                           </TableHead>
                           <TableHead className="text-right">
-                            LTGP proy.
+                            <EditableHeader
+                              value={getColumnLabel("th.100", "Nuevos")}
+                              onChange={(v) => setColumnLabel("th.100", v)}
+                            />
                           </TableHead>
-                          <TableHead className="text-right">Payback</TableHead>
-                          <TableHead className="text-right">ROIC</TableHead>
-                          <TableHead className="text-right">Op. ($)</TableHead>
                           <TableHead className="text-right">
-                            Ventas ($)
+                            <EditableHeader
+                              value={getColumnLabel("th.101", "HT")}
+                              onChange={(v) => setColumnLabel("th.101", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.102", "Activos")}
+                              onChange={(v) => setColumnLabel("th.102", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.103", "Retención")}
+                              onChange={(v) => setColumnLabel("th.103", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.104", "Revenue")}
+                              onChange={(v) => setColumnLabel("th.104", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.105", "Rev/cliente")}
+                              onChange={(v) => setColumnLabel("th.105", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.106", "CAC")}
+                              onChange={(v) => setColumnLabel("th.106", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.107", "LTGP real")}
+                              onChange={(v) => setColumnLabel("th.107", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.108", "LTGP proy.")}
+                              onChange={(v) => setColumnLabel("th.108", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.109", "Payback")}
+                              onChange={(v) => setColumnLabel("th.109", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.110", "ROIC")}
+                              onChange={(v) => setColumnLabel("th.110", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.111", "Op. ($)")}
+                              onChange={(v) => setColumnLabel("th.111", v)}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <EditableHeader
+                              value={getColumnLabel("th.112", "Ventas ($)")}
+                              onChange={(v) => setColumnLabel("th.112", v)}
+                            />
                           </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -4394,12 +5456,42 @@ function BusinessMetricsContent() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Etiqueta</TableHead>
-                        <TableHead>Clave</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Destino</TableHead>
-                        <TableHead>Columna</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.113", "Etiqueta")}
+                            onChange={(v) => setColumnLabel("th.113", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.114", "Clave")}
+                            onChange={(v) => setColumnLabel("th.114", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.115", "Tipo")}
+                            onChange={(v) => setColumnLabel("th.115", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.116", "Destino")}
+                            onChange={(v) => setColumnLabel("th.116", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.117", "Columna")}
+                            onChange={(v) => setColumnLabel("th.117", v)}
+                          />
+                        </TableHead>
+                        <TableHead className="text-right">
+                          <EditableHeader
+                            value={getColumnLabel("th.118", "Acciones")}
+                            onChange={(v) => setColumnLabel("th.118", v)}
+                          />
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -4608,6 +5700,7 @@ function BusinessMetricsContent() {
                                 ads: 0,
                                 closerCommissions: 0,
                                 carlaBonus: 0,
+                                bonos: 0,
                                 newClients: 0,
                                 highTicketRevenue: 0,
                                 delinquencyRate: 0,
@@ -4678,12 +5771,42 @@ function BusinessMetricsContent() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nombre</TableHead>
-                        <TableHead>Clave</TableHead>
-                        <TableHead>Expresión</TableHead>
-                        <TableHead>Formato</TableHead>
-                        <TableHead>Valor (periodo)</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.119", "Nombre")}
+                            onChange={(v) => setColumnLabel("th.119", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.120", "Clave")}
+                            onChange={(v) => setColumnLabel("th.120", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.121", "Expresión")}
+                            onChange={(v) => setColumnLabel("th.121", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.122", "Formato")}
+                            onChange={(v) => setColumnLabel("th.122", v)}
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <EditableHeader
+                            value={getColumnLabel("th.123", "Valor (periodo)")}
+                            onChange={(v) => setColumnLabel("th.123", v)}
+                          />
+                        </TableHead>
+                        <TableHead className="text-right">
+                          <EditableHeader
+                            value={getColumnLabel("th.124", "Acciones")}
+                            onChange={(v) => setColumnLabel("th.124", v)}
+                          />
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

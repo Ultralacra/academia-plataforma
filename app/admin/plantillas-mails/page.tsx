@@ -57,6 +57,10 @@ import {
   getContractExpirySource,
   CONTRACT_EXPIRY_TEMPLATES,
 } from "@/lib/email-templates/contract-expiry";
+import {
+  getRescateSource,
+  RESCATE_TEMPLATES,
+} from "@/lib/email-templates/rescate-estudiante";
 
 type MailTemplateKey =
   | "welcome"
@@ -85,7 +89,15 @@ type MailTemplateKey =
   | "starter_cierre"
   | "contrato_por_vencer_15d"
   | "contrato_completado_5d"
-  | "membresia_por_vencer_10d";
+  | "membresia_por_vencer_10d"
+  | "rescate_fase1_email1"
+  | "rescate_fase1_followup"
+  | "rescate_fase2_email1"
+  | "rescate_fase2_followup"
+  | "rescate_fase3_email1"
+  | "rescate_fase3_followup"
+  | "rescate_fase5_email1"
+  | "rescate_fase5_followup";
 
 type TemplateCategory =
   | "general"
@@ -93,7 +105,8 @@ type TemplateCategory =
   | "accesos"
   | "contrasena"
   | "onboarding"
-  | "starter";
+  | "starter"
+  | "rescate";
 
 const TEMPLATE_CATEGORIES: { id: TemplateCategory; label: string }[] = [
   { id: "general", label: "General" },
@@ -102,6 +115,7 @@ const TEMPLATE_CATEGORIES: { id: TemplateCategory; label: string }[] = [
   { id: "contrasena", label: "Contraseña" },
   { id: "onboarding", label: "Workflow Correos - Onboarding" },
   { id: "starter", label: "Workflow Correos - Starter" },
+  { id: "rescate", label: "Rescate del Estudiante" },
 ];
 
 const TEMPLATE_CATEGORY_MAP: Record<MailTemplateKey, TemplateCategory> = {
@@ -132,6 +146,14 @@ const TEMPLATE_CATEGORY_MAP: Record<MailTemplateKey, TemplateCategory> = {
   contrato_por_vencer_15d: "accesos",
   contrato_completado_5d: "accesos",
   membresia_por_vencer_10d: "accesos",
+  rescate_fase1_email1: "rescate",
+  rescate_fase1_followup: "rescate",
+  rescate_fase2_email1: "rescate",
+  rescate_fase2_followup: "rescate",
+  rescate_fase3_email1: "rescate",
+  rescate_fase3_followup: "rescate",
+  rescate_fase5_email1: "rescate",
+  rescate_fase5_followup: "rescate",
 };
 
 type MetadataTemplatePayload = {
@@ -355,6 +377,14 @@ const TEMPLATE_SPECIFIC_VARIABLES: Record<MailTemplateKey, TemplateVariable[]> =
     contrato_por_vencer_15d: [],
     contrato_completado_5d: [],
     membresia_por_vencer_10d: [],
+    rescate_fase1_email1: [],
+    rescate_fase1_followup: [],
+    rescate_fase2_email1: [],
+    rescate_fase2_followup: [],
+    rescate_fase3_email1: [],
+    rescate_fase3_followup: [],
+    rescate_fase5_email1: [],
+    rescate_fase5_followup: [],
   };
 
 /* ── Interpolación de variables para preview / test ────────────── */
@@ -608,6 +638,27 @@ function getDefaultTemplates(): MailTemplateItem[] {
       headerImageUrl: extractFirstImageSrc(src.html),
       activo: true,
       orden: 24 + i,
+      fromMetadata: false,
+    });
+  }
+
+  // Agregar las 8 plantillas de Rescate del Estudiante (Accountability)
+  for (let i = 0; i < RESCATE_TEMPLATES.length; i++) {
+    const meta = RESCATE_TEMPLATES[i];
+    const src = getRescateSource(meta.step);
+    base.push({
+      key: meta.key as MailTemplateKey,
+      entityId: meta.key,
+      name: meta.name,
+      description: meta.description,
+      endpoint: "/api/brevo/send-rescate",
+      source: "lib/email-templates/rescate-estudiante.ts",
+      subject: src.subject,
+      html: src.html,
+      text: src.text,
+      headerImageUrl: extractFirstImageSrc(src.html),
+      activo: true,
+      orden: 28 + i,
       fromMetadata: false,
     });
   }
@@ -1052,19 +1103,33 @@ export default function PlantillasMailsPage() {
   async function sendTemplateTest(template: MailTemplateItem) {
     setSendingTestKey(template.key);
     try {
-      const res = await fetch("/api/brevo/send-preview", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          to: TEST_TEMPLATE_EMAIL,
-          subject: renderSubjectPreview(template),
-          html: renderTemplatePreview(template),
-          text: renderTextPreview(template),
-        }),
-      });
+      const isRescate =
+        (TEMPLATE_CATEGORY_MAP[template.key] as string) === "rescate";
+      const res = isRescate
+        ? await fetch("/api/brevo/send-rescate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              templateKey: template.key,
+              to: TEST_TEMPLATE_EMAIL,
+              first_name: "César",
+              recipientName: "César",
+            }),
+          })
+        : await fetch("/api/brevo/send-preview", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              to: TEST_TEMPLATE_EMAIL,
+              subject: renderSubjectPreview(template),
+              html: renderTemplatePreview(template),
+              text: renderTextPreview(template),
+            }),
+          });
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok || String(json?.status || "") !== "success") {

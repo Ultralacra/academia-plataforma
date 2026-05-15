@@ -1,4 +1,4 @@
-import type { User } from "@/lib/auth";
+﻿import type { User } from "@/lib/auth";
 
 export const BUSINESS_METRICS_ADMIN_ID = 926;
 export const BUSINESS_METRICS_STORAGE_KEY = "business-metrics-admin:v2";
@@ -9,6 +9,8 @@ export type BusinessMonthRecord = {
   ads: number;
   closerCommissions: number;
   carlaBonus: number;
+  /** Bonos (campo separado de Carla, editable manualmente). */
+  bonos: number;
   newClients: number;
   highTicketRevenue: number;
   delinquencyRate: number;
@@ -20,7 +22,7 @@ export type BusinessMonthRecord = {
   roicOperationalCost: number;
   marketingSalesCost: number;
   notes?: string;
-  /** Valores para campos personalizados (clave -> número o texto). */
+  /** Valores para campos personalizados (clave -> nÃºmero o texto). */
   extra?: Record<string, number | string>;
 };
 
@@ -31,7 +33,7 @@ export type BusinessExpenseEntry = {
   category: string;
   amount: number;
   note?: string;
-  /** Valores para campos personalizados (clave -> número o texto). */
+  /** Valores para campos personalizados (clave -> nÃºmero o texto). */
   extra?: Record<string, number | string>;
 };
 
@@ -52,7 +54,7 @@ export type CustomFormulaFormat = "number" | "currency" | "percent";
 export type CustomFormulaDef = {
   key: string;
   label: string;
-  /** Expresión libre: +, -, *, /, (), nombres de variables y números. */
+  /** ExpresiÃ³n libre: +, -, *, /, (), nombres de variables y nÃºmeros. */
   expression: string;
   format: CustomFormulaFormat;
   /** Si true se muestra como tarjeta en el overview. */
@@ -66,8 +68,10 @@ export type BusinessMetricsState = {
   customFields?: CustomFieldDef[];
   /** Definiciones de KPIs personalizados. */
   customFormulas?: CustomFormulaDef[];
-  /** Clave (vault) del módulo, editable desde el panel auto-admin. */
+  /** Clave (vault) del mÃ³dulo, editable desde el panel auto-admin. */
   vaultPassword?: string;
+  /** Etiquetas personalizadas de columnas de tablas (clave → texto). */
+  columnLabels?: Record<string, string>;
 };
 
 export type BusinessKpiRow = {
@@ -123,7 +127,7 @@ export const BUSINESS_FORMULAS = [
   {
     label: "Ingreso por cliente",
     formula:
-      "(ingresos high ticket - pérdida por morosidad) / clientes high ticket",
+      "(ingresos high ticket - pÃ©rdida por morosidad) / clientes high ticket",
   },
   {
     label: "Costo operativo por cliente",
@@ -131,7 +135,7 @@ export const BUSINESS_FORMULAS = [
   },
   {
     label: "Costo total por cliente",
-    formula: "costo operativo por cliente * duración media en meses",
+    formula: "costo operativo por cliente * duraciÃ³n media en meses",
   },
   {
     label: "Margen operativo por cliente",
@@ -140,12 +144,12 @@ export const BUSINESS_FORMULAS = [
   {
     label: "LTGP Excel",
     formula:
-      "réplica literal del Excel actual: igual al margen operativo por cliente",
+      "rÃ©plica literal del Excel actual: igual al margen operativo por cliente",
   },
   {
     label: "LTGP proyectado",
     formula:
-      "margen operativo por cliente * duración media en meses",
+      "margen operativo por cliente * duraciÃ³n media en meses",
   },
   {
     label: "CAC Ratio",
@@ -157,7 +161,7 @@ export const BUSINESS_FORMULAS = [
   },
   {
     label: "Payback",
-    formula: "CAC / (ingreso por cliente / duración media)",
+    formula: "CAC / (ingreso por cliente / duraciÃ³n media)",
   },
   {
     label: "ROIC",
@@ -169,7 +173,7 @@ export const BUSINESS_FORMULAS = [
     formula: "nuevos clientes * ingreso por cliente",
   },
   {
-    label: "Rotación estructural",
+    label: "RotaciÃ³n estructural",
     formula: "alumnos activos * churn estructural",
   },
   {
@@ -204,7 +208,8 @@ export function buildBusinessSeedState(): BusinessMetricsState {
       month: "2025-09",
       ads: 84241.13,
       closerCommissions: 22553,
-      carlaBonus: 2472,
+      carlaBonus: 0,
+      bonos: 0,
       newClients: 66,
       highTicketRevenue: 252465.06,
       delinquencyRate: 0.1,
@@ -222,7 +227,8 @@ export function buildBusinessSeedState(): BusinessMetricsState {
       month: "2025-10",
       ads: 56536.75,
       closerCommissions: 20276,
-      carlaBonus: 4251,
+      carlaBonus: 0,
+      bonos: 0,
       newClients: 71,
       highTicketRevenue: 192644.81,
       delinquencyRate: 0.1,
@@ -239,7 +245,8 @@ export function buildBusinessSeedState(): BusinessMetricsState {
       month: "2025-11",
       ads: 74348.59,
       closerCommissions: 13798,
-      carlaBonus: 3202,
+      carlaBonus: 0,
+      bonos: 0,
       newClients: 49,
       highTicketRevenue: 232879.69,
       delinquencyRate: 0.1,
@@ -256,7 +263,8 @@ export function buildBusinessSeedState(): BusinessMetricsState {
       month: "2025-12",
       ads: 84241.13,
       closerCommissions: 15173,
-      carlaBonus: 3608,
+      carlaBonus: 0,
+      bonos: 0,
       newClients: 50,
       highTicketRevenue: 160371.18,
       delinquencyRate: 0.1,
@@ -273,7 +281,8 @@ export function buildBusinessSeedState(): BusinessMetricsState {
       month: "2026-01",
       ads: 90644.21,
       closerCommissions: 14953,
-      carlaBonus: 3620,
+      carlaBonus: 0,
+      bonos: 0,
       newClients: 66,
       highTicketRevenue: 190559.29,
       delinquencyRate: 0.1,
@@ -290,7 +299,8 @@ export function buildBusinessSeedState(): BusinessMetricsState {
       month: "2026-02",
       ads: 63529.07,
       closerCommissions: 16707.5,
-      carlaBonus: 2235,
+      carlaBonus: 0,
+      bonos: 0,
       newClients: 71,
       highTicketRevenue: 191026.32,
       delinquencyRate: 0.1,
@@ -307,7 +317,8 @@ export function buildBusinessSeedState(): BusinessMetricsState {
       month: "2026-03",
       ads: 44632.66,
       closerCommissions: 13805,
-      carlaBonus: 3463,
+      carlaBonus: 0,
+      bonos: 0,
       newClients: 49,
       highTicketRevenue: 165442.1,
       delinquencyRate: 0.1,
@@ -321,76 +332,76 @@ export function buildBusinessSeedState(): BusinessMetricsState {
     },
   ];
 
-  // Partidas detalladas extraídas directamente del Excel — Hoja 3 (Costo operativo)
+  // Partidas detalladas extraÃ­das directamente del Excel â€” Hoja 3 (Costo operativo)
   // scope "ventas" = Publicidad y Reembolso (en ROIC se contabilizan como Ventas/mkt)
   const expenses: BusinessExpenseEntry[] = [
-    // ── 2025-09 (sept/25) ──────────────────────────────────────────
+    // â”€â”€ 2025-09 (sept/25) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     { id: "2025-09-op-1",  month: "2025-09", scope: "operativo", category: "Plataforma",          amount: 4258.98,   note: "" },
-    { id: "2025-09-op-2",  month: "2025-09", scope: "operativo", category: "Nómina Septiembre",   amount: 21075.30,  note: "" },
+    { id: "2025-09-op-2",  month: "2025-09", scope: "operativo", category: "NÃ³mina Septiembre",   amount: 21075.30,  note: "" },
     { id: "2025-09-op-3",  month: "2025-09", scope: "operativo", category: "Freelancers",         amount: 2302,      note: "" },
-    { id: "2025-09-op-4",  month: "2025-09", scope: "operativo", category: "Bonificación",        amount: 860,       note: "" },
+    { id: "2025-09-op-4",  month: "2025-09", scope: "operativo", category: "BonificaciÃ³n",        amount: 860,       note: "" },
     { id: "2025-09-op-5",  month: "2025-09", scope: "operativo", category: "Otros gastos",        amount: 246.98,    note: "" },
     { id: "2025-09-op-6",  month: "2025-09", scope: "operativo", category: "Gastos Bancarios",    amount: 5,         note: "" },
     { id: "2025-09-vt-1",  month: "2025-09", scope: "ventas",    category: "Publicidad",          amount: 84241.13,  note: "ADS" },
     { id: "2025-09-vt-2",  month: "2025-09", scope: "ventas",    category: "Reembolso",           amount: 3500,      note: "" },
-    // ── 2025-10 (oct/25) ───────────────────────────────────────────
+    // â”€â”€ 2025-10 (oct/25) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     { id: "2025-10-op-1",  month: "2025-10", scope: "operativo", category: "Plataforma",          amount: 3429.18,   note: "" },
-    { id: "2025-10-op-2",  month: "2025-10", scope: "operativo", category: "Nómina Octubre",      amount: 22133,     note: "" },
+    { id: "2025-10-op-2",  month: "2025-10", scope: "operativo", category: "NÃ³mina Octubre",      amount: 22133,     note: "" },
     { id: "2025-10-op-3",  month: "2025-10", scope: "operativo", category: "Freelancers",         amount: 530,       note: "" },
-    { id: "2025-10-op-4",  month: "2025-10", scope: "operativo", category: "Bonificación",        amount: 3943,      note: "" },
+    { id: "2025-10-op-4",  month: "2025-10", scope: "operativo", category: "BonificaciÃ³n",        amount: 3943,      note: "" },
     { id: "2025-10-op-5",  month: "2025-10", scope: "operativo", category: "Otros gastos",        amount: 1298.66,   note: "" },
     { id: "2025-10-op-6",  month: "2025-10", scope: "operativo", category: "Gastos Bancarios",    amount: 11.13,     note: "" },
     { id: "2025-10-vt-1",  month: "2025-10", scope: "ventas",    category: "Publicidad",          amount: 56536.75,  note: "ADS" },
-    // ── 2025-11 (nov/25) ───────────────────────────────────────────
+    // â”€â”€ 2025-11 (nov/25) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     { id: "2025-11-op-1",  month: "2025-11", scope: "operativo", category: "Plataforma",          amount: 3379.41,   note: "" },
-    { id: "2025-11-op-2",  month: "2025-11", scope: "operativo", category: "Nómina Noviembre",    amount: 19358,     note: "" },
+    { id: "2025-11-op-2",  month: "2025-11", scope: "operativo", category: "NÃ³mina Noviembre",    amount: 19358,     note: "" },
     { id: "2025-11-op-3",  month: "2025-11", scope: "operativo", category: "Freelancers",         amount: 895,       note: "" },
-    { id: "2025-11-op-4",  month: "2025-11", scope: "operativo", category: "Bonificación",        amount: 3559.30,   note: "" },
-    { id: "2025-11-op-5",  month: "2025-11", scope: "operativo", category: "Comisión Rutsi",      amount: 1000,      note: "" },
-    { id: "2025-11-op-6",  month: "2025-11", scope: "operativo", category: "Jurídico",            amount: 119,       note: "" },
-    { id: "2025-11-op-7",  month: "2025-11", scope: "operativo", category: "Comisión Referidos",  amount: 870,       note: "" },
+    { id: "2025-11-op-4",  month: "2025-11", scope: "operativo", category: "BonificaciÃ³n",        amount: 3559.30,   note: "" },
+    { id: "2025-11-op-5",  month: "2025-11", scope: "operativo", category: "ComisiÃ³n Rutsi",      amount: 1000,      note: "" },
+    { id: "2025-11-op-6",  month: "2025-11", scope: "operativo", category: "JurÃ­dico",            amount: 119,       note: "" },
+    { id: "2025-11-op-7",  month: "2025-11", scope: "operativo", category: "ComisiÃ³n Referidos",  amount: 870,       note: "" },
     { id: "2025-11-op-8",  month: "2025-11", scope: "operativo", category: "Gastos Bancarios",    amount: 6,         note: "" },
     { id: "2025-11-op-9",  month: "2025-11", scope: "operativo", category: "Premio Estudiantes",  amount: 200,       note: "" },
     { id: "2025-11-vt-1",  month: "2025-11", scope: "ventas",    category: "Publicidad",          amount: 74348.59,  note: "ADS" },
-    // ── 2025-12 (dic/25) ───────────────────────────────────────────
+    // â”€â”€ 2025-12 (dic/25) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     { id: "2025-12-op-1",  month: "2025-12", scope: "operativo", category: "Plataforma",          amount: 3184.48,   note: "" },
-    { id: "2025-12-op-2",  month: "2025-12", scope: "operativo", category: "Nómina Diciembre",    amount: 18151,     note: "" },
+    { id: "2025-12-op-2",  month: "2025-12", scope: "operativo", category: "NÃ³mina Diciembre",    amount: 18151,     note: "" },
     { id: "2025-12-op-3",  month: "2025-12", scope: "operativo", category: "Freelancers",         amount: 1207.71,   note: "" },
-    { id: "2025-12-op-4",  month: "2025-12", scope: "operativo", category: "Bonificación",        amount: 2089,      note: "" },
-    { id: "2025-12-op-5",  month: "2025-12", scope: "operativo", category: "Comisión Rutsi",      amount: 1000,      note: "" },
+    { id: "2025-12-op-4",  month: "2025-12", scope: "operativo", category: "BonificaciÃ³n",        amount: 2089,      note: "" },
+    { id: "2025-12-op-5",  month: "2025-12", scope: "operativo", category: "ComisiÃ³n Rutsi",      amount: 1000,      note: "" },
     { id: "2025-12-op-6",  month: "2025-12", scope: "operativo", category: "Otros gastos",        amount: 87.35,     note: "" },
-    { id: "2025-12-op-7",  month: "2025-12", scope: "operativo", category: "Jurídico",            amount: 250,       note: "" },
+    { id: "2025-12-op-7",  month: "2025-12", scope: "operativo", category: "JurÃ­dico",            amount: 250,       note: "" },
     { id: "2025-12-op-8",  month: "2025-12", scope: "operativo", category: "Gastos Bancarios",    amount: 273,       note: "" },
     { id: "2025-12-op-9",  month: "2025-12", scope: "operativo", category: "Premio Estudiantes",  amount: 604,       note: "" },
     { id: "2025-12-op-10", month: "2025-12", scope: "operativo", category: "Servicio Contable",   amount: 4650,      note: "" },
     { id: "2025-12-vt-1",  month: "2025-12", scope: "ventas",    category: "Publicidad",          amount: 40292.68,  note: "ADS" },
-    // ── 2026-01 (ene/26) ───────────────────────────────────────────
+    // â”€â”€ 2026-01 (ene/26) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     { id: "2026-01-op-1",  month: "2026-01", scope: "operativo", category: "Plataforma",          amount: 2833.69,   note: "" },
-    { id: "2026-01-op-2",  month: "2026-01", scope: "operativo", category: "Nómina Enero",        amount: 22878.67,  note: "" },
+    { id: "2026-01-op-2",  month: "2026-01", scope: "operativo", category: "NÃ³mina Enero",        amount: 22878.67,  note: "" },
     { id: "2026-01-op-3",  month: "2026-01", scope: "operativo", category: "Freelancers",         amount: 2770.04,   note: "" },
-    { id: "2026-01-op-4",  month: "2026-01", scope: "operativo", category: "Bonificación",        amount: 4620,      note: "" },
-    { id: "2026-01-op-5",  month: "2026-01", scope: "operativo", category: "Comisión Rutsi",      amount: 1000,      note: "" },
+    { id: "2026-01-op-4",  month: "2026-01", scope: "operativo", category: "BonificaciÃ³n",        amount: 4620,      note: "" },
+    { id: "2026-01-op-5",  month: "2026-01", scope: "operativo", category: "ComisiÃ³n Rutsi",      amount: 1000,      note: "" },
     { id: "2026-01-op-6",  month: "2026-01", scope: "operativo", category: "Otros gastos",        amount: 435.20,    note: "" },
-    { id: "2026-01-op-7",  month: "2026-01", scope: "operativo", category: "Jurídico",            amount: 372,       note: "" },
+    { id: "2026-01-op-7",  month: "2026-01", scope: "operativo", category: "JurÃ­dico",            amount: 372,       note: "" },
     { id: "2026-01-op-8",  month: "2026-01", scope: "operativo", category: "Servicio Contable",   amount: 980,       note: "" },
     { id: "2026-01-op-9",  month: "2026-01", scope: "operativo", category: "Premio Estudiantes",  amount: 400,       note: "" },
-    // ── 2026-02 (feb/26) ───────────────────────────────────────────
+    // â”€â”€ 2026-02 (feb/26) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     { id: "2026-02-op-1",  month: "2026-02", scope: "operativo", category: "Plataforma",          amount: 2727.98,   note: "" },
-    { id: "2026-02-op-2",  month: "2026-02", scope: "operativo", category: "Nómina Febrero",      amount: 25760,     note: "" },
+    { id: "2026-02-op-2",  month: "2026-02", scope: "operativo", category: "NÃ³mina Febrero",      amount: 25760,     note: "" },
     { id: "2026-02-op-3",  month: "2026-02", scope: "operativo", category: "Freelancers",         amount: 2037,      note: "" },
-    { id: "2026-02-op-4",  month: "2026-02", scope: "operativo", category: "Bonificación",        amount: 2035.50,   note: "" },
-    { id: "2026-02-op-5",  month: "2026-02", scope: "operativo", category: "Comisión Rutsi",      amount: 902,       note: "" },
+    { id: "2026-02-op-4",  month: "2026-02", scope: "operativo", category: "BonificaciÃ³n",        amount: 2035.50,   note: "" },
+    { id: "2026-02-op-5",  month: "2026-02", scope: "operativo", category: "ComisiÃ³n Rutsi",      amount: 902,       note: "" },
     { id: "2026-02-op-6",  month: "2026-02", scope: "operativo", category: "Otros gastos",        amount: 500,       note: "" },
-    { id: "2026-02-op-7",  month: "2026-02", scope: "operativo", category: "Jurídico",            amount: 593,       note: "" },
+    { id: "2026-02-op-7",  month: "2026-02", scope: "operativo", category: "JurÃ­dico",            amount: 593,       note: "" },
     { id: "2026-02-op-8",  month: "2026-02", scope: "operativo", category: "Servicio Contable",   amount: 400,       note: "" },
     { id: "2026-02-op-9",  month: "2026-02", scope: "operativo", category: "Premio Estudiantes",  amount: 805.50,    note: "" },
-    // ── 2026-03 (mar/26) ───────────────────────────────────────────
+    // â”€â”€ 2026-03 (mar/26) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     { id: "2026-03-op-1",  month: "2026-03", scope: "operativo", category: "Plataforma",          amount: 4791.38,   note: "" },
-    { id: "2026-03-op-2",  month: "2026-03", scope: "operativo", category: "Nómina Marzo",        amount: 28794.50,  note: "" },
+    { id: "2026-03-op-2",  month: "2026-03", scope: "operativo", category: "NÃ³mina Marzo",        amount: 28794.50,  note: "" },
     { id: "2026-03-op-3",  month: "2026-03", scope: "operativo", category: "Freelancers",         amount: 3655,      note: "" },
-    { id: "2026-03-op-4",  month: "2026-03", scope: "operativo", category: "Bonificación",        amount: 3913,      note: "" },
-    { id: "2026-03-op-5",  month: "2026-03", scope: "operativo", category: "Comisión Rutsi",      amount: 1389,      note: "" },
-    { id: "2026-03-op-6",  month: "2026-03", scope: "operativo", category: "Otros pagos nómina",  amount: 34,        note: "" },
+    { id: "2026-03-op-4",  month: "2026-03", scope: "operativo", category: "BonificaciÃ³n",        amount: 3913,      note: "" },
+    { id: "2026-03-op-5",  month: "2026-03", scope: "operativo", category: "ComisiÃ³n Rutsi",      amount: 1389,      note: "" },
+    { id: "2026-03-op-6",  month: "2026-03", scope: "operativo", category: "Otros pagos nÃ³mina",  amount: 34,        note: "" },
     { id: "2026-03-op-7",  month: "2026-03", scope: "operativo", category: "Servicios varios",    amount: 4757,      note: "Servicio cyberseguridad" },
     { id: "2026-03-op-8",  month: "2026-03", scope: "operativo", category: "Otros gastos",        amount: 483.89,    note: "" },
     { id: "2026-03-op-9",  month: "2026-03", scope: "operativo", category: "Servicio Contable",   amount: 1369,      note: "+cierre de Orbe" },
@@ -407,7 +418,10 @@ function divideSafe(a: number, b: number): number {
 
 export function calculateBusinessKpis(record: BusinessMonthRecord): BusinessKpiRow {
   const acquisitionCost =
-    record.ads + record.closerCommissions + record.carlaBonus;
+    record.ads +
+    record.closerCommissions +
+    record.carlaBonus +
+    (record.bonos || 0);
   const cac = divideSafe(acquisitionCost, record.newClients);
   const delinquencyLoss = record.highTicketRevenue * record.delinquencyRate;
   const incomePerClient = divideSafe(
@@ -597,9 +611,9 @@ export function sortBusinessExpenses(expenses: BusinessExpenseEntry[]) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  Capa "auto-admin": custom fields + custom formulas
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const RESERVED_RECORD_KEYS = new Set<string>([
   "id",
@@ -607,6 +621,7 @@ const RESERVED_RECORD_KEYS = new Set<string>([
   "ads",
   "closerCommissions",
   "carlaBonus",
+  "bonos",
   "newClients",
   "highTicketRevenue",
   "delinquencyRate",
@@ -631,7 +646,7 @@ const RESERVED_EXPENSE_KEYS = new Set<string>([
   "extra",
 ]);
 
-/** Normaliza un texto humano a una clave JS válida (camelCase básico). */
+/** Normaliza un texto humano a una clave JS vÃ¡lida (camelCase bÃ¡sico). */
 export function slugifyCustomKey(input: string): string {
   const trimmed = String(input || "").trim().toLowerCase();
   if (!trimmed) return "";
@@ -657,7 +672,7 @@ export function validateCustomFieldKey(
 ): string | null {
   if (!key) return "La clave es obligatoria.";
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
-    return "Clave inválida: usa solo letras, números y _ (sin empezar por número).";
+    return "Clave invÃ¡lida: usa solo letras, nÃºmeros y _ (sin empezar por nÃºmero).";
   }
   const reserved = target === "record" ? RESERVED_RECORD_KEYS : RESERVED_EXPENSE_KEYS;
   if (reserved.has(key)) return "Clave reservada por el sistema.";
@@ -668,13 +683,19 @@ export function validateCustomFieldKey(
   return null;
 }
 
-/** Asegura que el estado tenga arrays válidos para campos/formulas personalizados. */
+/** Asegura que el estado tenga arrays vÃ¡lidos para campos/formulas personalizados. */
 export function normalizeBusinessState(
   raw: Partial<BusinessMetricsState> | null | undefined,
 ): BusinessMetricsState {
   const seed = buildBusinessSeedState();
   const records = Array.isArray(raw?.records)
-    ? sortBusinessRecords(raw!.records as BusinessMonthRecord[])
+    ? sortBusinessRecords(
+        (raw!.records as BusinessMonthRecord[]).map((r) => ({
+          ...r,
+          // Compatibilidad hacia atrÃ¡s: registros previos no tienen `bonos`.
+          bonos: typeof r.bonos === "number" ? r.bonos : 0,
+        })),
+      )
     : seed.records;
   const expenses = Array.isArray(raw?.expenses)
     ? sortBusinessExpenses(raw!.expenses as BusinessExpenseEntry[])
@@ -695,12 +716,20 @@ export function normalizeBusinessState(
     : [];
   const vaultPassword =
     typeof raw?.vaultPassword === "string" ? raw!.vaultPassword : undefined;
-  return { records, expenses, customFields, customFormulas, vaultPassword };
+  const columnLabels =
+    raw?.columnLabels && typeof raw.columnLabels === "object"
+      ? Object.fromEntries(
+          Object.entries(raw.columnLabels as Record<string, unknown>).filter(
+            ([, v]) => typeof v === "string",
+          ),
+        ) as Record<string, string>
+      : {};
+  return { records, expenses, customFields, customFormulas, vaultPassword, columnLabels };
 }
 
-// — Mini evaluador seguro de expresiones aritméticas —
-// Solo permite: números, identificadores [A-Za-z_][A-Za-z0-9_]*, + - * / ( ) , espacios.
-// Soporta funciones básicas: min, max, abs, round, floor, ceil, sqrt, pow.
+// â€” Mini evaluador seguro de expresiones aritmÃ©ticas â€”
+// Solo permite: nÃºmeros, identificadores [A-Za-z_][A-Za-z0-9_]*, + - * / ( ) , espacios.
+// Soporta funciones bÃ¡sicas: min, max, abs, round, floor, ceil, sqrt, pow.
 const FORMULA_FUNCTIONS: Record<string, (...args: number[]) => number> = {
   min: Math.min,
   max: Math.max,
@@ -737,7 +766,7 @@ function tokenizeFormula(expr: string): Token[] {
       const raw = expr.slice(i, j).replace(/_/g, "");
       const value = Number(raw);
       if (!Number.isFinite(value)) {
-        throw new Error(`Número inválido: ${raw}`);
+        throw new Error(`NÃºmero invÃ¡lido: ${raw}`);
       }
       tokens.push({ type: "num", value });
       i = j;
@@ -750,7 +779,7 @@ function tokenizeFormula(expr: string): Token[] {
       i = j;
       continue;
     }
-    throw new Error(`Carácter no permitido en la fórmula: "${ch}"`);
+    throw new Error(`CarÃ¡cter no permitido en la fÃ³rmula: "${ch}"`);
   }
   return tokens;
 }
@@ -792,7 +821,7 @@ function parseFormula(
 
   function parseFactor(): number {
     const t = consume();
-    if (!t) throw new Error("Expresión incompleta.");
+    if (!t) throw new Error("ExpresiÃ³n incompleta.");
     if (t.type === "op" && t.value === "-") {
       return -parseFactor();
     }
@@ -804,12 +833,12 @@ function parseFormula(
       const v = parseExpression();
       const closing = consume();
       if (!closing || closing.type !== "op" || closing.value !== ")") {
-        throw new Error("Falta cerrar paréntesis.");
+        throw new Error("Falta cerrar parÃ©ntesis.");
       }
       return v;
     }
     if (t.type === "id") {
-      // ¿Llamada a función?
+      // Â¿Llamada a funciÃ³n?
       if (peek() && peek().type === "op" && (peek() as any).value === "(") {
         consume(); // (
         const args: number[] = [];
@@ -822,10 +851,10 @@ function parseFormula(
         }
         const close = consume();
         if (!close || close.type !== "op" || close.value !== ")") {
-          throw new Error(`Falta cerrar ")" en función ${t.value}.`);
+          throw new Error(`Falta cerrar ")" en funciÃ³n ${t.value}.`);
         }
         const fn = FORMULA_FUNCTIONS[t.value];
-        if (!fn) throw new Error(`Función no soportada: ${t.value}.`);
+        if (!fn) throw new Error(`FunciÃ³n no soportada: ${t.value}.`);
         return fn(...args);
       }
       if (!(t.value in variables)) {
@@ -834,12 +863,12 @@ function parseFormula(
       const v = variables[t.value];
       return Number.isFinite(v) ? v : 0;
     }
-    throw new Error("Token inesperado en la fórmula.");
+    throw new Error("Token inesperado en la fÃ³rmula.");
   }
 
   const result = parseExpression();
   if (pos < tokens.length) {
-    throw new Error("Hay tokens extra al final de la fórmula.");
+    throw new Error("Hay tokens extra al final de la fÃ³rmula.");
   }
   return result;
 }
@@ -856,6 +885,7 @@ export function buildFormulaVariables(
     ads: record.ads,
     closerCommissions: record.closerCommissions,
     carlaBonus: record.carlaBonus,
+    bonos: record.bonos || 0,
     newClients: record.newClients,
     highTicketRevenue: record.highTicketRevenue,
     delinquencyRate: record.delinquencyRate,
@@ -898,26 +928,26 @@ export type FormulaEvalResult =
   | { ok: true; value: number }
   | { ok: false; error: string };
 
-/** Evalúa una expresión contra un diccionario de variables. */
+/** EvalÃºa una expresiÃ³n contra un diccionario de variables. */
 export function evaluateBusinessFormula(
   expression: string,
   variables: Record<string, number>,
 ): FormulaEvalResult {
   if (!expression || !expression.trim()) {
-    return { ok: false, error: "Expresión vacía." };
+    return { ok: false, error: "ExpresiÃ³n vacÃ­a." };
   }
   try {
     const tokens = tokenizeFormula(expression);
-    if (tokens.length === 0) return { ok: false, error: "Expresión vacía." };
+    if (tokens.length === 0) return { ok: false, error: "ExpresiÃ³n vacÃ­a." };
     const value = parseFormula(tokens, variables);
     if (!Number.isFinite(value)) return { ok: true, value: 0 };
     return { ok: true, value };
   } catch (err: any) {
-    return { ok: false, error: String(err?.message || "Fórmula inválida") };
+    return { ok: false, error: String(err?.message || "FÃ³rmula invÃ¡lida") };
   }
 }
 
-/** Evalúa una fórmula promediada/sumada sobre una lista de registros. */
+/** EvalÃºa una fÃ³rmula promediada/sumada sobre una lista de registros. */
 export function evaluateFormulaOverRecords(
   expression: string,
   records: BusinessMonthRecord[],
@@ -934,3 +964,4 @@ export function evaluateFormulaOverRecords(
   }
   return { ok: true, value: mode === "avg" ? total / Math.max(count, 1) : total };
 }
+
