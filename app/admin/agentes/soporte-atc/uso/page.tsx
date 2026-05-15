@@ -9,6 +9,7 @@ import {
   Loader2,
   RefreshCw,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -102,6 +103,9 @@ type AtcUsagePayload = {
   user_message_chars: number;
   alumno_codigo?: string;
   signals?: string[];
+  user_id?: string | number | null;
+  user_codigo?: string;
+  user_nombre?: string;
   created_at: string;
 };
 
@@ -253,6 +257,35 @@ function AtcUsoContent() {
     return Array.from(map.values()).sort((a, b) =>
       b.date.localeCompare(a.date),
     );
+  }, [records]);
+
+  // ── By user ──────────────────────────────────────────────────────────────────
+
+  const byUser = useMemo<
+    Array<{ codigo: string; nombre: string; usos: number; costo_usd: number }>
+  >(() => {
+    const map = new Map<
+      string,
+      { codigo: string; nombre: string; usos: number; costo_usd: number }
+    >();
+    for (const r of records) {
+      const p = r.payload || ({} as AtcUsagePayload);
+      const codigo = p.user_codigo ?? r.entity_id ?? "—";
+      const nombre = p.user_nombre ?? codigo;
+      const inTok = Number(p.input_tokens ?? 0);
+      const outTok = Number(p.output_tokens ?? 0);
+      const cost = calcCost(p.model, inTok, outTok);
+      const existing = map.get(codigo);
+      if (existing) {
+        existing.usos += 1;
+        existing.costo_usd += cost;
+        if (existing.nombre === codigo && nombre !== codigo)
+          existing.nombre = nombre;
+      } else {
+        map.set(codigo, { codigo, nombre, usos: 1, costo_usd: cost });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.usos - a.usos);
   }, [records]);
 
   // ── Signal frequency ─────────────────────────────────────────────────────────
@@ -464,6 +497,52 @@ function AtcUsoContent() {
         </div>
       </div>
 
+      {/* Uso por usuario */}
+      {byUser.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="px-4 pt-4 pb-2 flex items-center gap-2">
+            <Users className="h-4 w-4 text-teal-500" />
+            <h2 className="text-sm font-semibold text-slate-700">
+              Uso por usuario
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">Usuario</th>
+                  <th className="px-4 py-2 text-left font-medium">Código</th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Consultas
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Costo total (USD)
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {byUser.map((u) => (
+                  <tr key={u.codigo} className="hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-slate-800 font-medium">
+                      {u.nombre}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">
+                      {u.codigo}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-700">
+                      {formatNumber(u.usos)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-rose-700">
+                      {formatUSD(u.costo_usd)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Últimas 50 consultas */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="px-4 pt-4 pb-2">
@@ -476,6 +555,7 @@ function AtcUsoContent() {
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-2 text-left font-medium">Fecha</th>
+                <th className="px-4 py-2 text-left font-medium">Usuario</th>
                 <th className="px-4 py-2 text-left font-medium">Modelo</th>
                 <th className="px-4 py-2 text-right font-medium">Tokens in</th>
                 <th className="px-4 py-2 text-right font-medium">Tokens out</th>
@@ -492,7 +572,7 @@ function AtcUsoContent() {
               {recent.length === 0 && !loading && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-sm text-slate-500"
                   >
                     Sin registros.
@@ -509,6 +589,20 @@ function AtcUsoContent() {
                   <tr key={String(r.id)} className="hover:bg-slate-50">
                     <td className="px-4 py-2.5 text-slate-600 text-xs whitespace-nowrap">
                       {formatDate(p.created_at ?? r.created_at ?? null)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-slate-700">
+                          {p.user_nombre || p.user_codigo || "—"}
+                        </span>
+                        {p.user_codigo &&
+                          p.user_nombre &&
+                          p.user_codigo !== p.user_nombre && (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {p.user_codigo}
+                            </span>
+                          )}
+                      </div>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="inline-flex items-center rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[10px] font-medium text-teal-700">

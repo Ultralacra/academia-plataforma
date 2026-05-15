@@ -352,6 +352,64 @@ async function loadKnowledgeBase(authorization: string): Promise<string | null> 
   }
 }
 
+// ─── JWT / user helpers ───────────────────────────────────────────────────────
+
+function decodeJwtPayload(authorization: string): Record<string, unknown> | null {
+  try {
+    const token = authorization.replace(/^Bearer\s+/i, "").trim();
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = Buffer.from(b64, "base64").toString("utf-8");
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchUserInfo(
+  authorization: string,
+): Promise<{ id: unknown; codigo: string; nombre: string } | null> {
+  try {
+    const res = await fetch(buildUrl("/auth/me"), {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (res.ok) {
+      const json = (await res.json()) as unknown;
+      const user =
+        json && typeof json === "object" && "data" in (json as object)
+          ? (json as Record<string, unknown>).data
+          : json;
+      if (user && typeof user === "object") {
+        const u = user as Record<string, unknown>;
+        return {
+          id: u.id ?? u.user_id ?? null,
+          codigo: String(u.codigo ?? u.username ?? u.email ?? "unknown"),
+          nombre: String(u.nombre ?? u.name ?? u.email ?? "Usuario"),
+        };
+      }
+    }
+  } catch {
+    // fallback al JWT
+  }
+
+  const claims = decodeJwtPayload(authorization);
+  if (claims) {
+    const codigo = String(
+      claims.codigo ?? claims.username ?? claims.email ?? claims.sub ?? "unknown",
+    );
+    if (codigo && codigo !== "unknown") {
+      return {
+        id: claims.id ?? claims.user_id ?? claims.sub ?? null,
+        codigo,
+        nombre: String(claims.nombre ?? claims.name ?? claims.email ?? "Usuario"),
+      };
+    }
+  }
+  return null;
+}
+
 // ─── Usage logging ────────────────────────────────────────────────────────────
 
 async function logAgentUsage(
@@ -364,19 +422,24 @@ async function logAgentUsage(
     user_message_chars: number;
     alumno_codigo?: string;
     signals?: string[];
+    user_id?: unknown;
+    user_codigo?: string;
+    user_nombre?: string;
     created_at: string;
   },
 ) {
+  const internalToken = process.env.INTERNAL_API_TOKEN;
+  const authHeader = internalToken ? `Bearer ${internalToken}` : authorization;
   try {
     await fetch(buildUrl("/metadata"), {
       method: "POST",
       headers: {
-        Authorization: authorization,
+        Authorization: authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         entity: "agente_uso_soporte_atc",
-        entity_id: data.alumno_codigo ?? "general",
+        entity_id: data.user_codigo ?? data.alumno_codigo ?? "general",
         payload: data,
       }),
       cache: "no-store",
@@ -422,6 +485,12 @@ export async function POST(request: NextRequest) {
   const typedMessages = messages as Array<{ role: string; content: string }>;
   const userMsg = String(typedMessages.at(-1)?.content ?? "");
   const currentSignals = detectRiskSignals(userMsg);
+
+  // Resolver info del usuario que hace la consulta
+  let userInfo: { id: unknown; codigo: string; nombre: string } | null = null;
+  if (authorization) {
+    userInfo = await fetchUserInfo(authorization).catch(() => null);
+  }
 
   let atcCtx: AtcContext = {
     block: "",
@@ -555,6 +624,9 @@ export async function POST(request: NextRequest) {
               user_message_chars: userMsg.length,
               alumno_codigo: alumnoCode || undefined,
               signals: atcCtx.signals,
+              user_id: userInfo?.id,
+              user_codigo: userInfo?.codigo,
+              user_nombre: userInfo?.nombre,
               created_at: new Date().toISOString(),
             });
           }
@@ -639,6 +711,9 @@ export async function POST(request: NextRequest) {
             user_message_chars: userMsg.length,
             alumno_codigo: alumnoCode || undefined,
             signals: atcCtx.signals,
+            user_id: userInfo?.id,
+            user_codigo: userInfo?.codigo,
+            user_nombre: userInfo?.nombre,
             created_at: new Date().toISOString(),
           });
         }

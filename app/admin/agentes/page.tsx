@@ -7,7 +7,6 @@ import {
   BarChart3,
   Bot,
   BrainCircuit,
-  ClipboardCheck,
   FileSearch,
   Headphones,
   LayoutGrid,
@@ -68,16 +67,7 @@ const agents = [
     bgGlow: "bg-emerald-300/10",
     active: false,
   },
-  {
-    name: "ATC Administrativo",
-    description:
-      "Sugiere el equipo ideal (ATC, Ads, Copy y Mentalidad) para un alumno nuevo según la carga actual de cada coach.",
-    icon: ClipboardCheck,
-    href: "/admin/agentes/atc",
-    gradient: "from-sky-300 to-blue-400",
-    bgGlow: "bg-sky-300/10",
-    active: true,
-  },
+
   {
     name: "Soporte ATC",
     description:
@@ -255,6 +245,13 @@ function AgentsHome() {
         >
           <Receipt className="h-4 w-4" />
           Uso agente tickets
+        </Link>
+        <Link
+          href="/admin/agentes/soporte-atc/uso"
+          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
+        >
+          <LifeBuoy className="h-4 w-4" />
+          Uso Soporte ATC
         </Link>
       </div>
 
