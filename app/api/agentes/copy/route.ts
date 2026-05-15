@@ -1721,12 +1721,18 @@ async function logCoachAgentUsage(
     created_at: string;
   },
 ): Promise<void> {
+  // Usar un token de servicio server-side si está disponible, para garantizar
+  // que el registro se guarda independientemente del rol del coach.
+  // La autoría queda en el payload (coach_codigo/coach_nombre), no en el token.
+  const internalToken = process.env.INTERNAL_API_TOKEN;
+  const authHeader = internalToken ? `Bearer ${internalToken}` : authorization;
+
   try {
     const res = await fetch(`${API_HOST_INTERNAL}/metadata`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authorization,
+        Authorization: authHeader,
       },
       body: JSON.stringify({
         entity: "agente_uso_coach",
@@ -1737,14 +1743,22 @@ async function logCoachAgentUsage(
       }),
     });
     if (!res.ok) {
-      console.warn(
-        "[copy-agent] No se pudo guardar uso en metadata:",
-        res.status,
-        await res.text().catch(() => ""),
+      const errorBody = await res.text().catch(() => "");
+      console.error(
+        "[copy-agent] logCoachAgentUsage FAILED — status:", res.status,
+        "| coach:", payload.coach_codigo ?? payload.coach_id ?? "unknown",
+        "| usingInternalToken:", !!internalToken,
+        "| body:", errorBody,
+      );
+    } else {
+      console.log(
+        "[copy-agent] logCoachAgentUsage OK — coach:", payload.coach_codigo ?? payload.coach_id ?? "unknown",
+        "| tokens:", payload.input_tokens, "+", payload.output_tokens,
+        "| cost:", payload.cost_usd,
       );
     }
   } catch (err) {
-    console.warn("[copy-agent] Error al guardar uso en metadata:", err);
+    console.error("[copy-agent] logCoachAgentUsage ERROR (network):", err);
   }
 }
 
