@@ -79,6 +79,16 @@ const agents = [
     active: true,
   },
   {
+    name: "Super Agente ATC",
+    description:
+      "Asistente autónomo para alumnos y copiloto para el equipo ATC. Crea tickets, clasifica riesgos y escala casos automáticamente.",
+    icon: Bot,
+    href: "/admin/agentes/super-atc",
+    gradient: "from-cyan-400 to-teal-500",
+    bgGlow: "bg-cyan-400/10",
+    active: true,
+  },
+  {
     name: "Operativa",
     description:
       "Asiste en procesos operativos del día a día: asignaciones, calendario y coordinación de tareas.",
