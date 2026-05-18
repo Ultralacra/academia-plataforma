@@ -3874,7 +3874,7 @@ function PaymentsContent() {
                                 className="py-8 text-center text-sm text-muted-foreground"
                               >
                                 {sinPlanLoadedAt
-                                  ? q
+                                  ? sinPlanSearch.trim()
                                     ? "No hay coincidencias para el filtro."
                                     : "Todos los alumnos tienen plan de pago."
                                   : "Aún no se han cargado datos."}
