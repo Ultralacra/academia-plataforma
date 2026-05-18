@@ -554,12 +554,14 @@ export function calculateBusinessSummary(
     },
   );
 
+  const n = records.length;
+
   return {
-    totalRevenue: totals.totalRevenue,
-    totalAcquisitionCost: totals.totalAcquisitionCost,
-    totalOperatingCost: totals.totalOperatingCost,
-    totalRoicOperationalCost: totals.totalRoicOperationalCost,
-    totalMarketingSalesCost: totals.totalMarketingSalesCost,
+    totalRevenue: divideSafe(totals.totalRevenue, n),
+    totalAcquisitionCost: divideSafe(totals.totalAcquisitionCost, n),
+    totalOperatingCost: divideSafe(totals.totalOperatingCost, n),
+    totalRoicOperationalCost: divideSafe(totals.totalRoicOperationalCost, n),
+    totalMarketingSalesCost: divideSafe(totals.totalMarketingSalesCost, n),
     totalNewClients: totals.totalNewClients,
     totalHighTicketClients: totals.totalHighTicketClients,
     totalActiveStudents: totals.totalActiveStudents,
@@ -593,7 +595,7 @@ export function calculateBusinessSummary(
       totals.totalNewClients,
     ),
     weightedRoic: divideSafe(totals.weightedRoic, records.length),
-    totalSalesVelocity: totals.totalSalesVelocity,
+    totalSalesVelocity: divideSafe(totals.totalSalesVelocity, n),
     totalGrossValueGenerated: totals.totalGrossValueGenerated,
     avgEntryVsExit: divideSafe(totals.avgEntryVsExit, records.length),
   };

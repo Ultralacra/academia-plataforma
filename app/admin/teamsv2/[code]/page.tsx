@@ -73,6 +73,7 @@ import { CHAT_HOST } from "@/lib/api-config";
 import Spinner from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import StudentChatDisclaimer from "@/components/chat/StudentChatDisclaimer";
+import StudentPaymentWarningDisclaimer from "@/components/chat/StudentPaymentWarningDisclaimer";
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -2705,6 +2706,15 @@ export default function CoachDetailPage({
                           lastActivity:
                             selectedStudentItem.lastActivity ?? null,
                         }}
+                      />
+                    )}
+                    {targetStudentCode && selectedStudentItem && (
+                      <StudentPaymentWarningDisclaimer
+                        alumnoCode={
+                          selectedStudentItem.code ?? targetStudentCode
+                        }
+                        studentStage={selectedStudentItem.stage ?? null}
+                        studentName={selectedStudentItem.name ?? null}
                       />
                     )}
                     <CoachChatInline

@@ -4241,6 +4241,140 @@ export default function CoachChatInline({
     }
   };
 
+  // ── Envío de rescate desde el disclaimer de pago ──────────────────────────
+  React.useEffect(() => {
+    async function handleRescueSend(e: Event) {
+      try {
+        const { text: rescueText, audioUrl } =
+          (e as CustomEvent<{ text?: string; audioUrl?: string }>).detail ?? {};
+        if (!rescueText && !audioUrl) return;
+
+        const sio = sioRef.current;
+        if (!sio || !connected) return;
+
+        let cid = chatIdRef.current;
+        if (cid == null) return;
+
+        const effectivePid = myParticipantIdRef.current;
+
+        // 1. Subir audio al chat
+        if (audioUrl) {
+          try {
+            const audioRes = await fetch(audioUrl);
+            const audioBlob = await audioRes.blob();
+            const rawName =
+              decodeURIComponent(audioUrl.split("/").pop() ?? "") ||
+              "audio-rescate.ogg";
+            const audioFile = new File([audioBlob], rawName, {
+              type: audioBlob.type || "audio/ogg",
+            });
+
+            const fd = new FormData();
+            fd.append("file", audioFile, audioFile.name);
+
+            const { getAuthToken: getToken } = await import("@/lib/auth");
+            const token = typeof window !== "undefined" ? getToken() : null;
+            const headers: Record<string, string> = token
+              ? { Authorization: `Bearer ${token}` }
+              : {};
+
+            const optId = `rescue-audio-${Date.now()}`;
+            const optMsg: Message = {
+              id: optId,
+              room: normRoom,
+              sender: role as Sender,
+              text: "",
+              at: nowLocalIso(),
+              delivered: false,
+              read: false,
+              srcParticipantId: effectivePid ?? undefined,
+              attachments: [
+                {
+                  id: `${optId}-att`,
+                  name: audioFile.name,
+                  mime: audioFile.type,
+                  size: audioFile.size,
+                  data_base64: "",
+                  url: URL.createObjectURL(audioFile),
+                } as Attachment,
+              ],
+              uiKey: optId,
+            };
+            (optMsg as any).client_session = clientSessionRef.current;
+            setItems((prev) => [...prev, optMsg]);
+
+            const base = (CHAT_HOST || "").replace(/\/$/, "");
+            const uploadUrl = `${base}/v1/ai/upload-file/${encodeURIComponent(String(cid))}`;
+            const uploadRes = await fetch(uploadUrl, {
+              method: "POST",
+              headers,
+              body: fd,
+            });
+            setItems((prev) =>
+              prev.map((m) =>
+                m.id === optId ? { ...m, delivered: uploadRes.ok } : m,
+              ),
+            );
+          } catch {
+            // best-effort: continúa igual y envía el texto
+          }
+        }
+
+        // 2. Enviar mensaje de texto
+        if (rescueText && effectivePid != null && cid != null) {
+          const clientId = `rescue-text-${Date.now()}`;
+          const optText: Message = {
+            id: clientId,
+            room: normRoom,
+            sender: role as Sender,
+            text: rescueText,
+            at: nowLocalIso(),
+            delivered: false,
+            read: false,
+            srcParticipantId: effectivePid ?? undefined,
+            uiKey: clientId,
+          };
+          (optText as any).client_session = clientSessionRef.current;
+          setItems((prev) => [...prev, optText]);
+          seenRef.current.add(clientId);
+
+          sio.emit(
+            "chat.message.send",
+            {
+              id_chat: cid,
+              id_chat_participante_emisor: effectivePid,
+              contenido: rescueText,
+              client_session: clientSessionRef.current,
+            },
+            (ack: any) => {
+              setItems((prev) => {
+                const next = [...prev];
+                const serverId = ack?.data?.id_mensaje ?? ack?.data?.id;
+                const idx = next.findIndex((m) => m.id === clientId);
+                if (idx >= 0) {
+                  next[idx] = {
+                    ...next[idx],
+                    id: serverId ? String(serverId) : next[idx].id,
+                    delivered: !(ack && ack.success === false),
+                  };
+                  if (serverId) seenRef.current.add(String(serverId));
+                }
+                return next;
+              });
+            },
+          );
+        }
+      } catch {
+        // best-effort
+      }
+    }
+
+    window.addEventListener("chat:rescue-send", handleRescueSend);
+    return () =>
+      window.removeEventListener("chat:rescue-send", handleRescueSend);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, normRoom, role]);
+
   return (
     <>
       <div

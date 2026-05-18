@@ -99,16 +99,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { CalendarIcon, X } from "lucide-react";
-import { format, startOfMonth, endOfMonth } from "date-fns";
-import { es } from "date-fns/locale";
-import type { DateRange } from "react-day-picker";
+import { X } from "lucide-react";
 
 const EMPTY_MONTH_FORM: BusinessMonthRecord = {
   id: "",
@@ -337,8 +328,7 @@ function BusinessMetricsContent() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [fromMonth, setFromMonth] = useState("");
   const [toMonth, setToMonth] = useState("");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+
   const [monthForm, setMonthForm] =
     useState<BusinessMonthRecord>(EMPTY_MONTH_FORM);
   const [expenseForm, setExpenseForm] =
@@ -1191,196 +1181,44 @@ function BusinessMetricsContent() {
                 Sincronizado
               </Badge>
             )}
-            {/* ── Date range picker estilo vuelo ───────────────── */}
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-              <PopoverTrigger asChild>
+            {/* ── Filtro por mes ───────────────────────────────── */}
+            <div className="inline-flex items-center gap-0 rounded-xl border bg-background shadow-sm text-sm overflow-hidden">
+              <div className="flex flex-col items-start px-3 py-1.5 border-r">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Desde
+                </span>
+                <input
+                  type="month"
+                  value={fromMonth}
+                  onChange={(e) => setFromMonth(e.target.value)}
+                  className="font-medium bg-transparent border-none outline-none text-sm p-0 text-foreground"
+                />
+              </div>
+              <div className="flex flex-col items-start px-3 py-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Hasta
+                </span>
+                <input
+                  type="month"
+                  value={toMonth}
+                  onChange={(e) => setToMonth(e.target.value)}
+                  className="font-medium bg-transparent border-none outline-none text-sm p-0 text-foreground"
+                />
+              </div>
+              {(fromMonth || toMonth) && (
                 <button
                   type="button"
-                  className={[
-                    "inline-flex items-center gap-0 rounded-xl border bg-background shadow-sm",
-                    "text-sm ring-offset-background transition-colors",
-                    "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    calendarOpen ? "ring-2 ring-ring" : "",
-                  ].join(" ")}
-                >
-                  {/* Desde */}
-                  <div className="flex flex-col items-start px-4 py-2 border-r">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Desde
-                    </span>
-                    <span
-                      className={`font-medium ${
-                        dateRange?.from
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {dateRange?.from
-                        ? format(dateRange.from, "MMM yyyy", { locale: es })
-                        : "Seleccionar"}
-                    </span>
-                    {/* Primer mes con datos reales */}
-                    {visibleRecords.length > 0 && (
-                      <span className="text-[9px] text-muted-foreground/70 mt-0.5">
-                        datos: {formatMonthLabel(visibleRecords[0].month)}
-                      </span>
-                    )}
-                  </div>
-                  {/* Hasta */}
-                  <div className="flex flex-col items-start px-4 py-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Hasta
-                    </span>
-                    <span
-                      className={`font-medium ${
-                        dateRange?.to
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {dateRange?.to
-                        ? format(dateRange.to, "MMM yyyy", { locale: es })
-                        : "Seleccionar"}
-                    </span>
-                    {/* Último mes con datos reales */}
-                    {visibleRecords.length > 0 && (
-                      <span className="text-[9px] text-muted-foreground/70 mt-0.5">
-                        datos:{" "}
-                        {formatMonthLabel(
-                          visibleRecords[visibleRecords.length - 1].month,
-                        )}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center px-2 border-l">
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-auto p-0 shadow-2xl rounded-2xl overflow-hidden"
-                align="end"
-                sideOffset={8}
-              >
-                {/* Cabecera del popover */}
-                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b bg-muted/40">
-                  <p className="text-sm font-semibold">
-                    Selecciona el rango de meses
-                  </p>
-                  {dateRange?.from && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDateRange(undefined);
-                        setFromMonth("");
-                        setToMonth("");
-                      }}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Atajos rápidos */}
-                <div className="flex gap-2 px-4 py-3 border-b bg-background">
-                  {[
-                    { label: "Últ. 3 meses", months: 2 },
-                    { label: "Últ. 6 meses", months: 5 },
-                    { label: "Últ. 12 meses", months: 11 },
-                  ].map(({ label, months }) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => {
-                        const now = new Date();
-                        const from = new Date(
-                          now.getFullYear(),
-                          now.getMonth() - months,
-                          1,
-                        );
-                        const to = endOfMonth(now);
-                        setDateRange({ from, to });
-                        setFromMonth(
-                          `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}`,
-                        );
-                        setToMonth(
-                          `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, "0")}`,
-                        );
-                        setCalendarOpen(false);
-                      }}
-                      className="rounded-full border px-3 py-1 text-xs font-medium hover:bg-muted transition-colors"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDateRange(undefined);
-                      setFromMonth("");
-                      setToMonth("");
-                      setCalendarOpen(false);
-                    }}
-                    className="rounded-full border px-3 py-1 text-xs font-medium hover:bg-muted transition-colors ml-auto"
-                  >
-                    Todo
-                  </button>
-                </div>
-
-                {/* Calendario de 2 meses */}
-                <Calendar
-                  mode="range"
-                  selected={dateRange}
-                  onSelect={(range) => {
-                    setDateRange(range);
-                    if (range?.from) {
-                      const from = startOfMonth(range.from);
-                      setFromMonth(
-                        `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}`,
-                      );
-                    } else {
-                      setFromMonth("");
-                    }
-                    if (range?.to) {
-                      const to = range.to;
-                      setToMonth(
-                        `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, "0")}`,
-                      );
-                    } else {
-                      setToMonth("");
-                    }
-                    // Cerrar solo cuando ambas fechas estén elegidas
-                    if (range?.from && range?.to) {
-                      setCalendarOpen(false);
-                    }
+                  onClick={() => {
+                    setFromMonth("");
+                    setToMonth("");
                   }}
-                  numberOfMonths={2}
-                  locale={es}
-                  className="p-4"
-                />
-
-                {/* Pie: resumen de selección */}
-                <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/30 text-xs text-muted-foreground">
-                  <span>
-                    {dateRange?.from && dateRange?.to
-                      ? `${format(dateRange.from, "d MMM yyyy", { locale: es })} → ${format(dateRange.to, "d MMM yyyy", { locale: es })}`
-                      : dateRange?.from
-                        ? `Desde ${format(dateRange.from, "d MMM yyyy", { locale: es })} — elige fecha fin`
-                        : "Haz clic en el mes de inicio"}
-                  </span>
-                  {dateRange?.from && dateRange?.to && (
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setCalendarOpen(false)}
-                    >
-                      Aplicar
-                    </Button>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
+                  className="flex items-center px-2 self-stretch border-l hover:bg-muted/60 transition-colors"
+                  title="Limpiar filtro"
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
