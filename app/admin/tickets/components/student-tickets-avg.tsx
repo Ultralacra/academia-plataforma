@@ -93,7 +93,21 @@ export default function StudentTicketsAvg({
   const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const pageEntries = entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const subtitle = `${totalMonths} ${totalMonths === 1 ? "mes" : "meses"} en el rango · ${entries.length} alumnos`;
+  // ── Resumen global ────────────────────────────────────────────────────────
+  const totalTickets = entries.reduce((s, e) => s + e.totalTickets, 0);
+  const totalAlumnos = entries.length;
+  /** Promedio de tickets por alumno en todo el rango (sin dividir por meses) */
+  const avgPerAlumno =
+    totalAlumnos > 0
+      ? Math.round((totalTickets / totalAlumnos) * 100) / 100
+      : 0;
+  /** Promedio de tickets por alumno × mes */
+  const avgPerAlumnoPerMonth =
+    totalAlumnos > 0 && totalMonths > 0
+      ? Math.round((totalTickets / totalAlumnos / totalMonths) * 100) / 100
+      : 0;
+
+  const subtitle = `${totalMonths} ${totalMonths === 1 ? "mes" : "meses"} en el rango · ${totalAlumnos} alumnos`;
 
   return (
     <Card>
@@ -101,6 +115,29 @@ export default function StudentTicketsAvg({
         title="Promedio mensual de tickets por alumno"
         subtitle={subtitle}
       />
+
+      {/* ── KPIs resumen global ─────────────────────────────────────────── */}
+      {!loading && totalAlumnos > 0 && (
+        <div className="flex flex-wrap gap-4 border-b px-5 py-4">
+          <SummaryKpi label="Total tickets" value={totalTickets.toString()} />
+          <SummaryKpi
+            label="Alumnos con tickets"
+            value={totalAlumnos.toString()}
+          />
+          <SummaryKpi
+            label="Tickets por alumno (rango)"
+            value={avgPerAlumno.toFixed(2)}
+            hint={`Total tickets ÷ alumnos`}
+          />
+          <SummaryKpi
+            label="Tickets por alumno / mes"
+            value={avgPerAlumnoPerMonth.toFixed(2)}
+            hint={`Total tickets ÷ alumnos ÷ ${totalMonths} ${totalMonths === 1 ? "mes" : "meses"}`}
+            highlight
+          />
+        </div>
+      )}
+
       <CardBody className="overflow-x-auto p-0">
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 z-1 bg-white">
@@ -254,4 +291,32 @@ function formatMonthLabel(ym: string): string {
   const monthName = months[+m[2] - 1] ?? m[2];
   const year = m[1].slice(2);
   return `${monthName} ${year}`;
+}
+
+function SummaryKpi({
+  label,
+  value,
+  hint,
+  highlight = false,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-0.5 rounded-xl border px-4 py-3 ${
+        highlight ? "border-sky-200 bg-sky-50" : "border-gray-100 bg-gray-50"
+      }`}
+    >
+      <span className="text-xs text-gray-500">{label}</span>
+      <span
+        className={`text-xl font-bold tabular-nums ${highlight ? "text-sky-700" : "text-gray-900"}`}
+      >
+        {value}
+      </span>
+      {hint && <span className="text-[11px] text-gray-400">{hint}</span>}
+    </div>
+  );
 }
