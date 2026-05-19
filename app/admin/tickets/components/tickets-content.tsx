@@ -55,6 +55,7 @@ import TicketsByPhase from "./tickets-by-phase";
 import TicketsResolutionMetrics from "./tickets-resolution-metrics";
 import TicketsStatusDuration from "./tickets-status-duration";
 import TicketsSLAHorarioMetrics from "./tickets-sla-horario-metrics";
+import StudentTicketsAvg from "./student-tickets-avg";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -1327,6 +1328,14 @@ export default function TicketsContent() {
 
         {/* Resumen adicional (por alumno/tipo) */}
         <TicketsSummaryCard tickets={filtered} metrics={metrics} />
+
+        {/* Promedio mensual de tickets por alumno */}
+        <StudentTicketsAvg
+          tickets={filtered}
+          fechaDesde={fechaDesde}
+          fechaHasta={fechaHasta}
+          loading={loading}
+        />
 
         {/* Tickets por fase (usa alumnos para mapear etapa) */}
         <TicketsByPhase
