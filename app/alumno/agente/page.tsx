@@ -10,7 +10,6 @@ import {
   Clock,
   FileText,
   Loader2,
-  Ticket,
   User2,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
@@ -149,12 +148,12 @@ function StudentSidebar({
         </div>
       </div>
 
-      {/* Recent tickets */}
+      {/* Recent feedbacks */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
-            <Ticket className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Mis tickets</span>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Mis feedbacks</span>
           </div>
         </div>
         <div className="divide-y divide-border">
@@ -162,47 +161,67 @@ function StudentSidebar({
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : tickets.length === 0 ? (
+          ) : tickets.filter(
+              (t) =>
+                !["ELIMINADO", "CANCELADO", "ANULADO", "DELETED"].includes(
+                  String(t.estado ?? "").toUpperCase(),
+                ),
+            ).length === 0 ? (
             <div className="px-4 py-5 text-center">
               <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground/30" />
               <p className="text-xs text-muted-foreground">
-                No tienes tickets aún
+                No tienes feedbacks aún
               </p>
             </div>
           ) : (
-            tickets.slice(0, 5).map((ticket) => {
-              const estado = String(ticket.estado ?? "PENDIENTE").toUpperCase();
-              const style = ESTADO_STYLES[estado] ?? ESTADO_STYLES.PENDIENTE;
-              const StatusIcon = style.icon;
-              const fecha = formatDate(ticket.creacion);
+            tickets
+              .filter(
+                (t) =>
+                  !["ELIMINADO", "CANCELADO", "ANULADO", "DELETED"].includes(
+                    String(t.estado ?? "").toUpperCase(),
+                  ),
+              )
+              .slice(0, 5)
+              .map((ticket) => {
+                const estado = String(
+                  ticket.estado ?? "PENDIENTE",
+                ).toUpperCase();
+                const style = ESTADO_STYLES[estado] ?? ESTADO_STYLES.PENDIENTE;
+                const StatusIcon = style.icon;
+                const fecha = formatDate(ticket.creacion);
 
-              return (
-                <div key={ticket.id} className="px-4 py-3">
-                  <p className="mb-1 line-clamp-1 text-xs font-medium text-foreground">
-                    {ticket.nombre ?? `Ticket #${ticket.id}`}
-                  </p>
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${style.color}`}
-                    >
-                      <StatusIcon className="h-2.5 w-2.5" />
-                      {style.label}
-                    </span>
-                    {fecha && (
-                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Calendar className="h-2.5 w-2.5" />
-                        {fecha}
-                      </div>
-                    )}
+                return (
+                  <div key={ticket.id} className="px-4 py-3">
+                    <p className="mb-1 line-clamp-1 text-xs font-medium text-foreground">
+                      {ticket.nombre ?? `Feedback #${ticket.id}`}
+                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${style.color}`}
+                      >
+                        <StatusIcon className="h-2.5 w-2.5" />
+                        {style.label}
+                      </span>
+                      {fecha && (
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <Calendar className="h-2.5 w-2.5" />
+                          {fecha}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })
           )}
-          {tickets.length > 5 && (
+          {tickets.filter(
+            (t) =>
+              !["ELIMINADO", "CANCELADO", "ANULADO", "DELETED"].includes(
+                String(t.estado ?? "").toUpperCase(),
+              ),
+          ).length > 5 && (
             <div className="px-4 py-2.5 text-center">
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition">
-                Ver todos los tickets
+                Ver todos
                 <ChevronRight className="h-3 w-3" />
               </span>
             </div>
@@ -331,6 +350,7 @@ function AgentePageContent() {
             welcomeMessage={welcomeMessage}
             className="h-full"
             onTicketCreated={refreshTickets}
+            createAsAgent={true}
           />
         </div>
       </div>

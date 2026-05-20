@@ -807,6 +807,38 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   return json;
 }
 
+/**
+ * Crea un ticket usando el proxy /api/agentes/create-ticket, que a su vez usa
+ * INTERNAL_API_TOKEN para llamar al backend. El `informante` queda como la
+ * identidad de servicio ATC en lugar del alumno/usuario del browser.
+ */
+export async function createTicketAsAgent(form: CreateTicketForm): Promise<any> {
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch('/api/agentes/create-ticket', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      id_alumno: form.id_alumno,
+      nombre: form.nombre,
+      tipo: form.tipo,
+      descripcion: form.descripcion ?? '',
+      estado: form.estado,
+      ai_run_id: form.ai_run_id,
+      message_ids: form.message_ids,
+      file_ids: form.file_ids,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on /api/agentes/create-ticket`);
+  }
+  return res.json().catch(() => ({}));
+}
+
 // 6) Actualizar ticket por ID (JSON). No enviar alumno_url ni equipo en el body.
 export type TicketUpdatePayload = Partial<{
   deadline: string | null;

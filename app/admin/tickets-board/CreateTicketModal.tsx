@@ -48,6 +48,7 @@ export function CreateTicketModal({
   defaultTitle,
   defaultDescription,
   defaultType,
+  createFn,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +57,10 @@ export function CreateTicketModal({
   defaultTitle?: string;
   defaultDescription?: string;
   defaultType?: string;
+  /** Función alternativa para crear el ticket. Si no se pasa, usa `createTicket` por defecto. */
+  createFn?: (
+    form: import("@/app/admin/alumnos/api").CreateTicketForm,
+  ) => Promise<any>;
 }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -371,7 +376,7 @@ export function CreateTicketModal({
       setFlowStage("creating");
 
       // 1. Crear ticket con todos los tipos seleccionados (separados por coma)
-      const created = await createTicket({
+      const created = await (createFn ?? createTicket)({
         nombre: title,
         id_alumno: selectedStudentId,
         tipo: type.join(","),

@@ -468,7 +468,93 @@ async function buildAtcContext(
 const SUPER_ATC_KB_ENTITY = "super_atc_knowledge_base";
 const SUPER_ATC_KB_ENTITY_ID = "v1";
 
+// Bloque de protocolos base inyectado SIEMPRE cuando no hay KB guardada en DB.
+// Evita que el modelo alucine reglas inexistentes (ej: "2 pausas de 30 días").
+const FALLBACK_KB_BLOCK = `## BASE DE CONOCIMIENTO OPERATIVA ATC — PROTOCOLOS BASE
+
+### GARANTÍAS
+
+--- Hotselling Starter ---
+La garantía Starter es SOLO extensión de tiempo (NO reembolso).
+Si el alumno solicita → documentar caso con preguntas de indagación y conceder extensión.
+
+--- Hotselling PRO ---
+ANTES de hablar de garantía, ofrecer siempre en este orden:
+1. Sesión de claridad con el coach (reenfoque, plan de acción).
+2. Pausa (si el alumno manifiesta ansiedad por falta de tiempo).
+3. Continuidad por membresía — mensaje clave: "¿Sabías que puedes mantener tu garantía pagando una membresía simbólica? $97 hasta el 13-may-2026. Sigues con coaches, garantía y acceso completo."
+   NOTA: aplica SOLO si el alumno está dentro de los primeros 4 meses del contrato.
+
+Criterios para que aplique garantía PRO:
+- Completó todas las tareas de las 5 fases dentro del tiempo asignado.
+- Está dentro de los 4 meses de acceso al programa.
+- El contrato está al día con los pagos.
+- La solicitud es por falta de resultados con implementación real y exclusiva del método.
+
+Si el alumno insiste y está en los tiempos → enviar formato de auditoría (3 días para entregar). Proceso 5-7 días hábiles con equipo legal.
+
+### PAUSAS — REGLA ABSOLUTA
+
+REGLA: El alumno tiene UNA SOLA pausa disponible durante todo el programa.
+NO existen "2 pausas". NUNCA decir que el alumno tiene "2 pausas". NO inventar cantidad de pausas distinta a lo aquí documentado.
+
+--- Hotselling Starter ---
+NO aplica pausa durante los 4 meses del programa (según contrato).
+Si el alumno pide pausa → informar que la pausa no aplica en el programa Starter.
+
+--- Hotselling PRO ---
+UNA pausa de hasta 30 días totales (continuos o fraccionados).
+Opciones disponibles: 1 semana / 15 días / 1 mes. No existen otras opciones de duración.
+La pausa se aplica de fecha fija a fecha fija (ej: jueves a jueves).
+Condición OBLIGATORIA: el alumno debe estar al día con los pagos. Si hay mora → NO se concede la pausa hasta regularizar.
+Motivo grave (salud, situación justificada): solicitar soporte/aval comprobable, con respeto.
+Motivo personal (vacaciones, trabajo, etc.): es un beneficio contractual, no requiere justificación.
+
+### EXTENSIONES
+
+--- Hotselling Starter ---
+Incluye extensión de 4 meses adicionales SIN COSTO si el alumno no creó su negocio al finalizar los 4 meses iniciales.
+El alumno DEBE solicitarlo — no se aplica automáticamente.
+
+--- Hotselling PRO ---
+Extensiones de 1-2 meses, evaluadas caso a caso.
+Casos aprobables: (1) coach de tráfico y copy confirman que el alumno está cerca de ser caso de éxito, O (2) motivo humanitario comprobable con soporte documental.
+INDISPENSABLE: el alumno debe tener BUENA ACTITUD. Con antecedentes negativos → línea estricta y legal.
+Por contrato, si necesita más tiempo debe pagar membresía. Si no quiere y es problemático → protocolo legal.
+Casos de éxito (grabados y documentados): 30 días extensión SIN COSTO + 1 mes membresía a $97. Luego precio regular.
+Todo acuerdo de extensión extraordinaria debe quedar firmado por escrito por el alumno (OTROSÍ).
+
+### FIDELIDAD AL MÉTODO
+
+Se invalida AUTOMÁTICAMENTE la garantía si el alumno utilizó materiales externos:
+- Copys o creativos no alineados a las plantillas del programa.
+- Páginas de ventas o embudos externos (no los entregados por el programa).
+- Estrategias híbridas con métodos externos sin aprobación del coach.
+
+Respuesta estándar en caso de incumplimiento:
+"Tras revisar su implementación, detectamos el uso de materiales ajenos a la metodología oficial de Hotselling. La garantía se basa en la aplicación estricta del método validado. Al utilizar elementos externos, se invalida el proceso de garantía."
+
+### MEMBRESÍAS Y CONTRATOS
+
+Hotselling Starter: $97/mes (precio se mantiene).
+Hotselling PRO: $250/mes o $600 trimestral (precio desde 14-may-2026).
+Ventana de gracia (contratos vencidos antes del 14-may-2026): 5 días hábiles para activar a $97. Después → precio nuevo.
+Al 5ta membresía PRO: se eliminan bonos contractuales y pierde derecho a garantía.
+
+Estados: Activo → Inactivo por Pago → Activo Membresía → Completado (5 días gracia tras vencimiento).
+
+### LIMITACIONES DEL AGENTE
+
+El agente NO puede: aprobar reembolsos, garantías, extensiones extraordinarias, dar excepciones al contrato, negociar valores distintos a los oficiales, inventar reglas no documentadas.
+Si no sabe la respuesta con certeza → decir "te ayudo a gestionar esto con el equipo" en lugar de inventar.
+`;
+
 interface KbSecciones {
+  garantias?: string;
+  pausas?: string;
+  extensiones?: string;
+  fidelidad_metodo?: string;
+  // legacy (backward compat con DB existente)
   protocolos?: string;
   contratos?: string;
   faqs?: string;
@@ -510,10 +596,20 @@ async function loadSuperAtcKnowledgeBase(
     if (!secciones) return null;
 
     const parts: string[] = ["## BASE DE CONOCIMIENTO OPERATIVA ATC\n"];
+    // nuevas secciones dedicadas
+    if (secciones.garantias?.trim())
+      parts.push(`### GARANTÍAS\n${secciones.garantias}\n`);
+    if (secciones.pausas?.trim())
+      parts.push(`### PAUSAS\n${secciones.pausas}\n`);
+    if (secciones.extensiones?.trim())
+      parts.push(`### EXTENSIONES\n${secciones.extensiones}\n`);
+    if (secciones.fidelidad_metodo?.trim())
+      parts.push(`### FIDELIDAD AL MÉTODO\n${secciones.fidelidad_metodo}\n`);
+    // secciones legacy (backward compat)
     if (secciones.protocolos?.trim())
       parts.push(`### PROTOCOLOS\n${secciones.protocolos}\n`);
     if (secciones.contratos?.trim())
-      parts.push(`### CONTRATOS\n${secciones.contratos}\n`);
+      parts.push(`### CONTRATOS Y MEMBRESÍAS\n${secciones.contratos}\n`);
     if (secciones.faqs?.trim())
       parts.push(`### FAQS OPERATIVAS\n${secciones.faqs}\n`);
     if (secciones.casos_historicos?.trim())
@@ -624,13 +720,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Load knowledge base
-  let knowledgeBlock = "";
+  let knowledgeBlock = FALLBACK_KB_BLOCK; // siempre activo como base mínima
   if (authorization) {
     try {
       const kb = await loadSuperAtcKnowledgeBase(authorization);
-      if (kb) knowledgeBlock = kb;
+      if (kb) knowledgeBlock = kb; // la DB sobreescribe el fallback cuando existe
     } catch {
-      // silencioso
+      // silencioso — el fallback ya está activo
     }
   }
 

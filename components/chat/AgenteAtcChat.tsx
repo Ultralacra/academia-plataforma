@@ -14,7 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
-import { createTicket } from "@/app/admin/alumnos/api";
+import { createTicket, createTicketAsAgent } from "@/app/admin/alumnos/api";
 import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
 import { AgentTicketPreviewModal } from "@/components/chat/AgentTicketPreviewModal";
 
@@ -271,6 +271,8 @@ export interface AgenteAtcChatProps {
   welcomeMessage?: string;
   className?: string;
   onTicketCreated?: () => void;
+  /** Si true, los tickets se crean vía proxy ATC (informante = servicio ATC, no el alumno) */
+  createAsAgent?: boolean;
 }
 
 export function AgenteAtcChat({
@@ -281,6 +283,7 @@ export function AgenteAtcChat({
   welcomeMessage,
   className = "",
   onTicketCreated,
+  createAsAgent = false,
 }: AgenteAtcChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -498,7 +501,8 @@ export function AgenteAtcChat({
     _token: string | null,
   ) {
     try {
-      await createTicket({
+      const createFn = createAsAgent ? createTicketAsAgent : createTicket;
+      await createFn({
         nombre: `[URGENTE] Escalación automática — ${name}`,
         id_alumno: code,
         tipo: "ATC",
@@ -714,6 +718,7 @@ export function AgenteAtcChat({
           defaultTitle={pendingTicket.action.titulo}
           defaultDescription={pendingTicket.action.descripcion}
           defaultType={pendingTicket.action.categoria}
+          createFn={createAsAgent ? createTicketAsAgent : undefined}
           onSuccess={() => {
             setTicketModalOpen(false);
             setPendingTicket((prev) =>
