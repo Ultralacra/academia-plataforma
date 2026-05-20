@@ -45,11 +45,17 @@ export function CreateTicketModal({
   onOpenChange,
   onSuccess,
   defaultStudentCode,
+  defaultTitle,
+  defaultDescription,
+  defaultType,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
   defaultStudentCode?: string;
+  defaultTitle?: string;
+  defaultDescription?: string;
+  defaultType?: string;
 }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -156,9 +162,9 @@ export function CreateTicketModal({
       setStudentQuery("");
       setSelectedStudentId(defaultStudentCode || "");
       setSelectedStudentMeta(null);
-      setTitle("");
+      setTitle(defaultTitle || "");
       setType([]);
-      setDescription("");
+      setDescription(defaultDescription || "");
       setLinks([]);
       setNewLink("");
       setFiles([]);
@@ -182,7 +188,18 @@ export function CreateTicketModal({
       setPage(1);
       setHasMore((studentsData?.length ?? 0) >= PAGE_SIZE);
       setTypes(typesData);
-      // No pre-seleccionar ningún tipo por defecto
+      // Pre-seleccionar tipo si viene de defaultType
+      if (defaultType && typesData.length > 0) {
+        const def = String(defaultType).toUpperCase();
+        const match = typesData.find(
+          (t) =>
+            t.key.toUpperCase() === def ||
+            t.value.toUpperCase() === def ||
+            t.key.toUpperCase().includes(def) ||
+            def.includes(t.key.toUpperCase()),
+        );
+        if (match) setType([match.key]);
+      }
 
       if (defaultStudentCode) {
         const wanted = String(defaultStudentCode);

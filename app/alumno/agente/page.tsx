@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Bot,
@@ -16,6 +16,7 @@ import {
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { useAuth } from "@/hooks/use-auth";
+import { authService } from "@/lib/auth";
 import {
   AgenteAtcChat,
   type AIProvider,
@@ -215,13 +216,36 @@ function StudentSidebar({
 // ─── Page content ─────────────────────────────────────────────────────────────
 
 function AgentePageContent() {
-  const { authState, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [tickets, setTickets] = useState<StudentTicket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [provider, setProvider] = useState<AIProvider>("anthropic");
+  // Si el user no tiene codigo (datos incompletos de localStorage), forzar refetch
+  const [retryedCode, setRetryedCode] = useState<string | null>(null);
+  const retryRef = useRef(false);
 
-  const alumnoCode = authState.user?.codigo ?? "";
-  const alumnoName = authState.user?.name ?? alumnoCode;
+  const alumnoCode = (user as any)?.codigo ?? retryedCode ?? "";
+  const alumnoName = user?.name ?? alumnoCode;
+
+  // Si después de cargar el codigo sigue vacío, forzar un refetch fresco de /auth/me
+  useEffect(() => {
+    if (
+      !isLoading &&
+      !(user as any)?.codigo &&
+      isAuthenticated &&
+      !retryRef.current
+    ) {
+      retryRef.current = true;
+      authService
+        .me()
+        .then((u) => {
+          if (u.codigo) setRetryedCode(u.codigo);
+        })
+        .catch(() => {
+          /* se mostrará el banner de error */
+        });
+    }
+  }, [isLoading, user, isAuthenticated]);
 
   // Load provider preference
   useEffect(() => {
@@ -230,7 +254,7 @@ function AgentePageContent() {
   }, []);
 
   // Fetch recent tickets
-  useEffect(() => {
+  const refreshTickets = useCallback(() => {
     if (!alumnoCode) return;
     setLoadingTickets(true);
     getStudentTickets(alumnoCode)
@@ -239,14 +263,33 @@ function AgentePageContent() {
       .finally(() => setLoadingTickets(false));
   }, [alumnoCode]);
 
+  useEffect(() => {
+    refreshTickets();
+  }, [refreshTickets]);
+
   const welcomeMessage = alumnoName
     ? `¡Hola ${alumnoName.split(" ")[0]}! 👋 Soy tu Asistente ATC de Hotselling PRO. Estoy aquí para ayudarte con cualquier consulta sobre tu programa: membresías, contratos, pausas, extensiones, bonos, garantías y mucho más.\n\n¿En qué te puedo ayudar hoy?`
     : "¡Hola! 👋 Soy tu Asistente ATC. ¿En qué te puedo ayudar hoy?";
 
-  if (isLoading) {
+  if (
+    isLoading ||
+    (!(user as any)?.codigo &&
+      !retryedCode &&
+      isAuthenticated &&
+      !retryRef.current)
+  ) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!alumnoCode) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+        <strong>No se pudo identificar tu código de alumno.</strong> Por favor
+        recarga la página. Si el problema persiste, contacta a soporte técnico.
       </div>
     );
   }
@@ -287,6 +330,7 @@ function AgentePageContent() {
             provider={provider}
             welcomeMessage={welcomeMessage}
             className="h-full"
+            onTicketCreated={refreshTickets}
           />
         </div>
       </div>

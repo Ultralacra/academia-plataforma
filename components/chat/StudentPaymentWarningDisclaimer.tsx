@@ -23,12 +23,12 @@ import {
 const CHAT_MESSAGE =
   "Hola, espero te encuentres super bien 👋 Lina te dejó un mensaje importante relacionado con tu proceso y la etapa en la que te encuentras actualmente. Cuando tengas un momento, escúchalo por aquí y cuéntanos cómo vas. Un abrazo.";
 
-/** Mapa de audios por fase. Añadir la URL del audio cuando estén listos F2/F3/F5. */
+/** Mapa de audios por fase. */
 const AUDIO_BY_STAGE: Record<string, string> = {
   F1: "/FASE%20I.ogg",
-  F2: "/FASE%20I.ogg", // TBD
-  F3: "/FASE%20I.ogg", // TBD
-  F5: "/FASE%20I.ogg", // TBD
+  F2: "/FASE%20II.ogg",
+  F3: "/FASE%20III.ogg",
+  F5: "/FASE%20V.ogg",
 };
 
 const FALLBACK_AUDIO = "/FASE%20I.ogg";

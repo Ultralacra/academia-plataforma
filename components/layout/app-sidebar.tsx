@@ -10,6 +10,7 @@ import {
   BarChart3,
   ChevronDown,
   Sparkles,
+  LifeBuoy,
   Settings,
   CalendarClock,
   Moon,
@@ -721,6 +722,11 @@ export function AppSidebar() {
               title: "Chat soporte",
               url: `/admin/alumnos/${code}/chat`,
               icon: MessageSquare,
+            },
+            {
+              title: "Soporte IA",
+              url: "/alumno/agente",
+              icon: LifeBuoy,
             },
             {
               title: "Feedback",

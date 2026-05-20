@@ -118,6 +118,10 @@ Cuando detectes riesgo ALTO (amenaza legal, fraude, reembolso agresivo, crisis e
 
 Si no se requiere ninguna acción, NO incluyas ningún bloque [ACCION] en tu respuesta.
 
+## COMUNICACIONES — MUY IMPORTANTE
+- Las notificaciones por correo electrónico NO se envían al alumno cuando envía un mensaje ni cuando se crea un feedback/ticket.
+- NO menciones notificaciones de correo al alumno ni sugieras que recibirá emails de confirmación.
+
 ## OBJETIVO
 El alumno debe sentirse acompañado, bien atendido y resuelto. Eres su aliado operativo dentro del programa.`;
 }
@@ -177,6 +181,72 @@ Cuando se debe escalar:
 [ACCION:{"tipo":"escalar","motivo":"RAZÓN","nivel":"ALTO"}]
 
 Responde siempre en español. La respuesta sugerida debe estar lista para enviar con mínimas modificaciones.`;
+
+// ─── Student profile ────────────────────────────────────────────────────────
+
+async function fetchStudentProfile(
+  authorization: string,
+  alumnoCode: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const url = buildUrl(
+      `/client/get/cliente/${encodeURIComponent(alumnoCode)}`,
+    );
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as unknown;
+    if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      const r = (j.data as Record<string, unknown>) ?? j;
+      return r && typeof r === "object" && !Array.isArray(r) ? r : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function buildProfileBlock(profile: Record<string, unknown>): string {
+  const lines: string[] = ["## PERFIL COMPLETO DEL ALUMNO\n"];
+  const nombre = String(profile.nombre ?? profile.name ?? "");
+  const estado = String(profile.estado ?? profile.state ?? "");
+  const etapa = String(profile.etapa ?? profile.stage ?? "");
+  const ingreso = String(profile.ingreso ?? profile.joinDate ?? "");
+  const contrato = profile.contrato as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  if (nombre) lines.push(`- **Nombre:** ${nombre}`);
+  if (estado) lines.push(`- **Estado actual:** ${estado}`);
+  if (etapa) lines.push(`- **Etapa/Stage:** ${etapa}`);
+  if (ingreso) lines.push(`- **Fecha de ingreso:** ${ingreso}`);
+  const teamRaw =
+    profile.teamMembers ?? profile.equipo ?? profile.alumnos ?? profile.team;
+  if (Array.isArray(teamRaw) && teamRaw.length > 0) {
+    const coaches = (teamRaw as Record<string, unknown>[])
+      .map((m) => {
+        const n = String(m.nombre ?? m.name ?? m.user_nombre ?? "");
+        const r = String(m.rol ?? m.role ?? m.tipo ?? "");
+        return r ? `${n} (${r})` : n;
+      })
+      .filter(Boolean);
+    if (coaches.length > 0)
+      lines.push(`- **Equipo/Coach asignado:** ${coaches.join(", ")}`);
+  }
+  if (contrato && typeof contrato === "object") {
+    const meses =
+      contrato.meses ?? contrato.programa_meses ?? contrato.duracion;
+    const plan = String(
+      contrato.plan ?? contrato.tipo ?? contrato.nombre ?? "",
+    );
+    if (meses) lines.push(`- **Duración del programa:** ${meses} meses`);
+    if (plan) lines.push(`- **Plan/Contrato:** ${plan}`);
+  }
+  return lines.join("\n");
+}
 
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
@@ -307,7 +377,13 @@ async function buildAtcContext(
   alumnoName: string,
 ): Promise<AtcContext> {
   const signals: string[] = [];
-  const rawTickets = await fetchStudentTickets(authorization, alumnoCode);
+
+  // Fetch perfil y tickets en paralelo
+  const [profile, rawTickets] = await Promise.all([
+    fetchStudentProfile(authorization, alumnoCode),
+    fetchStudentTickets(authorization, alumnoCode),
+  ]);
+
   const weeklyTickets = countWeeklyTickets(rawTickets);
 
   const tickets = rawTickets
@@ -333,6 +409,13 @@ async function buildAtcContext(
   lines.push(
     `## HISTORIAL DEL ALUMNO: ${alumnoName} (código: ${alumnoCode})\n`,
   );
+
+  // Bloque de perfil completo del alumno
+  if (profile) {
+    lines.push(buildProfileBlock(profile));
+    lines.push("");
+  }
+
   lines.push(
     "Usa este historial para entender el contexto del caso actual. Identifica patrones, consultas recurrentes y tono de las interacciones.\n",
   );

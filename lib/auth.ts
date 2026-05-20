@@ -160,10 +160,12 @@ class AuthService {
     const token = st.token ?? null;
 
     // Si ya tenemos usuario reciente para este token, reutilizar
+    // Ignorar cache si el usuario no tiene codigo (evita quedar atrapado con datos incompletos)
     if (
       this.meCache &&
       this.meCache.token === token &&
-      now - this.meCache.at < this.meCacheTtlMs
+      now - this.meCache.at < this.meCacheTtlMs &&
+      !!this.meCache.user.codigo
     ) {
       return this.meCache.user;
     }
@@ -223,6 +225,12 @@ class AuthService {
             updated_at: payload?.updated_at,
           };
           this.meCache = { token: this.getToken(), user, at: Date.now() };
+          // Persistir en localStorage para que futuras cargas de página tengan los datos
+          // completos (incluido codigo) aunque me() falle por red en la siguiente carga.
+          try {
+            const st2 = this.getAuthState();
+            this.setAuthState({ ...st2, user });
+          } catch { /* non-critical */ }
           return user;
         })
         .finally(() => {

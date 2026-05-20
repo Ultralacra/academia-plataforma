@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
 import { createTicket } from "@/app/admin/alumnos/api";
+import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
+import { AgentTicketPreviewModal } from "@/components/chat/AgentTicketPreviewModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -136,10 +138,12 @@ function TicketActionCard({
   pending,
   onConfirm,
   onCancel,
+  isAlumno = false,
 }: {
   pending: PendingTicket;
   onConfirm: () => void;
   onCancel: () => void;
+  isAlumno?: boolean;
 }) {
   const { action, status } = pending;
 
@@ -159,8 +163,9 @@ function TicketActionCard({
         <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm shadow-sm dark:border-emerald-800/50 dark:bg-emerald-900/20">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
           <span className="text-emerald-700 dark:text-emerald-400">
-            ✅ Ticket creado exitosamente. Tu coach recibirá la notificación
-            pronto.
+            {isAlumno
+              ? "✅ Feedback enviado exitosamente. Tu coach lo revisará pronto."
+              : "✅ Ticket creado exitosamente."}
           </span>
         </div>
       </div>
@@ -180,7 +185,7 @@ function TicketActionCard({
         <div className="mb-2.5 flex items-center gap-2">
           <Ticket className="h-4 w-4 text-teal-600 dark:text-teal-400" />
           <span className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
-            Propuesta de ticket
+            {isAlumno ? "Propuesta de feedback" : "Propuesta de ticket"}
           </span>
         </div>
         <p className="mb-1 text-sm font-medium text-foreground">
@@ -202,7 +207,7 @@ function TicketActionCard({
         {status === "creating" ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Creando ticket...
+            {isAlumno ? "Enviando feedback..." : "Creando ticket..."}
           </div>
         ) : (
           <div className="flex gap-2">
@@ -211,7 +216,7 @@ function TicketActionCard({
               className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Crear ticket
+              {isAlumno ? "Enviar feedback" : "Crear ticket"}
             </button>
             <button
               onClick={onCancel}
@@ -265,6 +270,7 @@ export interface AgenteAtcChatProps {
   provider?: AIProvider;
   welcomeMessage?: string;
   className?: string;
+  onTicketCreated?: () => void;
 }
 
 export function AgenteAtcChat({
@@ -274,6 +280,7 @@ export function AgenteAtcChat({
   provider = "anthropic",
   welcomeMessage,
   className = "",
+  onTicketCreated,
 }: AgenteAtcChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -290,11 +297,16 @@ export function AgenteAtcChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const welcomeInitialized = useRef(false);
+  const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
   // ── Welcome message ──────────────────────────────────────────────────────────
+  // Solo se inicializa una vez con el primer welcomeMessage no vacío.
+  // Esto evita que el chat se resetee cuando authState se refresca (cambio de pestaña, etc.)
 
   useEffect(() => {
-    if (welcomeMessage) {
+    if (welcomeMessage && !welcomeInitialized.current) {
+      welcomeInitialized.current = true;
       setMessages([
         {
           id: "welcome",
@@ -311,6 +323,17 @@ export function AgenteAtcChat({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pendingTicket, escalations]);
+
+  // ── Auto-dismiss ticket created card ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (pendingTicket?.status === "created") {
+      const timer = setTimeout(() => {
+        setPendingTicket(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingTicket?.status]);
 
   // ── Textarea auto-resize ─────────────────────────────────────────────────────
 
@@ -487,30 +510,11 @@ export function AgenteAtcChat({
     }
   }
 
-  // ── Confirm ticket ────────────────────────────────────────────────────────────
+  // ── Confirm ticket (abre CreateTicketModal con datos pre-rellenos) ──────────
 
-  async function handleConfirmTicket() {
+  function handleConfirmTicket() {
     if (!pendingTicket || pendingTicket.action.tipo !== "ticket") return;
-    setPendingTicket((prev) => (prev ? { ...prev, status: "creating" } : null));
-
-    try {
-      await createTicket({
-        nombre: pendingTicket.action.titulo,
-        id_alumno: alumnoCode,
-        tipo: pendingTicket.action.categoria.toUpperCase(),
-        descripcion: pendingTicket.action.descripcion,
-        estado: "EN_PROGRESO",
-      });
-      setPendingTicket((prev) =>
-        prev ? { ...prev, status: "created" } : null,
-      );
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      setError(e.message ?? "No se pudo crear el ticket. Intenta nuevamente.");
-      setPendingTicket((prev) =>
-        prev ? { ...prev, status: "pending" } : null,
-      );
-    }
+    setTicketModalOpen(true);
   }
 
   function handleCancelTicket() {
@@ -567,7 +571,7 @@ export function AgenteAtcChat({
         {mode === "alumno" && contextInfo && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Ticket className="h-3.5 w-3.5" />
-            <span>{contextInfo.weeklyTickets}/10 tickets</span>
+            <span>{contextInfo.weeklyTickets}/10 feedbacks</span>
             <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
               <div
                 className={`h-full rounded-full transition-all ${weeklyColor}`}
@@ -612,8 +616,9 @@ export function AgenteAtcChat({
         {pendingTicket && (
           <TicketActionCard
             pending={pendingTicket}
-            onConfirm={() => void handleConfirmTicket()}
+            onConfirm={handleConfirmTicket}
             onCancel={handleCancelTicket}
+            isAlumno={mode === "alumno"}
           />
         )}
 
@@ -678,6 +683,45 @@ export function AgenteAtcChat({
           Enter para enviar · Shift+Enter para nueva línea
         </p>
       </div>
+
+      {/* Modal de ticket/feedback — preview read-only para modo alumno, completo para atc_team */}
+      {pendingTicket?.action.tipo === "ticket" && mode === "alumno" && (
+        <AgentTicketPreviewModal
+          open={ticketModalOpen}
+          onOpenChange={setTicketModalOpen}
+          alumnoCode={alumnoCode}
+          alumnoName={alumnoName}
+          title={pendingTicket.action.titulo}
+          description={pendingTicket.action.descripcion}
+          category={pendingTicket.action.categoria}
+          priority={pendingTicket.action.prioridad}
+          onSuccess={() => {
+            setTicketModalOpen(false);
+            setPendingTicket((prev) =>
+              prev ? { ...prev, status: "created" } : null,
+            );
+            onTicketCreated?.();
+          }}
+        />
+      )}
+      {pendingTicket?.action.tipo === "ticket" && mode !== "alumno" && (
+        <CreateTicketModal
+          open={ticketModalOpen}
+          onOpenChange={(v) => {
+            setTicketModalOpen(v);
+          }}
+          defaultStudentCode={alumnoCode}
+          defaultTitle={pendingTicket.action.titulo}
+          defaultDescription={pendingTicket.action.descripcion}
+          defaultType={pendingTicket.action.categoria}
+          onSuccess={() => {
+            setTicketModalOpen(false);
+            setPendingTicket((prev) =>
+              prev ? { ...prev, status: "created" } : null,
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
