@@ -182,6 +182,458 @@ Cuando se debe escalar:
 
 Responde siempre en español. La respuesta sugerida debe estar lista para enviar con mínimas modificaciones.`;
 
+// ─── Contract date helpers ────────────────────────────────────────────────────
+
+function parseDateOnly(raw: string | null | undefined): Date | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const v = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(v.getTime()) ? null : v;
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function toDayOnly(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addCalendarMonths(date: Date, months: number): Date {
+  const d = new Date(date.getTime());
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+}
+
+function addDaysOffset(d: Date, n: number): Date {
+  const x = new Date(d.getTime());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function diffDaysOffset(a: Date, b: Date): number {
+  return Math.round(
+    (toDayOnly(b).getTime() - toDayOnly(a).getTime()) / 86400000,
+  );
+}
+
+// ─── Contract data ────────────────────────────────────────────────────────────
+
+interface ContractData {
+  programaMeses: number;
+  mesesExtra: number;
+  fechaIngreso: string | null;
+  fechaFin: string | null;
+  diasRestantes: number | null;
+  pausasDiasTotales: number;
+  pausaActiva: boolean;
+  pausaActivaDesde: string | null;
+  membresiaActiva: boolean;
+  membresiaFechaHasta: string | null;
+  extensiones: Array<{ fechaDesde: string; fechaHasta: string; motivo?: string }>;
+}
+
+async function fetchMetadataByEntity(
+  authorization: string,
+  entity: string,
+  entityId: string,
+): Promise<Record<string, unknown>[]> {
+  try {
+    const url = buildUrl(
+      `/metadata?entity=${encodeURIComponent(entity)}&entity_id=${encodeURIComponent(entityId)}`,
+    );
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as unknown;
+    const coerce = (v: unknown): Record<string, unknown>[] => {
+      if (Array.isArray(v)) return v as Record<string, unknown>[];
+      if (v && typeof v === "object") {
+        const j = v as Record<string, unknown>;
+        for (const key of ["data", "items"]) {
+          if (Array.isArray(j[key])) return j[key] as Record<string, unknown>[];
+        }
+        if (j.data && typeof j.data === "object") {
+          const d = j.data as Record<string, unknown>;
+          for (const k of ["items", "data", "rows"]) {
+            if (Array.isArray(d[k])) return d[k] as Record<string, unknown>[];
+          }
+        }
+      }
+      return [];
+    };
+    const all = coerce(json);
+    return all.filter(
+      (r) =>
+        (!r.entity || r.entity === entity) &&
+        (!r.entity_id || String(r.entity_id) === entityId),
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function fetchEstatusRows(
+  authorization: string,
+  alumnoCode: string,
+): Promise<Record<string, unknown>[]> {
+  try {
+    const url = buildUrl(
+      `/client/get/cliente-estatus/${encodeURIComponent(alumnoCode)}`,
+    );
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as unknown;
+    if (Array.isArray(json)) return json as Record<string, unknown>[];
+    if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      if (Array.isArray(j.data)) return j.data as Record<string, unknown>[];
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function computeContractData(
+  venceItems: Record<string, unknown>[],
+  membresiaItems: Record<string, unknown>[],
+  estatusRows: Record<string, unknown>[],
+  joinDateRaw: string | null,
+): ContractData {
+  const venceMeta =
+    venceItems.length > 0
+      ? [...venceItems].sort((a, b) => {
+          const ta = new Date(String(a.updated_at ?? a.created_at ?? 0)).getTime();
+          const tb = new Date(String(b.updated_at ?? b.created_at ?? 0)).getTime();
+          return tb - ta;
+        })[0]
+      : null;
+
+  const vp = (venceMeta?.payload ?? {}) as Record<string, unknown>;
+  const programaMeses = Math.max(
+    1,
+    Number.isFinite(Number(vp.programa_meses)) ? Math.round(Number(vp.programa_meses)) : 4,
+  );
+  const mesesExtra = Math.max(
+    0,
+    Number.isFinite(Number(vp.meses_extra)) ? Math.round(Number(vp.meses_extra)) : 0,
+  );
+  const extensionesRaw = Array.isArray(vp.extensiones)
+    ? (vp.extensiones as Record<string, unknown>[])
+    : [];
+  const extensiones = extensionesRaw
+    .filter((e) => e.fecha_hasta)
+    .map((e) => ({
+      fechaDesde: String(e.fecha_desde ?? ""),
+      fechaHasta: String(e.fecha_hasta ?? ""),
+      motivo: e.motivo ? String(e.motivo) : undefined,
+    }));
+
+  const today = toDayOnly(new Date());
+  let pausaActiva = false;
+  let pausaActivaDesde: string | null = null;
+  const pauseRanges: Array<{ start: Date; end: Date }> = [];
+
+  for (const row of estatusRows) {
+    const estadoId = String(row.estatus_id ?? row.estado_id ?? row.estado ?? "").toUpperCase();
+    if (!estadoId.includes("PAUSADO") && !estadoId.includes("PAUSA")) continue;
+    const fromDate = parseDateOnly(String(row.fecha_desde ?? row.created_at ?? ""));
+    if (!fromDate) continue;
+    const fromDay = toDayOnly(fromDate);
+    const toRaw = String(row.fecha_hasta ?? "");
+    if (toRaw) {
+      const toDate = parseDateOnly(toRaw);
+      if (toDate) pauseRanges.push({ start: fromDay, end: toDayOnly(toDate) });
+    } else {
+      pausaActiva = true;
+      pausaActivaDesde = String(row.fecha_desde ?? row.created_at ?? "");
+      pauseRanges.push({ start: fromDay, end: today });
+    }
+  }
+
+  let pausasDiasTotales = 0;
+  if (pauseRanges.length > 0) {
+    pauseRanges.sort((a, b) => a.start.getTime() - b.start.getTime());
+    const merged: Array<{ start: Date; end: Date }> = [pauseRanges[0]];
+    for (let i = 1; i < pauseRanges.length; i++) {
+      const last = merged[merged.length - 1];
+      const cur = pauseRanges[i];
+      if (cur.start.getTime() <= last.end.getTime()) {
+        if (cur.end.getTime() > last.end.getTime()) last.end = cur.end;
+      } else {
+        merged.push(cur);
+      }
+    }
+    for (const r of merged) pausasDiasTotales += Math.max(0, diffDaysOffset(r.start, r.end));
+  }
+
+  const activeMembresias = membresiaItems.filter(
+    (m) => !((m.payload ?? {}) as Record<string, unknown>).anulado,
+  );
+  const membresiaActiva = activeMembresias.length > 0;
+  let membresiaFechaHasta: string | null = null;
+  for (const m of activeMembresias) {
+    const fh = String(((m.payload ?? {}) as Record<string, unknown>).fecha_hasta ?? "");
+    if (fh && (!membresiaFechaHasta || fh > membresiaFechaHasta)) membresiaFechaHasta = fh;
+  }
+
+  const joinDate = parseDateOnly(joinDateRaw);
+  if (!joinDate) {
+    return {
+      programaMeses, mesesExtra, fechaIngreso: joinDateRaw, fechaFin: null,
+      diasRestantes: null, pausasDiasTotales, pausaActiva, pausaActivaDesde,
+      membresiaActiva, membresiaFechaHasta, extensiones,
+    };
+  }
+
+  const startDay = toDayOnly(joinDate);
+  let finalEnd = addDaysOffset(addCalendarMonths(startDay, programaMeses), pausasDiasTotales);
+  if (mesesExtra > 0) finalEnd = addDaysOffset(finalEnd, mesesExtra * 30);
+  for (const ext of extensiones) {
+    const extEnd = parseDateOnly(ext.fechaHasta);
+    if (extEnd && toDayOnly(extEnd).getTime() > finalEnd.getTime())
+      finalEnd = toDayOnly(extEnd);
+  }
+  if (membresiaFechaHasta) {
+    const memEnd = parseDateOnly(membresiaFechaHasta);
+    if (memEnd && toDayOnly(memEnd).getTime() > finalEnd.getTime())
+      finalEnd = toDayOnly(memEnd);
+  }
+
+  return {
+    programaMeses, mesesExtra, fechaIngreso: joinDateRaw,
+    fechaFin: finalEnd.toISOString().slice(0, 10),
+    diasRestantes: diffDaysOffset(today, finalEnd),
+    pausasDiasTotales, pausaActiva, pausaActivaDesde,
+    membresiaActiva, membresiaFechaHasta, extensiones,
+  };
+}
+
+function buildContractBlock(data: ContractData): string {
+  const lines: string[] = ["## ESTADO CONTRACTUAL DEL ALUMNO\n"];
+  lines.push(`- **Duración del programa:** ${data.programaMeses} meses`);
+  if (data.fechaIngreso) lines.push(`- **Fecha de ingreso:** ${data.fechaIngreso}`);
+
+  if (data.fechaFin) {
+    const dr = data.diasRestantes ?? 0;
+    let statusLabel: string;
+    if (dr < 0) statusLabel = `VENCIDO hace ${Math.abs(dr)} días`;
+    else if (dr === 0) statusLabel = "VENCE HOY";
+    else if (dr <= 7) statusLabel = `por vencer en ${dr} días ⚠️`;
+    else if (dr <= 30) statusLabel = `vence en ${dr} días`;
+    else statusLabel = `activo — ${dr} días restantes`;
+    lines.push(`- **Fecha estimada de fin del acceso:** ${data.fechaFin} (${statusLabel})`);
+  } else {
+    lines.push(`- **Fecha de fin:** No calculable (sin fecha de ingreso registrada)`);
+  }
+
+  if (data.mesesExtra > 0)
+    lines.push(`- **Extensión registrada:** +${data.mesesExtra} meses adicionales`);
+
+  if (data.extensiones.length > 0) {
+    lines.push(`- **Extensiones explícitas:**`);
+    for (const ext of data.extensiones) {
+      const motivo = ext.motivo ? ` — ${ext.motivo}` : "";
+      lines.push(`  • Desde ${ext.fechaDesde || "—"} hasta ${ext.fechaHasta}${motivo}`);
+    }
+  }
+
+  lines.push(
+    `- **Días de pausa acumulados:** ${data.pausasDiasTotales}${
+      data.pausaActiva
+        ? ` (PAUSA ACTIVA desde ${data.pausaActivaDesde ?? "fecha desconocida"})`
+        : " (sin pausa activa)"
+    }`,
+  );
+  lines.push(
+    `- **Membresía activa:** ${
+      data.membresiaActiva
+        ? `SÍ${data.membresiaFechaHasta ? ` (hasta ${data.membresiaFechaHasta})` : ""}`
+        : "NO"
+    }`,
+  );
+  return lines.join("\n");
+}
+
+// ─── Extra profile data fetches ───────────────────────────────────────────────
+
+async function fetchEtapasHistory(
+  authorization: string,
+  alumnoCode: string,
+): Promise<Record<string, unknown>[]> {
+  try {
+    const url = buildUrl(
+      `/client/get/cliente-etapas/${encodeURIComponent(alumnoCode)}`,
+    );
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as unknown;
+    if (Array.isArray(json)) return json as Record<string, unknown>[];
+    if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      if (Array.isArray(j.data)) return j.data as Record<string, unknown>[];
+      if (j.data && typeof j.data === "object") {
+        const d = j.data as Record<string, unknown>;
+        if (Array.isArray(d.data)) return d.data as Record<string, unknown>[];
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchWelcomeSurvey(
+  authorization: string,
+  metadataEntityId: string,
+  alumnoCode: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const url = buildUrl(`/metadata?entity=student_profile_data`);
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as unknown;
+    const coerce = (v: unknown): Record<string, unknown>[] => {
+      if (Array.isArray(v)) return v as Record<string, unknown>[];
+      if (v && typeof v === "object") {
+        const j = v as Record<string, unknown>;
+        if (Array.isArray(j.data)) return j.data as Record<string, unknown>[];
+        if (Array.isArray(j.items)) return j.items as Record<string, unknown>[];
+        if (j.data && typeof j.data === "object") {
+          const d = j.data as Record<string, unknown>;
+          for (const k of ["items", "data", "rows"]) {
+            if (Array.isArray(d[k])) return d[k] as Record<string, unknown>[];
+          }
+        }
+      }
+      return [];
+    };
+    const all = coerce(json);
+    const match = all.find((m) => {
+      const eid = String(m.entity_id ?? "").trim();
+      if (eid === metadataEntityId || eid === alumnoCode) return true;
+      const pc = String((m.payload as Record<string, unknown> | undefined)?.alumno_codigo ?? "").trim();
+      return pc === alumnoCode || pc === metadataEntityId;
+    });
+    return match ? ((match.payload as Record<string, unknown>) ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Extra context block builders ─────────────────────────────────────────────
+
+function buildStatusHistoryBlock(estatusRows: Record<string, unknown>[]): string {
+  if (estatusRows.length === 0) return "";
+  const lines: string[] = ["## HISTORIAL DE ESTATUS\n"];
+  const sorted = [...estatusRows].sort((a, b) => {
+    const ta = String(a.created_at ?? a.fecha_desde ?? "");
+    const tb = String(b.created_at ?? b.fecha_desde ?? "");
+    return tb.localeCompare(ta);
+  });
+  for (const r of sorted.slice(0, 15)) {
+    const estado = String(r.estatus_id ?? r.estado_id ?? r.estado ?? "—");
+    const desde = String(r.fecha_desde ?? r.created_at ?? "—");
+    const hasta = String(r.fecha_hasta ?? "");
+    const rango = hasta ? `${desde} → ${hasta}` : `${desde} → (activo)`;
+    const motivo = r.motivo ? ` — ${String(r.motivo)}` : "";
+    const revertida = r.revertida || r.anulado ? " [REVERTIDA]" : "";
+    lines.push(`- **${estado}** · ${rango}${motivo}${revertida}`);
+  }
+  return lines.join("\n");
+}
+
+function buildEtapasBlock(etapasRows: Record<string, unknown>[]): string {
+  if (etapasRows.length === 0) return "";
+  const lines: string[] = ["## HISTORIAL DE ETAPAS/FASES\n"];
+  const sorted = [...etapasRows].sort((a, b) => {
+    const ta = String(a.created_at ?? a.fecha ?? "");
+    const tb = String(b.created_at ?? b.fecha ?? "");
+    return tb.localeCompare(ta);
+  });
+  for (const r of sorted.slice(0, 10)) {
+    const etapa = String(r.etapa_id ?? r.etapa ?? r.fase ?? r.stage ?? "—");
+    const fecha = String(r.created_at ?? r.fecha ?? "—");
+    lines.push(`- **${etapa}** · ${fecha}`);
+  }
+  return lines.join("\n");
+}
+
+function buildSurveyBlock(survey: Record<string, unknown>): string {
+  const lines: string[] = ["## ENCUESTA DE BIENVENIDA\n"];
+  const niche = String(survey.niche ?? survey.nicho ?? "");
+  const occupation = String(survey.occupation ?? survey.ocupacion ?? "");
+  const experience = String(survey.digitalExperience ?? survey.experiencia ?? "");
+  const learning = String(survey.learningPreference ?? survey.aprendizaje ?? "");
+  const completedAt = String(survey.completedAt ?? survey.updatedAt ?? "");
+  if (niche) lines.push(`- **Nicho:** ${niche}`);
+  if (occupation) lines.push(`- **Ocupación:** ${occupation}`);
+  if (experience) lines.push(`- **Experiencia digital:** ${experience}`);
+  if (learning) lines.push(`- **Aprende mejor con:** ${learning}`);
+  const socials = Array.isArray(survey.socialNetworks)
+    ? (survey.socialNetworks as Record<string, unknown>[])
+    : [];
+  if (socials.length > 0) {
+    const handles = socials
+      .map((s) => `${String(s.platform ?? "")}: ${String(s.handle ?? "")}`)
+      .filter(Boolean);
+    if (handles.length > 0) lines.push(`- **Redes sociales:** ${handles.join(" · ")}`);
+  }
+  if (completedAt) lines.push(`- **Completada:** ${completedAt.slice(0, 10)}`);
+  return lines.join("\n");
+}
+
+// ─── Student coaches ──────────────────────────────────────────────────────────
+
+async function fetchStudentCoaches(
+  authorization: string,
+  alumnoCode: string,
+): Promise<{ name: string; puesto: string | null; area: string | null }[]> {
+  try {
+    const url = buildUrl(
+      `/client/get/clients-coaches?alumno=${encodeURIComponent(alumnoCode)}`,
+    );
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as unknown;
+    let rows: Record<string, unknown>[] = [];
+    if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      if (Array.isArray(j.data))
+        rows = j.data as Record<string, unknown>[];
+    }
+    return rows
+      .map((r) => ({
+        name: String(r.coach_nombre ?? r.nombre ?? ""),
+        puesto: r.puesto ? String(r.puesto) : null,
+        area: r.area ? String(r.area) : null,
+      }))
+      .filter((c) => c.name);
+  } catch {
+    return [];
+  }
+}
+
 // ─── Student profile ────────────────────────────────────────────────────────
 
 async function fetchStudentProfile(
@@ -189,21 +641,77 @@ async function fetchStudentProfile(
   alumnoCode: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    const url = buildUrl(
-      `/client/get/cliente/${encodeURIComponent(alumnoCode)}`,
-    );
-    const res = await fetch(url, {
-      headers: { Authorization: authorization },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as unknown;
-    if (json && typeof json === "object") {
-      const j = json as Record<string, unknown>;
-      const r = (j.data as Record<string, unknown>) ?? j;
-      return r && typeof r === "object" && !Array.isArray(r) ? r : null;
+    // Fetch en paralelo: endpoint detalle (tiene contrato, teamMembers) + lista (tiene tag, ingreso, bonos)
+    const [detailRes, listRes] = await Promise.all([
+      fetch(buildUrl(`/client/get/cliente/${encodeURIComponent(alumnoCode)}`), {
+        headers: { Authorization: authorization },
+        signal: AbortSignal.timeout(8_000),
+      }),
+      fetch(buildUrl(`/client/get/clients?pageSize=10&search=${encodeURIComponent(alumnoCode)}`), {
+        headers: { Authorization: authorization },
+        signal: AbortSignal.timeout(8_000),
+      }),
+    ]);
+
+    // Extraer fila del listado (tiene tag, ingreso, bonos)
+    let listRow: Record<string, unknown> | null = null;
+    if (listRes.ok) {
+      const lj = (await listRes.json()) as unknown;
+      const coerce = (v: unknown): Record<string, unknown>[] => {
+        if (Array.isArray(v)) return v as Record<string, unknown>[];
+        if (v && typeof v === "object") {
+          const o = v as Record<string, unknown>;
+          if (Array.isArray(o.data)) return o.data as Record<string, unknown>[];
+          if (o.data && typeof o.data === "object") {
+            const d = o.data as Record<string, unknown>;
+            if (Array.isArray(d.data)) return d.data as Record<string, unknown>[];
+            if (Array.isArray(d.items)) return d.items as Record<string, unknown>[];
+          }
+          if (Array.isArray(o.clients)) return o.clients as Record<string, unknown>[];
+        }
+        return [];
+      };
+      const rows = coerce(lj);
+      listRow =
+        rows.find(
+          (r) =>
+            String(r.codigo ?? r.code ?? "").trim() === alumnoCode ||
+            String(r.id ?? "").trim() === alumnoCode,
+        ) ?? rows[0] ?? null;
     }
-    return null;
+
+    // Extraer objeto del endpoint detalle
+    let detailRow: Record<string, unknown> | null = null;
+    if (detailRes.ok) {
+      const dj = (await detailRes.json()) as unknown;
+      if (dj && typeof dj === "object") {
+        const j = dj as Record<string, unknown>;
+        const r = (j.data as Record<string, unknown>) ?? j;
+        if (r && typeof r === "object" && !Array.isArray(r))
+          detailRow = r as Record<string, unknown>;
+      }
+    }
+
+    if (!detailRow && !listRow) return null;
+
+    // Fusionar: detalle es la base (más completo), listado aporta tag e ingreso si faltan
+    return {
+      ...(listRow ?? {}),
+      ...(detailRow ?? {}),
+      // Campos que el listado suele tener y el detalle puede omitir
+      tag:
+        detailRow?.tag ??
+        listRow?.tag ??
+        listRow?.tags ??
+        listRow?.etiqueta ??
+        null,
+      ingreso:
+        detailRow?.ingreso ??
+        detailRow?.joinDate ??
+        listRow?.ingreso ??
+        listRow?.joinDate ??
+        null,
+    };
   } catch {
     return null;
   }
@@ -215,11 +723,26 @@ function buildProfileBlock(profile: Record<string, unknown>): string {
   const estado = String(profile.estado ?? profile.state ?? "");
   const etapa = String(profile.etapa ?? profile.stage ?? "");
   const ingreso = String(profile.ingreso ?? profile.joinDate ?? "");
-  const contrato = profile.contrato as
-    | Record<string, unknown>
-    | null
-    | undefined;
+  const contrato = profile.contrato as Record<string, unknown> | null | undefined;
+
+  // Tag (Hotselling Pro / Foundation)
+  const tagRaw = profile.tag ?? profile.tags ?? profile.etiqueta ?? profile.label;
+  const tag = tagRaw
+    ? typeof tagRaw === "string"
+      ? tagRaw.trim()
+      : typeof tagRaw === "object" && tagRaw !== null
+        ? String(
+            (tagRaw as Record<string, unknown>).tag ??
+              (tagRaw as Record<string, unknown>).nombre ??
+              (tagRaw as Record<string, unknown>).name ??
+              (tagRaw as Record<string, unknown>).value ??
+              "",
+          ).trim()
+        : ""
+    : "";
+
   if (nombre) lines.push(`- **Nombre:** ${nombre}`);
+  if (tag) lines.push(`- **Tag/Programa:** ${tag}`);
   if (estado) lines.push(`- **Estado actual:** ${estado}`);
   if (etapa) lines.push(`- **Etapa/Stage:** ${etapa}`);
   if (ingreso) lines.push(`- **Fecha de ingreso:** ${ingreso}`);
@@ -237,11 +760,8 @@ function buildProfileBlock(profile: Record<string, unknown>): string {
       lines.push(`- **Equipo/Coach asignado:** ${coaches.join(", ")}`);
   }
   if (contrato && typeof contrato === "object") {
-    const meses =
-      contrato.meses ?? contrato.programa_meses ?? contrato.duracion;
-    const plan = String(
-      contrato.plan ?? contrato.tipo ?? contrato.nombre ?? "",
-    );
+    const meses = contrato.meses ?? contrato.programa_meses ?? contrato.duracion;
+    const plan = String(contrato.plan ?? contrato.tipo ?? contrato.nombre ?? "");
     if (meses) lines.push(`- **Duración del programa:** ${meses} meses`);
     if (plan) lines.push(`- **Plan/Contrato:** ${plan}`);
   }
@@ -369,6 +889,7 @@ interface AtcContext {
   ticketCount: number;
   weeklyTickets: number;
   signals: string[];
+  alumnoNombreResuelto?: string;
 }
 
 async function buildAtcContext(
@@ -378,11 +899,34 @@ async function buildAtcContext(
 ): Promise<AtcContext> {
   const signals: string[] = [];
 
-  // Fetch perfil y tickets en paralelo
-  const [profile, rawTickets] = await Promise.all([
-    fetchStudentProfile(authorization, alumnoCode),
-    fetchStudentTickets(authorization, alumnoCode),
-  ]);
+  // Fase 1: perfil del alumno (necesitamos el ID numérico para filtrar metadata correctamente)
+  const profile = await fetchStudentProfile(authorization, alumnoCode);
+
+  // El entity_id en metadata es el ID numérico del alumno, NO el código string
+  const alumnoNumericId = profile
+    ? String((profile as Record<string, unknown>).id ?? "")
+    : "";
+  const metadataEntityId = alumnoNumericId || alumnoCode;
+
+  // Nombre real del alumno extraído del perfil (más fiable que lo que manda el cliente)
+  const alumnoNombreResuelto =
+    String(
+      (profile as Record<string, unknown> | null)?.nombre ??
+      (profile as Record<string, unknown> | null)?.name ??
+      "",
+    ).trim() || undefined;
+
+  // Fase 2: resto en paralelo usando el ID numérico para metadata
+  const [rawTickets, coaches, venceItems, membresiaItems, estatusRows, etapasRows, surveyPayload] =
+    await Promise.all([
+      fetchStudentTickets(authorization, alumnoCode),
+      fetchStudentCoaches(authorization, alumnoCode),
+      fetchMetadataByEntity(authorization, "alumno_acceso_vence_estimado", metadataEntityId),
+      fetchMetadataByEntity(authorization, "alumno_acceso_extension_membresia", metadataEntityId),
+      fetchEstatusRows(authorization, alumnoCode),
+      fetchEtapasHistory(authorization, alumnoCode),
+      fetchWelcomeSurvey(authorization, metadataEntityId, alumnoCode),
+    ]);
 
   const weeklyTickets = countWeeklyTickets(rawTickets);
 
@@ -413,6 +957,57 @@ async function buildAtcContext(
   // Bloque de perfil completo del alumno
   if (profile) {
     lines.push(buildProfileBlock(profile));
+    lines.push("");
+  }
+
+  // Coaches asignados (endpoint dedicado — más fiable que teamMembers del perfil)
+  if (coaches.length > 0) {
+    lines.push("## COACHES ASIGNADOS AL ALUMNO\n");
+    for (const c of coaches) {
+      const role = [c.puesto, c.area].filter(Boolean).join(" · ");
+      lines.push(`- ${c.name}${role ? ` (${role})` : ""}`);
+    }
+    lines.push("");
+  }
+
+  // Datos contractuales: fechas, pausas, extensiones, membresía
+  // Buscar fecha de ingreso en el perfil (varios campos posibles según el endpoint)
+  const p = profile as Record<string, unknown> | null;
+  const joinDateRaw =
+    (p
+      ? String(
+          p.ingreso ?? p.joinDate ?? p.join_date ?? p.fecha_ingreso ?? p.fechaIngreso ?? "",
+        ) || null
+      : null) ??
+    // Fallback: la metadata de vence a veces almacena fecha_ingreso en el payload
+    (() => {
+      if (!venceItems.length) return null;
+      const vp = (venceItems[0] as Record<string, unknown>).payload as Record<string, unknown> | undefined;
+      return vp ? (String(vp.fecha_ingreso ?? vp.ingreso ?? "") || null) : null;
+    })();
+  const contractData = computeContractData(
+    venceItems, membresiaItems, estatusRows, joinDateRaw,
+  );
+  lines.push(buildContractBlock(contractData));
+  lines.push("");
+
+  // Historial de estatus (ACTIVO, PAUSADO, MEMBRESIA, etc.)
+  const statusBlock = buildStatusHistoryBlock(estatusRows);
+  if (statusBlock) {
+    lines.push(statusBlock);
+    lines.push("");
+  }
+
+  // Historial de etapas/fases
+  const etapasBlock = buildEtapasBlock(etapasRows);
+  if (etapasBlock) {
+    lines.push(etapasBlock);
+    lines.push("");
+  }
+
+  // Encuesta de bienvenida
+  if (surveyPayload) {
+    lines.push(buildSurveyBlock(surveyPayload));
     lines.push("");
   }
 
@@ -460,6 +1055,7 @@ async function buildAtcContext(
     ticketCount: tickets.length,
     weeklyTickets,
     signals: uniqueSignals,
+    alumnoNombreResuelto,
   };
 }
 
@@ -625,6 +1221,37 @@ async function loadSuperAtcKnowledgeBase(
 
 // ─── Usage logging ────────────────────────────────────────────────────────────
 
+async function fetchCurrentUser(
+  authorization: string,
+): Promise<{ id: string | null; codigo: string | null; nombre: string | null }> {
+  try {
+    const res = await fetch(buildUrl("/auth/me"), {
+      headers: { Authorization: authorization, Accept: "application/json" },
+      signal: AbortSignal.timeout(5_000),
+      cache: "no-store",
+    });
+    if (!res.ok) return { id: null, codigo: null, nombre: null };
+    const json = (await res.json()) as unknown;
+    const payload =
+      json && typeof json === "object" && "data" in (json as object)
+        ? (json as Record<string, unknown>).data
+        : json;
+    const p = payload as Record<string, unknown>;
+    return {
+      id: p ? String(p.id ?? "") || null : null,
+      codigo: p ? String(p.codigo ?? p.code ?? "") || null : null,
+      nombre:
+        p
+          ? String(
+              p.nombre ?? p.name ?? p.username ?? p.email ?? "",
+            ) || null
+          : null,
+    };
+  } catch {
+    return { id: null, codigo: null, nombre: null };
+  }
+}
+
 async function logAgentUsage(
   authorization: string,
   data: {
@@ -632,9 +1259,13 @@ async function logAgentUsage(
     model: string;
     input_tokens: number;
     output_tokens: number;
+    cost_usd?: number;
     user_message_chars: number;
     mode: string;
+    user_codigo?: string;
+    user_nombre?: string;
     alumno_codigo?: string;
+    alumno_nombre?: string;
     signals?: string[];
     created_at: string;
   },
@@ -650,7 +1281,7 @@ async function logAgentUsage(
       },
       body: JSON.stringify({
         entity: "agente_uso_super_atc",
-        entity_id: data.alumno_codigo ?? "general",
+        entity_id: data.user_codigo ?? data.alumno_codigo ?? "general",
         payload: data,
       }),
       cache: "no-store",
@@ -698,6 +1329,9 @@ export async function POST(request: NextRequest) {
   const typedMessages = messages as Array<{ role: string; content: string }>;
   const userMsg = String(typedMessages.at(-1)?.content ?? "");
   const currentSignals = detectRiskSignals(userMsg);
+
+  // Identificar al usuario que llama (para registrar quién usa el agente)
+  const currentUser = authorization ? await fetchCurrentUser(authorization) : { id: null, codigo: null, nombre: null };
 
   // Build context
   let ctx: AtcContext = {
@@ -843,9 +1477,13 @@ export async function POST(request: NextRequest) {
             model: modelId,
             input_tokens: inputTokens,
             output_tokens: outputTokens,
+            cost_usd: (inputTokens / 1_000_000) * 3 + (outputTokens / 1_000_000) * 15,
             user_message_chars: userMsg.length,
             mode,
+            user_codigo: currentUser.codigo ?? undefined,
+            user_nombre: currentUser.nombre ?? undefined,
             alumno_codigo: alumnoCode || undefined,
+            alumno_nombre: ctx.alumnoNombreResuelto || alumnoName || undefined,
             signals: ctx.signals,
             created_at: new Date().toISOString(),
           });
@@ -928,9 +1566,13 @@ export async function POST(request: NextRequest) {
           model: oaiModel,
           input_tokens: inputTokens,
           output_tokens: outputTokens,
+          cost_usd: (inputTokens / 1_000_000) * 2.5 + (outputTokens / 1_000_000) * 10,
           user_message_chars: userMsg.length,
           mode,
+          user_codigo: currentUser.codigo ?? undefined,
+          user_nombre: currentUser.nombre ?? undefined,
           alumno_codigo: alumnoCode || undefined,
+          alumno_nombre: ctx.alumnoNombreResuelto || alumnoName || undefined,
           signals: ctx.signals,
           created_at: new Date().toISOString(),
         });

@@ -250,6 +250,13 @@ function AgentsHome() {
           Ver uso del agente Copy (coachs)
         </Link>
         <Link
+          href="/admin/agentes/uso-super-atc"
+          className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
+        >
+          <BarChart3 className="h-4 w-4" />
+          Uso Super ATC (equipo)
+        </Link>
+        <Link
           href="/admin/agentes/uso-tickets"
           className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-100"
         >

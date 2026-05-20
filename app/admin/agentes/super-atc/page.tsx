@@ -12,15 +12,18 @@ import {
   FileText,
   Loader2,
   Save,
+  Search,
   ShieldCheck,
   Target,
   Timer,
+  Users,
   Zap,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Textarea } from "@/components/ui/textarea";
 import { getAuthToken } from "@/lib/auth";
+import { AgenteAtcChat } from "@/components/chat/AgenteAtcChat";
 import { type AIProvider } from "@/components/chat/AgenteAtcChat";
 import { AI_PROVIDER_KEY } from "@/app/admin/agentes/page";
 
@@ -31,7 +34,7 @@ const API_HOST =
 const KB_ENTITY = "super_atc_knowledge_base";
 const KB_ENTITY_ID = "v1";
 
-type Tab = "kb";
+type Tab = "kb" | "test";
 
 // ─── KB Types ─────────────────────────────────────────────────────────────────
 
@@ -437,6 +440,147 @@ const KB_SECTIONS: {
   },
 ];
 
+// ─── Test Tab ─────────────────────────────────────────────────────────────────
+
+function TestAlumnoTab({ provider }: { provider: AIProvider }) {
+  const [students, setStudents] = useState<{ code: string; name: string }[]>(
+    [],
+  );
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<{
+    code: string;
+    name: string;
+  } | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const token = getAuthToken();
+        const res = await fetch(
+          `${API_HOST}/client/get/clients?pageSize=1000`,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as Record<string, unknown>;
+        let rows: Record<string, unknown>[] = [];
+        if (Array.isArray(json.data)) {
+          rows = json.data as Record<string, unknown>[];
+        } else {
+          const payload =
+            (json.clients as Record<string, unknown>) ??
+            (json.getClients as Record<string, unknown>);
+          if (payload && Array.isArray(payload.data))
+            rows = payload.data as Record<string, unknown>[];
+        }
+        setStudents(
+          rows
+            .map((r) => ({
+              code: String(r.codigo ?? r.code ?? r.id ?? ""),
+              name: String(r.nombre ?? r.name ?? ""),
+            }))
+            .filter((s) => s.code && s.name),
+        );
+      } catch {
+        // silencioso
+      } finally {
+        setLoading(false);
+      }
+    }
+    void load();
+  }, []);
+
+  const filtered = students
+    .filter(
+      (s) =>
+        s.name.toLowerCase().includes(search.toLowerCase()) ||
+        s.code.toLowerCase().includes(search.toLowerCase()),
+    )
+    .slice(0, 150);
+
+  return (
+    <div className="flex gap-4" style={{ height: "calc(100vh - 18rem)" }}>
+      {/* Panel izquierdo: selector de alumno */}
+      <div className="flex w-72 shrink-0 flex-col gap-3">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar alumno..."
+            className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="flex-1 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1">
+            {filtered.map((s) => (
+              <button
+                key={s.code}
+                onClick={() => setSelected(s)}
+                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                  selected?.code === s.code
+                    ? "bg-teal-600 text-white"
+                    : "hover:bg-muted text-foreground"
+                }`}
+              >
+                <p className="truncate font-medium">{s.name}</p>
+                <p
+                  className={`truncate font-mono text-xs ${
+                    selected?.code === s.code
+                      ? "text-teal-100"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {s.code}
+                </p>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Sin resultados
+              </p>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {students.length} alumnos cargados
+        </p>
+      </div>
+
+      {/* Panel derecho: chat */}
+      <div className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-border">
+        {selected ? (
+          <AgenteAtcChat
+            key={selected.code}
+            alumnoCode={selected.code}
+            alumnoName={selected.name}
+            mode="atc_team"
+            provider={provider}
+            className="h-full"
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+            <Users className="h-12 w-12 opacity-20" />
+            <p className="text-sm">
+              Selecciona un alumno para probar el agente
+            </p>
+            <p className="text-xs opacity-60">
+              El chat tendrá contexto completo del alumno seleccionado
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── KB Editor Tab ────────────────────────────────────────────────────────────
 
 function KbEditorTab() {
@@ -706,7 +850,10 @@ function SuperAtcContent() {
     id: Tab;
     label: string;
     icon: React.FC<{ className?: string }>;
-  }[] = [{ id: "kb", label: "Base de Conocimiento", icon: Database }];
+  }[] = [
+    { id: "kb", label: "Base de Conocimiento", icon: Database },
+    { id: "test", label: "Probar Agente", icon: Users },
+  ];
 
   return (
     <div className="flex h-full flex-col">
@@ -788,6 +935,7 @@ function SuperAtcContent() {
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
         {activeTab === "kb" && <KbEditorTab />}
+        {activeTab === "test" && <TestAlumnoTab provider={provider} />}
       </div>
     </div>
   );
