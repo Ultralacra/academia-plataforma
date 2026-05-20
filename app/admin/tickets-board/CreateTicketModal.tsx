@@ -49,6 +49,7 @@ export function CreateTicketModal({
   defaultDescription,
   defaultType,
   createFn,
+  defaultFiles,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -61,6 +62,8 @@ export function CreateTicketModal({
   createFn?: (
     form: import("@/app/admin/alumnos/api").CreateTicketForm,
   ) => Promise<any>;
+  /** Archivos pre-adjuntados desde el chat del agente. */
+  defaultFiles?: File[];
 }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -85,6 +88,13 @@ export function CreateTicketModal({
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
+  // Pre-populate files from the agent chat when the modal opens
+  useEffect(() => {
+    if (open && defaultFiles && defaultFiles.length > 0) {
+      setFiles(defaultFiles);
+    }
+  }, [open, defaultFiles]);
   const [uploadProgress, setUploadProgress] = useState({
     current: 0,
     total: 0,

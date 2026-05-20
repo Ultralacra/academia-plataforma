@@ -6,10 +6,12 @@ import {
   CheckCircle2,
   FileText,
   Loader2,
+  Paperclip,
   Tag,
   X,
 } from "lucide-react";
-import { createTicket } from "@/app/admin/alumnos/api";
+import { createTicket, uploadTicketFiles } from "@/app/admin/alumnos/api";
+import { convertBlobToMp3 } from "@/lib/audio-converter";
 
 interface AgentTicketPreviewModalProps {
   open: boolean;
@@ -21,6 +23,12 @@ interface AgentTicketPreviewModalProps {
   category: string;
   priority: string;
   onSuccess: () => void;
+  /** Archivos adjuntados en el chat — se suben junto al ticket */
+  files?: File[];
+  /** Función alternativa de creación (ej. createTicketAsAgent) */
+  createFn?: (
+    form: import("@/app/admin/alumnos/api").CreateTicketForm,
+  ) => Promise<any>;
 }
 
 export function AgentTicketPreviewModal({
@@ -33,6 +41,8 @@ export function AgentTicketPreviewModal({
   category,
   priority,
   onSuccess,
+  files,
+  createFn,
 }: AgentTicketPreviewModalProps) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,13 +53,37 @@ export function AgentTicketPreviewModal({
     setCreating(true);
     setError(null);
     try {
-      await createTicket({
+      const fn = createFn ?? createTicket;
+      const created = await fn({
         nombre: title,
         id_alumno: alumnoCode,
         tipo: category,
         descripcion: description,
         estado: "EN_PROGRESO",
       });
+
+      // Upload files if any
+      if (files && files.length > 0) {
+        const payload = created?.data ?? created;
+        const ticketId = payload?.codigo ?? payload?.id;
+        if (ticketId) {
+          for (const file of files) {
+            let fileToUpload = file;
+            const fileType = (file.type || "").toLowerCase();
+            if (
+              fileType.startsWith("audio/") &&
+              !fileType.includes("mp3") &&
+              !fileType.includes("mpeg")
+            ) {
+              try {
+                fileToUpload = await convertBlobToMp3(file);
+              } catch {}
+            }
+            await uploadTicketFiles(String(ticketId), [fileToUpload]);
+          }
+        }
+      }
+
       onSuccess();
     } catch (e: unknown) {
       const msg = (e as Error)?.message ?? "No se pudo enviar el feedback";
@@ -155,6 +189,26 @@ export function AgentTicketPreviewModal({
               </div>
             </div>
           </div>
+
+          {/* Archivos adjuntos */}
+          {files && files.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Adjuntos ({files.length})
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {files.map((f, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/50 px-2 py-1 text-xs text-muted-foreground"
+                  >
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    <span className="max-w-[9rem] truncate">{f.name}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Error */}
           {error && (

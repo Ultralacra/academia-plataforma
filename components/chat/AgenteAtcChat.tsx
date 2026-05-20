@@ -6,6 +6,7 @@ import {
   Bot,
   CheckCircle2,
   Loader2,
+  Paperclip,
   RefreshCw,
   SendHorizonal,
   ShieldAlert,
@@ -300,8 +301,10 @@ export function AgenteAtcChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const welcomeInitialized = useRef(false);
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
   // ── Welcome message ──────────────────────────────────────────────────────────
   // Solo se inicializa una vez con el primer welcomeMessage no vacío.
@@ -356,10 +359,17 @@ export function AgenteAtcChat({
     setError(null);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
+    // Build content text — include attached file names so the agent has context
+    const filesSuffix =
+      attachedFiles.length > 0
+        ? `\n\n[Archivos adjuntos: ${attachedFiles.map((f) => f.name).join(", ")}]`
+        : "";
+    const contentWithFiles = text + filesSuffix;
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: text,
+      content: contentWithFiles,
       timestamp: new Date(),
     };
 
@@ -379,7 +389,7 @@ export function AgenteAtcChat({
       ...messages
         .filter((m) => m.id !== "welcome")
         .map((m) => ({ role: m.role, content: m.content })),
-      { role: "user" as const, content: text },
+      { role: "user" as const, content: contentWithFiles },
     ];
 
     try {
@@ -650,7 +660,60 @@ export function AgenteAtcChat({
 
       {/* Input area */}
       <div className="border-t border-border bg-card/80 p-3">
+        {/* Attached files chips */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {attachedFiles.map((f, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground"
+              >
+                <Paperclip className="h-3 w-3 shrink-0" />
+                <span className="max-w-30 truncate">{f.name}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAttachedFiles((prev) =>
+                      prev.filter((_, idx) => idx !== i),
+                    )
+                  }
+                  className="ml-0.5 rounded hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,application/pdf,audio/*,video/*,.doc,.docx,.xls,.xlsx,.txt,.csv"
+          className="hidden"
+          onChange={(e) => {
+            const selected = Array.from(e.target.files ?? []);
+            if (selected.length > 0) {
+              setAttachedFiles((prev) => [...prev, ...selected]);
+            }
+            // Reset so same file can be re-selected
+            e.target.value = "";
+          }}
+        />
+
         <div className="flex items-end gap-2 rounded-xl border border-border bg-background px-3 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/20 transition-all">
+          {/* Attachment button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            title="Adjuntar archivos"
+            className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:bg-muted disabled:opacity-40"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
           <textarea
             ref={textareaRef}
             value={input}
@@ -699,11 +762,14 @@ export function AgenteAtcChat({
           description={pendingTicket.action.descripcion}
           category={pendingTicket.action.categoria}
           priority={pendingTicket.action.prioridad}
+          files={attachedFiles}
+          createFn={createAsAgent ? createTicketAsAgent : undefined}
           onSuccess={() => {
             setTicketModalOpen(false);
             setPendingTicket((prev) =>
               prev ? { ...prev, status: "created" } : null,
             );
+            setAttachedFiles([]);
             onTicketCreated?.();
           }}
         />
@@ -719,11 +785,13 @@ export function AgenteAtcChat({
           defaultDescription={pendingTicket.action.descripcion}
           defaultType={pendingTicket.action.categoria}
           createFn={createAsAgent ? createTicketAsAgent : undefined}
+          defaultFiles={attachedFiles}
           onSuccess={() => {
             setTicketModalOpen(false);
             setPendingTicket((prev) =>
               prev ? { ...prev, status: "created" } : null,
             );
+            setAttachedFiles([]);
           }}
         />
       )}

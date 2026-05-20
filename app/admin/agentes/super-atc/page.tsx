@@ -12,21 +12,16 @@ import {
   FileText,
   Loader2,
   Save,
-  Search,
   ShieldCheck,
   Target,
   Timer,
-  Users,
   Zap,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Textarea } from "@/components/ui/textarea";
 import { getAuthToken } from "@/lib/auth";
-import {
-  AgenteAtcChat,
-  type AIProvider,
-} from "@/components/chat/AgenteAtcChat";
+import { type AIProvider } from "@/components/chat/AgenteAtcChat";
 import { AI_PROVIDER_KEY } from "@/app/admin/agentes/page";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -36,7 +31,7 @@ const API_HOST =
 const KB_ENTITY = "super_atc_knowledge_base";
 const KB_ENTITY_ID = "v1";
 
-type Tab = "kb" | "copilot" | "test";
+type Tab = "kb";
 
 // ─── KB Types ─────────────────────────────────────────────────────────────────
 
@@ -74,18 +69,20 @@ Proceso de indagación:
 5. Sesión de claridad: "¿Has considerado una sesión con tus coaches para analizar tu caso?"
 6. Confirmar pagos al día
 
-Si el alumno insiste y está en los tiempos → enviar formato de auditoría (3 días para entregar).
+Si el alumno insiste y está en los tiempos → enviar formato de auditoría (plazo: 3 días para completarlo).
 
-Proceso de auditoría:
+PROCESO DE AUDITORÍA:
+- El alumno solicita el reembolso por compromiso mutuo
 - Se verifica que esté dentro de los tiempos contractuales
-- Se envía formato de auditoría por correo
-- Duración: 5-7 días hábiles
-- Respuesta final con equipo legal
-- Si se niega y hay reconsideración → equipo legal cierra el caso
+- Se responde por correo con el formato de auditoría (3 días hábiles para completarlo)
+- Una vez recibido: se crea carpeta con toda la recopilación del caso (contrato, solicitud, formato, feedback y contexto de coaches)
+- Duración del proceso: 5-7 días hábiles
+- Respuesta final: de la mano del equipo legal
+- Si se niega y el alumno pide reconsideración → equipo operaciones + ATC + legal → propuesta comercial o cierre definitivo
 
 === GARANTÍA — Hotselling Starter ===
-La garantía Starter es SOLO extensión de tiempo (NO reembolso).
-Si el alumno solicita → documentar caso con preguntas de indagación y conceder la extensión.`,
+La garantía Starter es SOLO extensión de tiempo (NO reembolso monetario).
+Si el alumno solicita → enviar correo, documentar caso con preguntas de indagación para entender el motivo y conceder la extensión.`,
 
   pausas: `=== PAUSAS — REGLA ABSOLUTA ===
 El alumno tiene UNA SOLA pausa disponible durante todo el programa.
@@ -198,9 +195,84 @@ Reglas por caso:
 - Casos de éxito (grabados): 30 días extensión sin costo + 1 mes membresía a $97. Luego precio regular.
 - Prospectos de caso de éxito: extensión extraordinaria sin costo. Tras grabación: mes extra + membresía $97.
 - Alumnos vencidos con 10+ días de inactividad: retirar accesos Space/Skool. Si retoman → precio nuevo $250/$600.
-- Alumnos en Fase 5 con contrato por vencer/vencido: indagar primero si es prospecto o caso de éxito antes de comunicar precio.`,
+- Alumnos en Fase 5 con contrato por vencer/vencido: indagar primero si es prospecto o caso de éxito ANTES de comunicar precio nuevo.
 
-  faqs: `=== FLUJO CO-PRODUCTORES ===
+=== MENSAJES SUGERIDOS POR ESCENARIO ===
+
+--- CASO 1: Contrato PRO por vencer (0-7 días), contratos vencidos ANTES del 14-may-2026 ---
+Ventana: 5 días hábiles para activar membresía a $97. Pasados esos 5 días → precio nuevo.
+Mensaje: "Hola [Nombre], te escribo porque la fecha de vencimiento de tu contrato está cerca y quería escribirte personalmente para que no pierdas continuidad en tu proceso. Durante estos días tienes una ventana de 5 días hábiles donde aún puedes activar tu membresía con el valor anterior de $97, como parte de esta transición. Después de ese tiempo, la membresía pasa al nuevo valor. Si sientes que este es el momento para seguir avanzando, este sería el mejor punto para hacerlo. Quedo atento para orientarte en los siguientes pasos. Un abrazo."
+
+--- CASO 2: Contrato PRO por vencer desde el 14-may-2026 en adelante ---
+Mensaje: "Hola [Nombre], te escribo porque la fecha de vencimiento de tu contrato está cerca y quería darte seguimiento para que puedas organizar bien tu proceso. Contarte que el valor de la membresía de continuidad de Hotselling ha sido actualizada, y a partir de ahora el valor es de $250 mensual o $600 trimestral. Esto responde a una evolución en todo lo que estamos construyendo a nivel de soporte, estructura y acompañamiento. Mi recomendación es que lo tengas en el radar desde ya, para que tomes la decisión con claridad cuando llegue el momento. Cualquier duda, estoy aquí para servirte. Un abrazo."
+
+--- CASO 3: Caso de éxito (grabado y documentado) ---
+Beneficio: 30 días extensión sin costo + 1 mes membresía a $97. Luego precio regular.
+Mensaje: "Hola [Nombre], primero felicitarte nuevamente por lo que lograste dentro de Hotselling, es un orgullo para nosotros. Queremos acompañarte un poco más, por eso te vamos a brindar 30 días adicionales sin costo, y además podrás tomar 1 mes de membresía al valor anterior de $97. Una vez finalice este beneficio y si decides continuar, ya entrarías al nuevo esquema de membresía. Para avanzar con los 30 días de extensión, te estaremos haciendo llegar un acuerdo para que puedas firmar y continuar con tu progreso. Quedo atento si surgen dudas. Un abrazo."
+
+--- CASO 4: Prospecto a caso de éxito ---
+Beneficio: extensión extraordinaria sin costo (tiempo coordinado con coach). Tras grabación → mes extra + membresía $97.
+Mensaje: "Hola [Nombre], he estado revisando tu proceso y noté que estás en un punto importante. En Hotselling queremos darte el espacio necesario para que puedas lograr esa trascendencia, así que vamos a acompañarte con una extensión extraordinaria sin costo, alineado con lo que necesites ejecutar. La idea es que puedas avanzar con foco y completar este proceso. Una vez logremos consolidar tu caso, revisamos juntos los siguientes pasos. Te estaremos enviando un acuerdo que necesitamos firmes para continuar con tu progreso. Vamos con todo."
+
+--- CASO 5: Alumno vencido con 10+ días de inactividad ---
+Acción: retirar accesos Space/Skool. Si retoman → precio nuevo $250/$600.
+Mensaje (automatizar por correo): "Hola [Nombre], vimos que llevas un tiempo sin actividad en el programa y por eso tus accesos fueron cerrados. Si en algún momento decides retomar tu proceso, estaremos felices de acompañarte nuevamente. Actualmente, la membresía de continuidad tiene un valor de $250 mensual o $600 trimestral. Si sientes que es tu momento de seguir escalando, contáctanos."
+
+--- CASO 6: Alumno vencido pero sigue activo aprovechando el servicio ---
+Acción: notificar, dar 5 días de gracia. Si no paga → retirar accesos Space/Skool.
+Mensaje: "Hola [Nombre], espero te encuentres muy bien. Quería escribirte porque notamos que tu contrato ya finalizó, sin embargo vemos que sigues activo dentro del proceso y esto habla muy bien de tu compromiso. Para que puedas continuar con acceso completo al acompañamiento, es necesario activar la membresía. Puedes acceder en dos opciones: $250 mensual o $600 trimestral. Tienes 5 días para realizarlo y así mantener la continuidad sin interrupciones. Avísame cómo deseas avanzar y con gusto te oriento. Un abrazo."
+
+--- CASO 7: Alumno en Fase 5 con contrato por vencer o vencido ---
+Acción: indagar PRIMERO si es prospecto a caso de éxito o ya es caso de éxito. NUNCA comunicar precio antes de saber dónde está.
+Mensaje: "Hola [Nombre], te escribo porque me gustaría entender en qué punto estás dentro de Hotselling y cómo ha sido tu experiencia. ¿Cómo vas con tus resultados actualmente? ¿Ya estás generando ventas o estás cerca de lograrlo? La idea es revisar contigo si estamos frente a tu pronta trascendencia y definir desde ahí el siguiente paso. Estaré muy atento a ti." (Dependiendo de la respuesta, abordar conforme a criterios siempre de la mano del Líder de Área).`,
+
+  faqs: `=== CLASIFICACIÓN DE RIESGO — GUÍA PARA EL AGENTE ===
+
+RIESGO BAJO — respuesta automática directa:
+- Consultas operativas: accesos, membresía, continuidad, contratos, fechas de vencimiento
+- FAQs sobre pausas, extensiones, bonos, fases
+- Estado del proceso, coaches asignados, tickets
+Acción: proporcionar respuesta clara e informativa
+
+RIESGO MEDIO — respuesta empática + seguimiento:
+- Inconformidad, ansiedad o frustración con el proceso
+- Pagos duplicados → escalar a Líder ATC
+- Cobros automáticos por error → escalar a Líder ATC
+- Casos de salud o situaciones personales complejas
+Acción: respuesta empática + crear ticket si aplica + sugerir seguimiento
+
+RIESGO ALTO — ESCALAMIENTO OBLIGATORIO — crear ticket urgente + notificar Líder ATC:
+- Reembolso acompañado de amenaza
+- Solicitudes extraordinarias fuera de protocolo
+- Disputa PayPal o cargos revertidos
+- Acusaciones, amenaza legal, mención de abogado o demanda
+- Fraude, estafa
+- Crisis reputacional (redes sociales, reseñas negativas como amenaza)
+- Crisis emocional severa
+Acción: crear ticket urgente automáticamente + escalar a Líder ATC para canalizar al departamento correspondiente
+
+PALABRAS CLAVE QUE ACTIVAN ESCALAMIENTO AUTOMÁTICO:
+PayPal, disputa, demanda, abogado, fraude, estafa, amenaza, acusación, legal, tribunal, denuncia, reputación, prensa, crisis
+
+=== LÍMITE DE TICKETS POR ALUMNO ===
+Máximo 10 tickets por semana por alumno.
+- Informar al alumno cuántos tickets le quedan si está cerca del límite
+- Bloquear creación de tickets si supera el límite semanal
+- Sugerir consolidar varias dudas en un solo ticket
+
+=== MATRIZ DE DECISIÓN ===
+Contrato vencido → explicar continuidad por membresía → NO escalar
+Solicitud garantía → explicar proceso y requisitos → SÍ escalar si insiste Y aplica en tiempos y forma
+Reembolso emocional → contener, ser empático → SÍ escalar a Líder ATC
+Pausa por salud → revisar días disponibles, verificar pagos → escalar solo si es complejo
+Membresía → explicar opciones y precios → NO escalar
+PayPal / disputa / cargo revertido → congelar accesos + crear ticket urgente → SÍ escalar OBLIGATORIO
+Crisis emocional → contener → SÍ escalar si es severa
+Solicitud extensión → evaluar criterios (actitud, pagos, trascendencia) → escalar a Líder si es extraordinaria
+Bonos → verificar estado contractual y membresías activas → escalar si hay duda
+Amenaza legal → NO responder de fondo → crear ticket urgente → escalar OBLIGATORIO a legal
+
+=== FLUJO CO-PRODUCTORES ===
 
 FASE 0 — IDENTIFICACIÓN
 - ATC debe marcar si el alumno es Emprendedor o Co-productor
@@ -251,21 +323,44 @@ P: ¿Tengo garantía?
 R: Aplica si: completaste las 5 fases dentro del tiempo del contrato, estás al día con pagos, y usaste únicamente materiales del programa.
 
 P: ¿Cómo solicito una extensión?
-R: Debes estar al día con pagos y demostrar compromiso. Extensiones de 1-2 meses según caso. Si eres prospecto a caso de éxito o tienes motivo humanitario comprobable, se evalúa sin costo.`,
+R: Debes estar al día con pagos y demostrar compromiso. Extensiones de 1-2 meses según caso. Si eres prospecto a caso de éxito o tienes motivo humanitario comprobable, se evalúa sin costo.
+
+P: ¿Qué es la membresía y qué incluye?
+R: La membresía es la continuidad del programa una vez que vence el contrato original. Incluye acceso a la plataforma, soporte ATC, acceso a coaches y seguimiento. Sin membresía activa, los accesos se retiran.
+
+P: ¿Cuándo pierdo el derecho a la garantía?
+R: Pierdes el derecho si: usaste materiales externos al programa, cambiaste de experto o nicho durante el proceso, no completaste todas las fases, no estás al día con los pagos, o ya activaste tu 5ta membresía. Cualquiera de estas condiciones invalida la solicitud.`,
 
   casos_historicos: "",
 
   limitaciones: `El agente NO puede:
-- Aprobar reembolsos
-- Aprobar garantías (solo el líder ATC tras auditoría)
+- Aprobar reembolsos (solo el líder ATC tras proceso de auditoría)
+- Aprobar garantías (solo el líder ATC tras auditoría completa)
 - Dar excepciones no contempladas en los protocolos
-- Negociar valores o precios distintos a los oficiales
+- Negociar valores o precios distintos a los oficiales documentados
 - Aprobar extensiones extraordinarias sin autorización del líder ATC
-- Contradecir protocolos operativos
-- Modificar contratos
-- Confirmar que un alumno aplica a garantía sin revisar el checklist completo
-- Prometer membresías a precio antiguo fuera de la ventana de gracia
-- Inventar beneficios o reglas no documentadas en esta base de conocimiento`,
+- Aprobar pausas sin verificar que el alumno esté al día con los pagos
+- Contradecir protocolos operativos o contractuales
+- Modificar contratos ni addendums (OTROSÍ)
+- Confirmar que un alumno aplica a garantía sin revisar el checklist de 6 puntos completo
+- Prometer membresía a precio anterior fuera de la ventana de gracia de 5 días
+- Inventar beneficios, reglas o plazos no documentados en esta base de conocimiento
+- Responder de fondo ante amenazas legales, demandas o menciones de fraude/estafa (solo escalar)
+- Reactivar accesos sin validación manual de pago por el equipo ATC/Admin
+- Aprobar bonos sin verificar que el alumno no haya activado su 5ta membresía
+- Confirmar que el alumno perdió la garantía sin revisar si usó materiales externos
+- Decir que el alumno tiene 2 pausas — SIEMPRE es UNA SOLA pausa disponible
+- Prometer resoluciones en plazos distintos a los oficiales (auditoría: 5-7 días hábiles)
+- Tomar decisiones autónomas en casos con riesgo legal, comercial o reputacional
+
+El agente SIEMPRE debe:
+- Priorizar el contrato y los protocolos documentados
+- Proteger operativamente a la empresa
+- Mantener tono humano, cercano, cálido y profesional
+- Contener emocionalmente antes de escalar
+- Intentar resolver antes de escalar
+- Reconocer cuándo es necesario escalar y hacerlo sin demora
+- Ante cualquier duda sobre si escalar o no → ESCALAR`,
 };
 
 const KB_SECTIONS: {
@@ -507,16 +602,26 @@ function KbEditorTab() {
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4 rounded-xl border border-amber-200/60 bg-amber-50/60 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-900/20">
-        <p className="text-sm text-amber-800 dark:text-amber-300">
-          Esta base de conocimiento se inyecta automáticamente en el contexto
-          del agente en cada consulta.{" "}
-          {!metadataId && (
-            <span className="font-semibold">
-              Aún no está guardada en la base de datos — guarda todo para
-              activarla.
-            </span>
+        <div className="space-y-1">
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            Esta base de conocimiento se inyecta automáticamente en el contexto
+            del agente en cada consulta.{" "}
+            {!metadataId && (
+              <span className="font-semibold">
+                Aún no está guardada en la base de datos — guarda todo para
+                activarla.
+              </span>
+            )}
+          </p>
+          {metadataId && (
+            <p className="font-mono text-xs text-amber-700/70 dark:text-amber-400/60">
+              Metadata ID:{" "}
+              <span className="select-all font-semibold text-amber-800 dark:text-amber-300">
+                {metadataId}
+              </span>
+            </p>
           )}
-        </p>
+        </div>
         <button
           onClick={() => void saveAll()}
           disabled={savingAll}
@@ -586,172 +691,6 @@ function KbEditorTab() {
   );
 }
 
-// ─── Copilot Tab ──────────────────────────────────────────────────────────────
-
-function CopilotTab({ provider }: { provider: AIProvider }) {
-  const [alumnoCode, setAlumnoCode] = useState("");
-  const [alumnoName, setAlumnoName] = useState("");
-  const [activeCode, setActiveCode] = useState("");
-  const [activeName, setActiveName] = useState("");
-  const [key, setKey] = useState(0);
-
-  function handleStart() {
-    if (!alumnoCode.trim()) return;
-    setActiveCode(alumnoCode.trim());
-    setActiveName(alumnoName.trim() || alumnoCode.trim());
-    setKey((k) => k + 1);
-  }
-
-  return (
-    <div className="flex h-full flex-col gap-4">
-      {/* Code input */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Código del alumno
-          </label>
-          <input
-            value={alumnoCode}
-            onChange={(e) => setAlumnoCode(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleStart()}
-            placeholder="CXA-574"
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Nombre (opcional)
-          </label>
-          <input
-            value={alumnoName}
-            onChange={(e) => setAlumnoName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleStart()}
-            placeholder="Juan Pérez"
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
-          />
-        </div>
-        <button
-          onClick={handleStart}
-          disabled={!alumnoCode.trim()}
-          className="flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:opacity-40"
-        >
-          <Search className="h-4 w-4" />
-          Cargar contexto
-        </button>
-      </div>
-
-      {/* Disclaimer */}
-      <div className="rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
-        Modo Copiloto ATC — Las respuestas del agente son sugerencias para el
-        equipo. El ATC siempre valida antes de enviar al alumno.
-      </div>
-
-      {/* Chat */}
-      {activeCode ? (
-        <AgenteAtcChat
-          key={key}
-          alumnoCode={activeCode}
-          alumnoName={activeName}
-          mode="atc_team"
-          provider={provider}
-          welcomeMessage={`Contexto cargado para: **${activeName}** (${activeCode}). ¿Qué consulta de este alumno necesitas analizar?`}
-          className="flex-1"
-          createAsAgent={true}
-        />
-      ) : (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 py-16">
-          <Users className="mb-3 h-10 w-10 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            Ingresa el código del alumno para cargar su contexto
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Test Alumno Tab ──────────────────────────────────────────────────────────
-
-function TestAlumnoTab({ provider }: { provider: AIProvider }) {
-  const [alumnoCode, setAlumnoCode] = useState("");
-  const [alumnoName, setAlumnoName] = useState("");
-  const [activeCode, setActiveCode] = useState("");
-  const [activeName, setActiveName] = useState("");
-  const [key, setKey] = useState(0);
-
-  function handleStart() {
-    if (!alumnoCode.trim()) return;
-    setActiveCode(alumnoCode.trim());
-    setActiveName(alumnoName.trim() || alumnoCode.trim());
-    setKey((k) => k + 1);
-  }
-
-  const welcomeMessage = activeName
-    ? `¡Hola ${activeName.split(" ")[0]}! 👋 Soy tu Asistente ATC de Hotselling PRO. ¿En qué te puedo ayudar hoy?\n\n*(Modo prueba admin — simulando vista del alumno)*`
-    : undefined;
-
-  return (
-    <div className="flex h-full flex-col gap-4">
-      {/* Code input */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-amber-200/60 bg-amber-50/40 p-4 shadow-sm dark:border-amber-800/40 dark:bg-amber-900/20 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label className="mb-1.5 block text-xs font-medium text-amber-700 dark:text-amber-400">
-            Código del alumno a simular
-          </label>
-          <input
-            value={alumnoCode}
-            onChange={(e) => setAlumnoCode(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleStart()}
-            placeholder="CXA-574"
-            className="w-full rounded-xl border border-amber-200 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-amber-400/30 dark:border-amber-800/60"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="mb-1.5 block text-xs font-medium text-amber-700 dark:text-amber-400">
-            Nombre
-          </label>
-          <input
-            value={alumnoName}
-            onChange={(e) => setAlumnoName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleStart()}
-            placeholder="Nombre del alumno"
-            className="w-full rounded-xl border border-amber-200 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-amber-400/30 dark:border-amber-800/60"
-          />
-        </div>
-        <button
-          onClick={handleStart}
-          disabled={!alumnoCode.trim()}
-          className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:opacity-40"
-        >
-          <Bot className="h-4 w-4" />
-          Simular alumno
-        </button>
-      </div>
-
-      {/* Chat */}
-      {activeCode ? (
-        <AgenteAtcChat
-          key={key}
-          alumnoCode={activeCode}
-          alumnoName={activeName}
-          mode="alumno"
-          provider={provider}
-          welcomeMessage={welcomeMessage}
-          className="flex-1"
-          createAsAgent={true}
-        />
-      ) : (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 py-16">
-          <Bot className="mb-3 h-10 w-10 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            Ingresa el código del alumno para simular su experiencia
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Page content ─────────────────────────────────────────────────────────────
 
 function SuperAtcContent() {
@@ -767,11 +706,7 @@ function SuperAtcContent() {
     id: Tab;
     label: string;
     icon: React.FC<{ className?: string }>;
-  }[] = [
-    { id: "kb", label: "Base de Conocimiento", icon: Database },
-    { id: "copilot", label: "Copiloto ATC", icon: Bot },
-    { id: "test", label: "Prueba Alumno", icon: Users },
-  ];
+  }[] = [{ id: "kb", label: "Base de Conocimiento", icon: Database }];
 
   return (
     <div className="flex h-full flex-col">
@@ -853,22 +788,6 @@ function SuperAtcContent() {
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
         {activeTab === "kb" && <KbEditorTab />}
-        {activeTab === "copilot" && (
-          <div
-            className="flex flex-col"
-            style={{ height: "calc(100vh - 320px)", minHeight: "500px" }}
-          >
-            <CopilotTab provider={provider} />
-          </div>
-        )}
-        {activeTab === "test" && (
-          <div
-            className="flex flex-col"
-            style={{ height: "calc(100vh - 320px)", minHeight: "500px" }}
-          >
-            <TestAlumnoTab provider={provider} />
-          </div>
-        )}
       </div>
     </div>
   );
