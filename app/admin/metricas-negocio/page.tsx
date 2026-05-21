@@ -341,6 +341,7 @@ function BusinessMetricsContent() {
   const [pwError, setPwError] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipSaveRef = useRef(false);
+  const metaIdRef = useRef<string | null>(null);
   const [importingSnapshot, setImportingSnapshot] = useState(false);
   const [importedFields, setImportedFields] = useState<string[]>([]);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -451,6 +452,7 @@ function BusinessMetricsContent() {
           skipSaveRef.current = true;
           setState(next);
           setMetaId(String(found.id));
+          metaIdRef.current = String(found.id);
         }
         // Si no existe: no se crea nada automáticamente.
         // El usuario debe pulsar "Sincronizar" para crear el registro.
@@ -495,6 +497,7 @@ function BusinessMetricsContent() {
         if (newId) {
           skipSaveRef.current = true;
           setMetaId(String(newId));
+          metaIdRef.current = String(newId);
         } else {
           throw new Error("Respuesta sin ID");
         }
@@ -545,7 +548,7 @@ function BusinessMetricsContent() {
     saveTimerRef.current = setTimeout(async () => {
       try {
         const token = getAuthToken();
-        let id = metaId;
+        let id = metaIdRef.current;
 
         // Si aún no tenemos el ID, buscamos el registro existente
         if (!id) {
@@ -574,6 +577,7 @@ function BusinessMetricsContent() {
             );
             if (found) {
               id = String(found.id);
+              metaIdRef.current = id;
               setMetaId(id);
             }
           }
@@ -600,7 +604,7 @@ function BusinessMetricsContent() {
         setSavingMeta(false);
       }
     }, 1500);
-  }, [state, metaId]);
+  }, [state]);
 
   const visibleRecords = useMemo(() => {
     const sorted = sortBusinessRecords(state.records);
@@ -1167,11 +1171,25 @@ function BusinessMetricsContent() {
                 meta: {metaId}
               </Badge>
             )}
-            {savingMeta && (
-              <Badge variant="outline" className="text-muted-foreground">
-                Guardando…
-              </Badge>
-            )}
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleManualSync}
+              disabled={savingMeta}
+              className="gap-1.5"
+            >
+              {savingMeta ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  Guardando…
+                </>
+              ) : (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  Guardar
+                </>
+              )}
+            </Button>
             {!savingMeta && metaId && (
               <Badge
                 variant="outline"
