@@ -1117,12 +1117,7 @@ function SoporteAtcWorkspace() {
         <div className="border-t border-border p-3 space-y-2">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <Bot className="h-3.5 w-3.5" />
-            <span>
-              {(typeof window !== "undefined" &&
-                localStorage.getItem("agents-ai-provider")) === "openai"
-                ? "OpenAI · GPT"
-                : "Anthropic · Claude"}
-            </span>
+            <span>Anthropic · Claude</span>
           </div>
           <Link
             href="/admin/agentes/soporte-atc/uso"

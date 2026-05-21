@@ -684,7 +684,7 @@ function CopyAgentWorkspace() {
           body: JSON.stringify({
             messages: history,
             agentType: selectedAgentId,
-            provider: localStorage.getItem("agents-ai-provider") ?? "openai",
+            provider: "anthropic",
             alumnoCode: selectedStudent?.code,
             alumnoName: selectedStudent?.name,
           }),

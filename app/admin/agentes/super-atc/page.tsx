@@ -839,11 +839,11 @@ function KbEditorTab() {
 
 function SuperAtcContent() {
   const [activeTab, setActiveTab] = useState<Tab>("kb");
-  const [provider, setProvider] = useState<AIProvider>("anthropic");
+  const [provider] = useState<AIProvider>("anthropic");
 
   useEffect(() => {
-    const saved = localStorage.getItem(AI_PROVIDER_KEY) as AIProvider | null;
-    if (saved === "openai" || saved === "anthropic") setProvider(saved);
+    // Forzar siempre anthropic — OpenAI deshabilitado por control de costes
+    localStorage.setItem(AI_PROVIDER_KEY, "anthropic");
   }, []);
 
   const tabs: {
@@ -884,30 +884,15 @@ function SuperAtcContent() {
               </div>
             </div>
 
-            {/* Provider selector */}
+            {/* Modelo IA — solo Claude */}
             <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
               <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Modelo IA
               </span>
               <div className="flex items-center gap-1 rounded-xl border border-border bg-background/60 p-1">
-                {(["anthropic", "openai"] as AIProvider[]).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => {
-                      setProvider(p);
-                      localStorage.setItem(AI_PROVIDER_KEY, p);
-                    }}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                      provider === p
-                        ? p === "anthropic"
-                          ? "bg-linear-to-r from-[#c96442] to-[#a8522e] text-white shadow"
-                          : "bg-linear-to-r from-[#10a37f] to-[#0d8a6a] text-white shadow"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    {p === "anthropic" ? "Anthropic" : "OpenAI"}
-                  </button>
-                ))}
+                <span className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-[#c96442] to-[#a8522e] px-3 py-1.5 text-xs font-semibold text-white shadow">
+                  Anthropic · Claude
+                </span>
               </div>
             </div>
           </div>

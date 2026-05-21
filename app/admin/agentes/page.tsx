@@ -151,17 +151,12 @@ const agents = [
 ];
 
 function AgentsHome() {
-  const [provider, setProvider] = useState<AIProvider>("openai");
+  const [provider] = useState<AIProvider>("anthropic");
 
   useEffect(() => {
-    const saved = localStorage.getItem(AI_PROVIDER_KEY) as AIProvider | null;
-    if (saved === "openai" || saved === "anthropic") setProvider(saved);
+    // Forzar siempre anthropic — OpenAI deshabilitado por control de costes
+    localStorage.setItem(AI_PROVIDER_KEY, "anthropic");
   }, []);
-
-  function toggleProvider(next: AIProvider) {
-    setProvider(next);
-    localStorage.setItem(AI_PROVIDER_KEY, next);
-  }
 
   return (
     <div className="space-y-8">
@@ -185,37 +180,13 @@ function AgentsHome() {
             </div>
           </div>
 
-          {/* Switch de proveedor IA */}
+          {/* Modelo IA — solo Claude */}
           <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
             <span className="text-[11px] font-medium uppercase tracking-wide text-[#7a6654] dark:text-orange-200/60">
               Modelo IA
             </span>
             <div className="flex items-center gap-1 rounded-xl border border-orange-200/60 bg-white/60 p-1 shadow-sm dark:border-orange-900/30 dark:bg-[#1f1a14]/60">
-              <button
-                onClick={() => toggleProvider("openai")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
-                  provider === "openai"
-                    ? "bg-linear-to-r from-[#10a37f] to-[#0d8a6a] text-white shadow"
-                    : "text-[#7a6654] hover:bg-orange-50 dark:text-orange-200/60 dark:hover:bg-orange-900/20"
-                }`}
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.677l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.896zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
-                </svg>
-                OpenAI
-              </button>
-              <button
-                onClick={() => toggleProvider("anthropic")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
-                  provider === "anthropic"
-                    ? "bg-linear-to-r from-[#c96442] to-[#a8522e] text-white shadow"
-                    : "text-[#7a6654] hover:bg-orange-50 dark:text-orange-200/60 dark:hover:bg-orange-900/20"
-                }`}
-              >
+              <span className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-[#c96442] to-[#a8522e] px-3 py-1.5 text-xs font-semibold text-white shadow">
                 <svg
                   className="h-3.5 w-3.5"
                   viewBox="0 0 24 24"
@@ -224,10 +195,10 @@ function AgentsHome() {
                   <path d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-3.654 0H6.57L0 20h3.603l1.357-3.415h6.571L10.173 3.52zm-1.125 9.975H5.898l2.577-6.492 2.573 6.492z" />
                 </svg>
                 Anthropic
-              </button>
+              </span>
             </div>
             <span className="text-[10px] text-[#9e8778] dark:text-orange-200/40">
-              {provider === "openai" ? "GPT · OpenAI" : "Claude · Anthropic"}
+              Claude · Anthropic
             </span>
           </div>
         </div>
