@@ -75,6 +75,12 @@ const businessMetricsMenuItem: MenuItem = {
   icon: BarChart3,
 };
 
+const teamPerformanceMenuItem: MenuItem = {
+  title: "Rendimiento areas",
+  url: "/admin/rendimiento-areas",
+  icon: BarChart3,
+};
+
 /* ====================== Menús (admin con top-level Coachs/Alumnos/Tickets + grupo “Métricas”) ====================== */
 const adminItems: MenuItem[] = [
   /*  { title: "Dashboard", url: "/admin", icon: Home },
@@ -312,8 +318,12 @@ export function AppSidebar() {
             : baseAdmin;
 
           const adminWithConfidentialModule = canAccessBusinessMetrics(user)
-            ? [...baseAdminWithAccesos, businessMetricsMenuItem]
-            : baseAdminWithAccesos;
+            ? [
+                ...baseAdminWithAccesos,
+                businessMetricsMenuItem,
+                teamPerformanceMenuItem,
+              ]
+            : [...baseAdminWithAccesos, teamPerformanceMenuItem];
 
           return (
             alumnoCodeInPath
@@ -543,6 +553,7 @@ export function AppSidebar() {
                   url: "/admin/preguntas-frecuentes",
                   icon: CircleHelp,
                 },
+                teamPerformanceMenuItem,
               ]
             : [
                 {
@@ -623,6 +634,7 @@ export function AppSidebar() {
                   url: "/admin/preguntas-frecuentes",
                   icon: CircleHelp,
                 },
+                teamPerformanceMenuItem,
               ];
 
           // Filtrar ítems según el área del usuario equipo

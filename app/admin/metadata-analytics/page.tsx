@@ -37,6 +37,10 @@ const MODULE_MAP: Record<string, { label: string; url?: string }> = {
     label: "Métricas de Negocio",
     url: "/admin/metricas-negocio",
   },
+  team_performance_space_state: {
+    label: "Rendimiento por Areas",
+    url: "/admin/rendimiento-areas",
+  },
   nota_interna_etiqueta: {
     label: "Etiquetas Notas Tickets",
     url: "/admin/tickets-board/notas-internas",
