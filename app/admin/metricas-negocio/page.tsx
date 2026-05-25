@@ -342,6 +342,7 @@ function BusinessMetricsContent() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipSaveRef = useRef(false);
   const metaIdRef = useRef<string | null>(null);
+  const immediateRef = useRef(false);
   const [importingSnapshot, setImportingSnapshot] = useState(false);
   const [importedFields, setImportedFields] = useState<string[]>([]);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -545,6 +546,8 @@ function BusinessMetricsContent() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSavingMeta(true);
     const snapshot = state;
+    const delay = immediateRef.current ? 0 : 1500;
+    immediateRef.current = false;
     saveTimerRef.current = setTimeout(async () => {
       try {
         const token = getAuthToken();
@@ -880,6 +883,7 @@ function BusinessMetricsContent() {
       notes: monthForm.notes?.trim() || "",
     };
 
+    immediateRef.current = true;
     setState((current) => {
       const filtered = current.records.filter(
         (record) => record.id !== editingMonthId,
@@ -906,6 +910,7 @@ function BusinessMetricsContent() {
       note: expenseForm.note?.trim() || "",
     };
 
+    immediateRef.current = true;
     setState((current) => ({
       ...current,
       expenses: sortBusinessExpenses([
@@ -1553,7 +1558,8 @@ function BusinessMetricsContent() {
             </TabsTrigger>
             <TabsTrigger
               value="expenses"
-              className="data-[state=active]:bg-rose-600 data-[state=active]:text-white"
+              disabled
+              className="data-[state=active]:bg-rose-600 data-[state=active]:text-white opacity-40 cursor-not-allowed"
             >
               <Receipt className="mr-1 h-3 w-3" />
               Partidas / costos
@@ -3715,11 +3721,7 @@ function BusinessMetricsContent() {
               <Button
                 className="bg-rose-600 hover:bg-rose-700 text-white"
                 size="sm"
-                onClick={() => {
-                  resetExpenseForm();
-                  setExpenseForm((f) => ({ ...f, scope: "operativo" }));
-                  setActiveTab("expenses");
-                }}
+                disabled
               >
                 <Plus className="mr-1 h-4 w-4" />
                 Nueva partida operativa
