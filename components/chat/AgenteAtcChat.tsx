@@ -45,7 +45,12 @@ interface EscalateAction {
   nivel: string;
 }
 
-type AgentAction = TicketAction | EscalateAction;
+interface TransferAction {
+  tipo: "transferir";
+  motivo: string;
+}
+
+type AgentAction = TicketAction | EscalateAction | TransferAction;
 
 interface AgentContextInfo {
   ticketCount: number;
@@ -185,7 +190,7 @@ function TicketActionCard({
       <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200/80 bg-teal-50/60 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
         <div className="mb-2.5 flex items-center gap-2">
           <Ticket className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
             {isAlumno ? "Propuesta de feedback" : "Propuesta de ticket"}
           </span>
         </div>
@@ -244,8 +249,8 @@ function EscalationCard({ motivo }: { motivo: string }) {
       <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-red-200 bg-red-50 px-4 py-3.5 shadow-sm dark:border-red-800/40 dark:bg-red-900/20">
         <div className="mb-1.5 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
-            Caso escalado al equipo ATC
+          <span className="text-xs font-semibold tracking-wide text-red-700 dark:text-red-300">
+            Caso escalado al equipo atc
           </span>
         </div>
         <p className="text-sm text-red-700 dark:text-red-300">
@@ -254,6 +259,35 @@ function EscalationCard({ motivo }: { motivo: string }) {
         </p>
         {motivo && (
           <p className="mt-1.5 text-xs text-red-500 dark:text-red-400">
+            Motivo: {motivo}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Transfer card ────────────────────────────────────────────────────────────
+
+function TransferCard({ motivo }: { motivo: string }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-500 shadow-sm">
+        <Bot className="h-4 w-4 text-white" />
+      </div>
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200 bg-teal-50 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+        <div className="mb-1.5 flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+            Conectando con tu agente atc
+          </span>
+        </div>
+        <p className="text-sm text-teal-700 dark:text-teal-300">
+          Entendido, te estoy pasando con tu Agente de Atención al Cliente.
+          Puedes continuar la conversación directamente en tu chat.
+        </p>
+        {motivo && (
+          <p className="mt-1.5 text-xs text-teal-500 dark:text-teal-400">
             Motivo: {motivo}
           </p>
         )}
@@ -274,6 +308,8 @@ export interface AgenteAtcChatProps {
   onTicketCreated?: () => void;
   /** Si true, los tickets se crean vía proxy ATC (informante = servicio ATC, no el alumno) */
   createAsAgent?: boolean;
+  /** Historial de chat ATC↔alumno (texto formateado) para dar contexto al AI */
+  chatHistory?: string;
 }
 
 export function AgenteAtcChat({
@@ -285,6 +321,7 @@ export function AgenteAtcChat({
   className = "",
   onTicketCreated,
   createAsAgent = false,
+  chatHistory,
 }: AgenteAtcChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -295,6 +332,9 @@ export function AgenteAtcChat({
     null,
   );
   const [escalations, setEscalations] = useState<
+    Array<{ id: string; motivo: string }>
+  >([]);
+  const [transfers, setTransfers] = useState<
     Array<{ id: string; motivo: string }>
   >([]);
 
@@ -408,6 +448,7 @@ export function AgenteAtcChat({
           alumnoName,
           mode,
           provider,
+          chatHistory,
         }),
         signal: abortRef.current.signal,
       });
@@ -491,6 +532,13 @@ export function AgenteAtcChat({
             alumnoName,
             token,
           );
+        } else if (action.tipo === "transferir") {
+          // Transfer to human ATC — no ticket, show transfer card
+          const transferId = crypto.randomUUID();
+          setTransfers((prev) => [
+            ...prev,
+            { id: transferId, motivo: action.motivo },
+          ]);
         }
       }
     } catch (err: unknown) {
@@ -639,6 +687,11 @@ export function AgenteAtcChat({
         {/* Escalation cards */}
         {escalations.map((esc) => (
           <EscalationCard key={esc.id} motivo={esc.motivo} />
+        ))}
+
+        {/* Transfer to human ATC cards */}
+        {transfers.map((t) => (
+          <TransferCard key={t.id} motivo={t.motivo} />
         ))}
 
         {/* Error */}

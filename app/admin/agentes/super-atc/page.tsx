@@ -26,13 +26,23 @@ import { getAuthToken } from "@/lib/auth";
 import { AgenteAtcChat } from "@/components/chat/AgenteAtcChat";
 import { type AIProvider } from "@/components/chat/AgenteAtcChat";
 import { AI_PROVIDER_KEY } from "@/app/admin/agentes/page";
+import { io } from "socket.io-client";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const API_HOST =
   process.env.NEXT_PUBLIC_API_HOST ?? "https://api-ax.valinkgroup.com/v1";
+const CHAT_HOST =
+  process.env.NEXT_PUBLIC_CHAT_HOST ?? "https://api-ax.valinkgroup.com";
 const KB_ENTITY = "super_atc_knowledge_base";
 const KB_ENTITY_ID = "v1";
+
+// Agentes ATC activos — misma lista que soporte-atc
+const ATC_TEAM_CODES = [
+  { code: "18SA4S1_J4B-MPEU", label: "Alejandro" },
+  { code: "mQ2dwRX3xMzV99e3nh9eb", label: "Pedro" },
+  { code: "PKBT2jVtzKzN7TpnLZkPj", label: "Katherine" },
+];
 
 type Tab = "kb" | "test";
 
@@ -452,6 +462,195 @@ function TestAlumnoTab({ provider }: { provider: AIProvider }) {
     code: string;
     name: string;
   } | null>(null);
+  const [chatHistory, setChatHistory] = useState("");
+  const [loadingChat, setLoadingChat] = useState(false);
+  const [chatMsgCount, setChatMsgCount] = useState<number | null>(null);
+
+  // Fetch ATC<->student chat history via socket.io — query by ATC agent IDs
+  useEffect(() => {
+    if (!selected) {
+      setChatHistory("");
+      setChatMsgCount(null);
+      return;
+    }
+    setLoadingChat(true);
+    setChatHistory("");
+    setChatMsgCount(null);
+    const token = getAuthToken();
+    if (!token) {
+      setLoadingChat(false);
+      return;
+    }
+
+    let done = false;
+    const socket = io(CHAT_HOST, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+      reconnection: false,
+      timeout: 30_000,
+    });
+
+    socket.on("connect", () => {
+      void (async () => {
+        try {
+          const studentCode = selected.code.toLowerCase();
+          const matchingChatIds = new Set<string>();
+
+          // Paso 1: consultar lista de chats de cada agente ATC y filtrar por alumno
+          for (const atc of ATC_TEAM_CODES) {
+            const convs = await new Promise<Record<string, unknown>[]>(
+              (res) => {
+                const t = setTimeout(() => res([]), 15_000);
+                socket.emit(
+                  "chat.list",
+                  {
+                    participante_tipo: "equipo",
+                    id_equipo: atc.code,
+                    include_participants: true,
+                    with_participants: true,
+                    limit: 1000,
+                    page_size: 1000,
+                    pageSize: 1000,
+                  },
+                  (ack: unknown) => {
+                    clearTimeout(t);
+                    const a = ack as Record<string, unknown>;
+                    res(
+                      Array.isArray(a?.data)
+                        ? (a.data as Record<string, unknown>[])
+                        : [],
+                    );
+                  },
+                );
+              },
+            );
+
+            for (const conv of convs) {
+              const chatId = String(conv.id_chat ?? conv.id ?? "").trim();
+              if (!chatId) continue;
+              // Buscar código del alumno en metadata de la conversación
+              if (JSON.stringify(conv).toLowerCase().includes(studentCode)) {
+                matchingChatIds.add(chatId);
+              }
+            }
+          }
+
+          // Paso 2: hacer join de los chats que involucran al alumno
+          const chatIds = [...matchingChatIds];
+          const BATCH = 5;
+          const allResults: {
+            chatId: string;
+            msgs: Record<string, unknown>[];
+          }[] = [];
+
+          for (let i = 0; i < chatIds.length; i += BATCH) {
+            const batch = chatIds.slice(i, i + BATCH);
+            const batchResults = await Promise.all(
+              batch.map(
+                (chatId) =>
+                  new Promise<{
+                    chatId: string;
+                    msgs: Record<string, unknown>[];
+                  }>((res) => {
+                    const t = setTimeout(
+                      () => res({ chatId, msgs: [] }),
+                      10_000,
+                    );
+                    socket.emit(
+                      "chat.join",
+                      { id_chat: chatId },
+                      (ack: unknown) => {
+                        clearTimeout(t);
+                        const a = ack as Record<string, unknown>;
+                        const data = a?.data as
+                          | Record<string, unknown>
+                          | undefined;
+                        const msgs = Array.isArray(data?.messages)
+                          ? (data.messages as Record<string, unknown>[])
+                          : Array.isArray(data?.mensajes)
+                            ? (data.mensajes as Record<string, unknown>[])
+                            : [];
+                        res({ chatId, msgs });
+                      },
+                    );
+                  }),
+              ),
+            );
+            allResults.push(...batchResults);
+          }
+
+          // Paso 3: formatear mensajes
+          let totalMsgs = 0;
+          const lines: string[] = [];
+          for (const { chatId, msgs } of allResults) {
+            if (msgs.length === 0) continue;
+            lines.push(`### Chat ${chatId}`);
+            for (const m of msgs.slice(-30)) {
+              const tipo = String(
+                m.participante_tipo ?? m.tipo ?? m.type ?? m.emisor_tipo ?? "",
+              ).toLowerCase();
+              const label = tipo.includes("cliente")
+                ? "Alumno"
+                : tipo.includes("equipo") || tipo.includes("coach")
+                  ? "ATC"
+                  : "Sistema";
+              const content = String(
+                m.contenido ??
+                  m.content ??
+                  m.mensaje ??
+                  m.message ??
+                  m.texto ??
+                  m.text ??
+                  "",
+              ).trim();
+              const at = String(m.created_at ?? m.at ?? m.fecha ?? "").slice(
+                0,
+                16,
+              );
+              if (content) {
+                lines.push(`[${at}] ${label}: ${content}`);
+                totalMsgs++;
+              }
+            }
+            lines.push("");
+          }
+          setChatHistory(lines.join("\n"));
+          setChatMsgCount(totalMsgs);
+        } catch {
+          setChatHistory("");
+          setChatMsgCount(0);
+        } finally {
+          done = true;
+          setLoadingChat(false);
+          try {
+            socket.disconnect();
+          } catch {
+            /* silencioso */
+          }
+        }
+      })();
+    });
+
+    socket.on("connect_error", () => {
+      if (!done) {
+        done = true;
+        setLoadingChat(false);
+      }
+      try {
+        socket.disconnect();
+      } catch {
+        /* silencioso */
+      }
+    });
+
+    return () => {
+      try {
+        socket.disconnect();
+      } catch {
+        /* silencioso */
+      }
+    };
+  }, [selected]);
 
   useEffect(() => {
     async function load() {
@@ -549,6 +748,33 @@ function TestAlumnoTab({ provider }: { provider: AIProvider }) {
             )}
           </div>
         )}
+        {/* Estado del historial de chat */}
+        {selected && (
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+            {loadingChat ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-teal-500" />
+                <span className="text-xs text-muted-foreground">
+                  Buscando historial ATC…
+                </span>
+              </>
+            ) : chatMsgCount === 0 ? (
+              <>
+                <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40" />
+                <span className="text-xs text-muted-foreground">
+                  Sin historial previo de chat
+                </span>
+              </>
+            ) : chatMsgCount !== null ? (
+              <>
+                <span className="h-2 w-2 shrink-0 rounded-full bg-teal-500" />
+                <span className="text-xs font-medium text-teal-700 dark:text-teal-400">
+                  {chatMsgCount} mensajes de chat cargados
+                </span>
+              </>
+            ) : null}
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">
           {students.length} alumnos cargados
         </p>
@@ -564,6 +790,7 @@ function TestAlumnoTab({ provider }: { provider: AIProvider }) {
             mode="atc_team"
             provider={provider}
             className="h-full"
+            chatHistory={chatHistory}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">

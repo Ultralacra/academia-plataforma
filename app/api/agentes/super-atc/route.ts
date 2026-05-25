@@ -89,6 +89,15 @@ Tu función es ayudar directamente al alumno: responder sus dudas con contexto r
 **Riesgo ALTO** — amenaza legal, fraude, estafa, reembolso agresivo, disputa PayPal, crisis emocional severa
 → SIEMPRE termina con [ACCION:{"tipo":"escalar",...}] sin pedir confirmación al alumno
 
+## CUANDO EL ALUMNO QUIERE HABLAR CON UN HUMANO — MUY IMPORTANTE
+Si el alumno dice que quiere hablar con una persona, con su ATC, con un agente humano, o frases similares como:
+"quiero hablar con alguien", "necesito mi ATC", "pásame con un humano", "quiero hablar con mi coach", "necesito atención humana", etc.
+
+→ NO crear un ticket. En su lugar, termina tu respuesta con:
+[ACCION:{"tipo":"transferir","motivo":"RAZÓN CONCRETA DEL ALUMNO"}]
+
+Esto conectará al alumno directamente con su Agente de Atención al Cliente.
+
 ## CUÁNDO PROPONER UN TICKET
 Propón crear un ticket cuando:
 - El alumno necesita revisión de tarea o feedback del coach
@@ -101,6 +110,7 @@ Propón crear un ticket cuando:
 - La respuesta ya existe en FAQs o conocimiento base
 - El alumno ya tiene un ticket similar abierto (verificar historial)
 - La consulta es simple y operativa — la resuelves tú mismo
+- El alumno quiere hablar con un humano → usar acción "transferir"
 
 ## LÍMITE DE TICKETS
 Si el alumno ya tiene 10 o más tickets esta semana: infórmalo e invítalo a consolidar sus dudas en un solo ticket.
@@ -116,7 +126,13 @@ Prioridades válidas: BAJA | MEDIA | ALTA
 Cuando detectes riesgo ALTO (amenaza legal, fraude, reembolso agresivo, crisis emocional severa, disputa PayPal), termina con:
 [ACCION:{"tipo":"escalar","motivo":"RAZÓN CONCRETA","nivel":"ALTO"}]
 
+Cuando el alumno solicita hablar con un humano/ATC, termina con:
+[ACCION:{"tipo":"transferir","motivo":"RAZÓN CONCRETA"}]
+
 Si no se requiere ninguna acción, NO incluyas ningún bloque [ACCION] en tu respuesta.
+
+## CONTEXTO DE CONVERSACIONES PREVIAS
+Si en el contexto hay un historial de chat ATC↔alumno, úsalo libremente para responder preguntas sobre conversaciones pasadas o recientes. Puedes citar y resumir mensajes cuando el alumno o el equipo lo pregunte. Los mensajes tienen marca de tiempo — úsala para responder preguntas sobre fechas concretas.
 
 ## COMUNICACIONES — MUY IMPORTANTE
 - Las notificaciones por correo electrónico NO se envían al alumno cuando envía un mensaje ni cuando se crea un feedback/ticket.
@@ -1300,6 +1316,7 @@ export async function POST(request: NextRequest) {
     alumnoCode?: string;
     alumnoName?: string;
     mode?: string;
+    chatHistory?: string;
   };
   try {
     body = await request.json();
@@ -1324,6 +1341,10 @@ export async function POST(request: NextRequest) {
   const alumnoName =
     typeof body.alumnoName === "string" ? body.alumnoName.trim() : alumnoCode;
   const mode = body.mode === "atc_team" ? "atc_team" : "alumno";
+  const chatHistory =
+    typeof body.chatHistory === "string" && body.chatHistory.trim()
+      ? body.chatHistory.trim()
+      : null;
 
   const authorization = request.headers.get("authorization") ?? "";
   const typedMessages = messages as Array<{ role: string; content: string }>;
@@ -1381,6 +1402,7 @@ export async function POST(request: NextRequest) {
     baseSystem,
     knowledgeBlock ? `\n\n${knowledgeBlock}` : "",
     ctx.block ? `\n\n${ctx.block}` : "",
+    chatHistory ? `\n\n## HISTORIAL DE CHAT ATC\u2194ALUMNO\n\nEste es el historial real de mensajes entre el alumno y su equipo ATC. Los mensajes incluyen marca de tiempo. Puedes usarlo para responder preguntas sobre conversaciones pasadas, resumir lo que se habl\u00f3, o identificar temas pendientes. Si el alumno pregunta por una conversaci\u00f3n de una fecha concreta, busca en este historial y cita los mensajes relevantes.\n\n${chatHistory}` : "",
     signalBlock,
     weeklyLimitBlock,
   ]

@@ -15,13 +15,17 @@ import {
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { useAuth } from "@/hooks/use-auth";
-import { authService } from "@/lib/auth";
+import { authService, getAuthToken } from "@/lib/auth";
 import {
   AgenteAtcChat,
   type AIProvider,
 } from "@/components/chat/AgenteAtcChat";
 import { getStudentTickets } from "@/app/admin/alumnos/api";
 import { AI_PROVIDER_KEY } from "@/app/admin/agentes/page";
+import { io } from "socket.io-client";
+
+const CHAT_HOST =
+  process.env.NEXT_PUBLIC_CHAT_HOST ?? "https://api-ax.valinkgroup.com";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -239,6 +243,7 @@ function AgentePageContent() {
   const [tickets, setTickets] = useState<StudentTicket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [provider, setProvider] = useState<AIProvider>("anthropic");
+  const [chatHistory, setChatHistory] = useState("");
   // Si el user no tiene codigo (datos incompletos de localStorage), forzar refetch
   const [retryedCode, setRetryedCode] = useState<string | null>(null);
   const retryRef = useRef(false);
@@ -271,6 +276,138 @@ function AgentePageContent() {
     const saved = localStorage.getItem(AI_PROVIDER_KEY) as AIProvider | null;
     if (saved === "openai" || saved === "anthropic") setProvider(saved);
   }, []);
+
+  // Fetch ATC<->student chat history via socket.io
+  useEffect(() => {
+    if (!alumnoCode) return;
+    const token = getAuthToken();
+    if (!token) return;
+
+    const socket = io(CHAT_HOST, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+      reconnection: false,
+      timeout: 20_000,
+    });
+
+    socket.on("connect", () => {
+      void (async () => {
+        try {
+          const convs = await new Promise<Record<string, unknown>[]>((res) => {
+            const t = setTimeout(() => res([]), 10_000);
+            socket.emit(
+              "chat.list",
+              {
+                participante_tipo: "cliente",
+                id_cliente: alumnoCode,
+                limit: 100,
+                page_size: 100,
+              },
+              (ack: unknown) => {
+                clearTimeout(t);
+                const a = ack as Record<string, unknown>;
+                res(
+                  Array.isArray(a?.data)
+                    ? (a.data as Record<string, unknown>[])
+                    : [],
+                );
+              },
+            );
+          });
+
+          const chatIds = convs
+            .map((c) => String(c.id_chat ?? c.id ?? ""))
+            .filter(Boolean)
+            .slice(0, 5);
+
+          const results = await Promise.all(
+            chatIds.map(
+              (chatId) =>
+                new Promise<{
+                  chatId: string;
+                  msgs: Record<string, unknown>[];
+                }>((res) => {
+                  const t = setTimeout(() => res({ chatId, msgs: [] }), 8_000);
+                  socket.emit(
+                    "chat.join",
+                    { id_chat: chatId },
+                    (ack: unknown) => {
+                      clearTimeout(t);
+                      const a = ack as Record<string, unknown>;
+                      const data = a?.data as
+                        | Record<string, unknown>
+                        | undefined;
+                      const msgs = Array.isArray(data?.messages)
+                        ? (data.messages as Record<string, unknown>[])
+                        : Array.isArray(data?.mensajes)
+                          ? (data.mensajes as Record<string, unknown>[])
+                          : [];
+                      res({ chatId, msgs });
+                    },
+                  );
+                }),
+            ),
+          );
+
+          const lines: string[] = [];
+          for (const { chatId, msgs } of results) {
+            if (msgs.length === 0) continue;
+            lines.push(`### Conversación ${chatId}`);
+            for (const m of msgs.slice(-20)) {
+              const tipo = String(
+                m.participante_tipo ?? m.tipo ?? m.type ?? m.emisor_tipo ?? "",
+              ).toLowerCase();
+              const label = tipo.includes("cliente")
+                ? "Alumno"
+                : tipo.includes("equipo") || tipo.includes("coach")
+                  ? "ATC"
+                  : "Sistema";
+              const content = String(
+                m.contenido ??
+                  m.content ??
+                  m.mensaje ??
+                  m.message ??
+                  m.texto ??
+                  m.text ??
+                  "",
+              ).trim();
+              const at = String(m.created_at ?? m.at ?? m.fecha ?? "").slice(
+                0,
+                16,
+              );
+              if (content) lines.push(`[${at}] ${label}: ${content}`);
+            }
+            lines.push("");
+          }
+          setChatHistory(lines.join("\n"));
+        } catch {
+          // silencioso
+        } finally {
+          try {
+            socket.disconnect();
+          } catch {
+            /* silencioso */
+          }
+        }
+      })();
+    });
+
+    socket.on("connect_error", () => {
+      try {
+        socket.disconnect();
+      } catch {
+        /* silencioso */
+      }
+    });
+
+    return () => {
+      try {
+        socket.disconnect();
+      } catch {
+        /* silencioso */
+      }
+    };
+  }, [alumnoCode]);
 
   // Fetch recent tickets
   const refreshTickets = useCallback(() => {
@@ -351,6 +488,7 @@ function AgentePageContent() {
             className="h-full"
             onTicketCreated={refreshTickets}
             createAsAgent={true}
+            chatHistory={chatHistory}
           />
         </div>
       </div>
