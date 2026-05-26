@@ -343,9 +343,6 @@ function BusinessMetricsContent() {
   const skipSaveRef = useRef(false);
   const metaIdRef = useRef<string | null>(null);
   const immediateRef = useRef(false);
-  const [importingSnapshot, setImportingSnapshot] = useState(false);
-  const [importedFields, setImportedFields] = useState<string[]>([]);
-  const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
   // ── Auto-admin: formularios de campos / fórmulas / clave ─────────────────
   const [fieldDraft, setFieldDraft] = useState<CustomFieldDef>({
@@ -539,11 +536,18 @@ function BusinessMetricsContent() {
   // Siempre actualiza el metadata existente (PUT). Si metaId aún no está
   // cargado, lo busca primero y luego hace PUT. Nunca crea duplicados.
   useEffect(() => {
+    // SIEMPRE cancelar cualquier timer pendiente antes de decidir si saltamos.
+    // Si no lo hacemos, un PUT agendado con un snapshot viejo (p. ej. la
+    // semilla inicial) puede dispararse después de que el fetch de carga
+    // haya seteado el metaId y sobreescribir la BD con datos viejos.
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     if (skipSaveRef.current) {
       skipSaveRef.current = false;
       return;
     }
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSavingMeta(true);
     const snapshot = state;
     const delay = immediateRef.current ? 0 : 1500;
@@ -606,7 +610,7 @@ function BusinessMetricsContent() {
       } finally {
         setSavingMeta(false);
       }
-    }, 1500);
+    }, delay);
   }, [state]);
 
   const visibleRecords = useMemo(() => {
@@ -806,64 +810,6 @@ function BusinessMetricsContent() {
       };
     });
   }, [visibleRecords, expenseAutoTotals]);
-
-  const importSnapshot = async (month: string) => {
-    if (!month) return;
-    setImportingSnapshot(true);
-    setSnapshotError(null);
-    setImportedFields([]);
-    try {
-      const token = getAuthToken();
-      const res = await fetch(
-        `/api/metrics/monthly-snapshot?month=${encodeURIComponent(month)}`,
-        {
-          headers: { Authorization: `Bearer ${token ?? ""}` },
-          cache: "no-store",
-        },
-      );
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        setSnapshotError(text || `Error HTTP ${res.status}`);
-        return;
-      }
-      const json = await res.json().catch(() => null);
-      const calc = json?.calculated ?? {};
-      const filled: string[] = [];
-      setMonthForm((prev) => {
-        const next = { ...prev };
-        if (calc.newClients != null) {
-          next.newClients = calc.newClients;
-          filled.push("Nuevos clientes");
-        }
-        if (calc.highTicketClients != null) {
-          next.highTicketClients = calc.highTicketClients;
-          filled.push("Clientes HT");
-        }
-        if (calc.activeStudents != null) {
-          next.activeStudents = calc.activeStudents;
-          filled.push("Alumnos activos");
-        }
-        if (calc.highTicketRevenue != null) {
-          next.highTicketRevenue = calc.highTicketRevenue;
-          filled.push("Revenue HT");
-        }
-        if (calc.delinquencyRate != null) {
-          next.delinquencyRate = calc.delinquencyRate;
-          filled.push("Morosidad");
-        }
-        if (calc.durationMonths != null) {
-          next.durationMonths = calc.durationMonths;
-          filled.push("Duración media");
-        }
-        return next;
-      });
-      setImportedFields(filled);
-    } catch (e: any) {
-      setSnapshotError(e?.message ?? "Error inesperado");
-    } finally {
-      setImportingSnapshot(false);
-    }
-  };
 
   const resetMonthForm = () => {
     setMonthForm(EMPTY_MONTH_FORM);
@@ -2612,46 +2558,14 @@ function BusinessMetricsContent() {
           <TabsContent value="months" className="space-y-4">
             <Card className="border-slate-200 dark:border-slate-700">
               <CardHeader className="bg-slate-50/50 dark:bg-slate-900/30 rounded-t-lg">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-slate-800 dark:text-slate-200">
-                      {editingMonthId ? "Editar mes" : "Nuevo mes"}
-                    </CardTitle>
-                    <CardDescription>
-                      Ingresa el mes y los costos externos. Los demás campos se
-                      pueden importar automáticamente.
-                    </CardDescription>
-                  </div>
-                  {monthForm.month && (
-                    <div className="flex flex-col items-end gap-1">
-                      <Button
-                        size="sm"
-                        className="bg-sky-600 hover:bg-sky-700 text-white shrink-0"
-                        disabled={importingSnapshot || !monthForm.month}
-                        onClick={() => importSnapshot(monthForm.month)}
-                      >
-                        {importingSnapshot ? (
-                          <>
-                            <span className="mr-2 h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                            Cargando…
-                          </>
-                        ) : (
-                          <>
-                            <Zap className="mr-1 h-4 w-4" />
-                            Importar desde sistema
-                          </>
-                        )}
-                      </Button>
-                      {importedFields.length > 0 && (
-                        <p className="text-xs text-sky-600 dark:text-sky-400">
-                          Auto-rellenado: {importedFields.join(", ")}
-                        </p>
-                      )}
-                      {snapshotError && (
-                        <p className="text-xs text-red-500">{snapshotError}</p>
-                      )}
-                    </div>
-                  )}
+                <div>
+                  <CardTitle className="text-slate-800 dark:text-slate-200">
+                    {editingMonthId ? "Editar mes" : "Nuevo mes"}
+                  </CardTitle>
+                  <CardDescription>
+                    Ingresa el mes y todos los datos manualmente. Todo es
+                    administrable desde aquí.
+                  </CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -2665,8 +2579,6 @@ function BusinessMetricsContent() {
                         value={monthForm.month}
                         className="w-52"
                         onChange={(e) => {
-                          setImportedFields([]);
-                          setSnapshotError(null);
                           setMonthForm((current) => ({
                             ...current,
                             month: e.target.value,
@@ -2675,8 +2587,7 @@ function BusinessMetricsContent() {
                       />
                       {!monthForm.month && (
                         <p className="text-xs text-muted-foreground">
-                          Elige un mes y luego usa “Importar desde sistema” para
-                          auto-rellenar los campos calculables.
+                          Elige un mes y completa los campos manualmente.
                         </p>
                       )}
                     </div>
@@ -2803,19 +2714,14 @@ function BusinessMetricsContent() {
                   </div>
                 </div>
 
-                {/* Sección: Campos calculables desde el sistema */}
+                {/* Sección: Datos del mes */}
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-400 mb-3">
-                    Datos del sistema — auto-importables
+                    Datos del mes
                   </p>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1">
-                        Nuevos clientes
-                        {importedFields.includes("Nuevos clientes") && (
-                          <Check className="h-3 w-3 text-sky-500" />
-                        )}
-                      </Label>
+                      <Label>Nuevos clientes</Label>
                       <Input
                         type="number"
                         value={monthForm.newClients}
@@ -2828,12 +2734,7 @@ function BusinessMetricsContent() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1">
-                        Ingresos high ticket
-                        {importedFields.includes("Revenue HT") && (
-                          <Check className="h-3 w-3 text-sky-500" />
-                        )}
-                      </Label>
+                      <Label>Ingresos high ticket</Label>
                       <Input
                         type="number"
                         value={monthForm.highTicketRevenue}
@@ -2848,12 +2749,7 @@ function BusinessMetricsContent() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1">
-                        Morosidad
-                        {importedFields.includes("Morosidad") && (
-                          <Check className="h-3 w-3 text-sky-500" />
-                        )}
-                      </Label>
+                      <Label>Morosidad</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -2867,12 +2763,7 @@ function BusinessMetricsContent() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1">
-                        Clientes HT
-                        {importedFields.includes("Clientes HT") && (
-                          <Check className="h-3 w-3 text-sky-500" />
-                        )}
-                      </Label>
+                      <Label>Clientes HT</Label>
                       <Input
                         type="number"
                         value={monthForm.highTicketClients}
@@ -2887,12 +2778,7 @@ function BusinessMetricsContent() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1">
-                        Alumnos activos
-                        {importedFields.includes("Alumnos activos") && (
-                          <Check className="h-3 w-3 text-sky-500" />
-                        )}
-                      </Label>
+                      <Label>Alumnos activos</Label>
                       <Input
                         type="number"
                         value={monthForm.activeStudents}
@@ -2905,12 +2791,7 @@ function BusinessMetricsContent() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1">
-                        Duración media
-                        {importedFields.includes("Duración media") && (
-                          <Check className="h-3 w-3 text-sky-500" />
-                        )}
-                      </Label>
+                      <Label>Duración media</Label>
                       <Input
                         type="number"
                         step="0.1"

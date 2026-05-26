@@ -1039,6 +1039,77 @@ export async function updateClientEtapa(clientCode: string, etapa: string): Prom
   return json;
 }
 
+// Registrar una pausa (CONTRACTUAL o EXTRAORDINARIA) en el cliente.
+// Replica la operación que hace el modal manual de Pausa: envía
+// estado=PAUSADO + fecha_desde + fecha_hasta + tipo + motivo al mismo
+// endpoint PUT /client/update/client/:code (form-data).
+//
+// Acepta fechas como ISO (con 'T') o como 'YYYY-MM-DD'. Las normaliza a ISO
+// (00:00:00 UTC) igual que PauseDatesModal.toISO().
+export async function registerStudentPause(
+  clientCode: string,
+  args: {
+    start: string;
+    end: string;
+    tipo: 'CONTRACTUAL' | 'EXTRAORDINARIA';
+    motivo: string;
+  }
+): Promise<any> {
+  if (!clientCode) throw new Error('clientCode requerido');
+  const tipo = String(args.tipo || '').toUpperCase();
+  if (tipo !== 'CONTRACTUAL' && tipo !== 'EXTRAORDINARIA') {
+    throw new Error("tipo debe ser 'CONTRACTUAL' o 'EXTRAORDINARIA'");
+  }
+  const motivo = String(args.motivo || '').trim();
+  if (!motivo) throw new Error('motivo requerido');
+
+  const toIsoUtc = (raw: string): string => {
+    const s = String(raw || '').trim();
+    if (!s) throw new Error('fecha requerida');
+    // YYYY-MM-DD → fijar 00:00 UTC del día
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      return new Date(
+        Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0)
+      ).toISOString();
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) throw new Error(`fecha inválida: ${s}`);
+    return new Date(
+      Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
+    ).toISOString();
+  };
+
+  const fechaDesde = toIsoUtc(args.start);
+  const fechaHasta = toIsoUtc(args.end);
+  if (new Date(fechaHasta).getTime() < new Date(fechaDesde).getTime()) {
+    throw new Error('fecha_hasta no puede ser menor que fecha_desde');
+  }
+
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
+  const fd = new FormData();
+  fd.set('estado', 'PAUSADO');
+  fd.set('fecha_desde', fechaDesde);
+  fd.set('fecha_hasta', fechaHasta);
+  fd.set('tipo', tipo);
+  fd.set('motivo', motivo);
+
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: 'PUT',
+    body: fd,
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  const json = await res.json().catch(() => ({}));
+  invalidateStudentsCache();
+  return json;
+}
+
 // Actualizar fecha de ingreso del cliente (usa FormData por compatibilidad con backend)
 // Enviar como key: ingreso (YYYY-MM-DD o ISO). Si viene vacío, se limpia.
 export async function updateClientIngreso(clientCode: string, ingreso: string | null): Promise<any> {
