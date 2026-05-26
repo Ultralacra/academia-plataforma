@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bot,
+  Calendar,
   CheckCircle2,
   Loader2,
   Paperclip,
@@ -15,7 +16,11 @@ import {
   XCircle,
 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
-import { createTicket, createTicketAsAgent } from "@/app/admin/alumnos/api";
+import {
+  createTicket,
+  createTicketAsAgent,
+  registerStudentPause,
+} from "@/app/admin/alumnos/api";
 import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
 import { AgentTicketPreviewModal } from "@/components/chat/AgentTicketPreviewModal";
 
@@ -50,7 +55,15 @@ interface TransferAction {
   motivo: string;
 }
 
-type AgentAction = TicketAction | EscalateAction | TransferAction;
+interface PausaAction {
+  tipo: "pausa";
+  start: string;
+  end: string;
+  tipo_pausa: "CONTRACTUAL" | "EXTRAORDINARIA";
+  motivo: string;
+}
+
+type AgentAction = TicketAction | EscalateAction | TransferAction | PausaAction;
 
 interface AgentContextInfo {
   ticketCount: number;
@@ -64,6 +77,13 @@ interface PendingTicket {
   messageId: string;
   status: "pending" | "creating" | "created" | "cancelled";
   ticketId?: string;
+}
+
+interface PendingPause {
+  action: PausaAction;
+  messageId: string;
+  status: "pending" | "creating" | "created" | "cancelled";
+  errorMsg?: string;
 }
 
 // ─── Action parser ────────────────────────────────────────────────────────────
@@ -296,6 +316,108 @@ function TransferCard({ motivo }: { motivo: string }) {
   );
 }
 
+// ─── Pause action card ────────────────────────────────────────────────────────
+
+function PauseActionCard({
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  pending: PendingPause;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { action, status, errorMsg } = pending;
+
+  const tipoBadge =
+    action.tipo_pausa === "CONTRACTUAL"
+      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+      : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+
+  if (status === "created") {
+    return (
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+          <Bot className="h-4 w-4 text-white" />
+        </div>
+        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm shadow-sm dark:border-emerald-800/50 dark:bg-emerald-900/20">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span className="text-emerald-700 dark:text-emerald-400">
+            ✅ Pausa registrada correctamente. Tu programa queda suspendido del{" "}
+            <strong>{action.start}</strong> al <strong>{action.end}</strong>.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "cancelled") {
+    return null;
+  }
+
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+        <Bot className="h-4 w-4 text-white" />
+      </div>
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200/80 bg-teal-50/60 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+        <div className="mb-2.5 flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+            Propuesta de pausa
+          </span>
+        </div>
+        <div className="mb-2 space-y-1 text-sm text-foreground">
+          <p>
+            <span className="font-medium">Desde:</span> {action.start}
+          </p>
+          <p>
+            <span className="font-medium">Hasta:</span> {action.end}
+          </p>
+          <p>
+            <span className="font-medium">Motivo:</span> {action.motivo}
+          </p>
+        </div>
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          <span
+            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${tipoBadge}`}
+          >
+            {action.tipo_pausa}
+          </span>
+        </div>
+        {errorMsg && (
+          <p className="mb-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-900/20 dark:text-red-400">
+            {errorMsg}
+          </p>
+        )}
+        {status === "creating" ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Registrando pausa...
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={onConfirm}
+              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Registrar pausa
+            </button>
+            <button
+              onClick={onCancel}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancelar
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export interface AgenteAtcChatProps {
@@ -331,6 +453,7 @@ export function AgenteAtcChat({
   const [pendingTicket, setPendingTicket] = useState<PendingTicket | null>(
     null,
   );
+  const [pendingPause, setPendingPause] = useState<PendingPause | null>(null);
   const [escalations, setEscalations] = useState<
     Array<{ id: string; motivo: string }>
   >([]);
@@ -380,6 +503,17 @@ export function AgenteAtcChat({
       return () => clearTimeout(timer);
     }
   }, [pendingTicket?.status]);
+
+  // ── Auto-dismiss pause created card ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (pendingPause?.status === "created") {
+      const timer = setTimeout(() => {
+        setPendingPause(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingPause?.status]);
 
   // ── Textarea auto-resize ─────────────────────────────────────────────────────
 
@@ -539,6 +673,13 @@ export function AgenteAtcChat({
             ...prev,
             { id: transferId, motivo: action.motivo },
           ]);
+        } else if (action.tipo === "pausa") {
+          // Pause proposal — show confirmation card
+          setPendingPause({
+            action,
+            messageId: assistantMsgId,
+            status: "pending",
+          });
         }
       }
     } catch (err: unknown) {
@@ -583,6 +724,34 @@ export function AgenteAtcChat({
     setPendingTicket((prev) =>
       prev ? { ...prev, status: "cancelled" } : null,
     );
+  }
+
+  // ── Confirm / cancel pause ────────────────────────────────────────────────────
+
+  async function handleConfirmPause() {
+    if (!pendingPause || pendingPause.action.tipo !== "pausa") return;
+    setPendingPause((prev) =>
+      prev ? { ...prev, status: "creating", errorMsg: undefined } : null,
+    );
+    try {
+      await registerStudentPause(alumnoCode, {
+        start: pendingPause.action.start,
+        end: pendingPause.action.end,
+        tipo: pendingPause.action.tipo_pausa,
+        motivo: pendingPause.action.motivo,
+      });
+      setPendingPause((prev) => (prev ? { ...prev, status: "created" } : null));
+    } catch (err: unknown) {
+      const msg =
+        (err as { message?: string }).message ?? "Error al registrar la pausa";
+      setPendingPause((prev) =>
+        prev ? { ...prev, status: "pending", errorMsg: msg } : null,
+      );
+    }
+  }
+
+  function handleCancelPause() {
+    setPendingPause((prev) => (prev ? { ...prev, status: "cancelled" } : null));
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -693,6 +862,15 @@ export function AgenteAtcChat({
         {transfers.map((t) => (
           <TransferCard key={t.id} motivo={t.motivo} />
         ))}
+
+        {/* Pause action card */}
+        {pendingPause && (
+          <PauseActionCard
+            pending={pendingPause}
+            onConfirm={() => void handleConfirmPause()}
+            onCancel={handleCancelPause}
+          />
+        )}
 
         {/* Error */}
         {error && (
