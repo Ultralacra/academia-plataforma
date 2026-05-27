@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   AlertCircle,
+  Bot,
+  CheckCircle2,
   CloudUpload,
   Loader2,
   Mail,
@@ -28,7 +30,11 @@ import {
   RefreshCw,
   RotateCcw,
   Send,
+  Users,
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { getAuthToken } from "@/lib/auth";
+import { getPublicAppOrigin } from "@/lib/public-app-origin";
 import { useToast } from "@/components/ui/use-toast";
 import { createMetadata, listMetadata, updateMetadata } from "@/lib/metadata";
 import { getWelcomeEmailSource } from "@/lib/email-templates/welcome";
@@ -106,7 +112,8 @@ type TemplateCategory =
   | "contrasena"
   | "onboarding"
   | "starter"
-  | "rescate";
+  | "rescate"
+  | "piloto_ia";
 
 const TEMPLATE_CATEGORIES: { id: TemplateCategory; label: string }[] = [
   { id: "general", label: "General" },
@@ -116,6 +123,7 @@ const TEMPLATE_CATEGORIES: { id: TemplateCategory; label: string }[] = [
   { id: "onboarding", label: "Workflow Correos - Onboarding" },
   { id: "starter", label: "Workflow Correos - Starter" },
   { id: "rescate", label: "Rescate del Estudiante" },
+  { id: "piloto_ia", label: "🤖 Piloto IA ATC" },
 ];
 
 const TEMPLATE_CATEGORY_MAP: Record<MailTemplateKey, TemplateCategory> = {
@@ -209,9 +217,34 @@ type TemplateVariable = {
   example?: string;
 };
 
+type PilotoAlumno = {
+  email: string;
+  nombre: string;
+};
+
+type PilotoInvitado = {
+  email: string;
+  nombre: string;
+  invitado_en: string;
+};
+
+type PilotoAceptado = {
+  email: string;
+  nombre: string;
+  aceptado_en: string;
+};
+
+type PilotoMetadataPayload = {
+  version: 1;
+  invitados: PilotoInvitado[];
+  aceptados: PilotoAceptado[];
+};
+
 const MAIL_TEMPLATES_ENTITY = "plantillas_mails";
 const ALL_TEMPLATES_ENTITY_ID = "all_templates";
 const TEST_TEMPLATE_EMAIL = "cesaramuroc@gmail.com";
+const PILOTO_ENTITY = "piloto_ia_v1";
+const PILOTO_ENTITY_ID = "datos";
 
 const COMMON_TEMPLATE_VARIABLES: TemplateVariable[] = [
   {
@@ -780,6 +813,7 @@ function buildMetadataPayload(
 
 export default function PlantillasMailsPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingTestKey, setSendingTestKey] = useState<MailTemplateKey | null>(
@@ -808,6 +842,40 @@ export default function PlantillasMailsPage() {
   );
   const [syncingKey, setSyncingKey] = useState<MailTemplateKey | null>(null);
   const [creatingMeta, setCreatingMeta] = useState(false);
+
+  // ── Piloto IA ATC state ──
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsSearch, setStudentsSearch] = useState("");
+  const [students, setStudents] = useState<PilotoAlumno[]>([]);
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
+  const [sendingPilotInvites, setSendingPilotInvites] = useState(false);
+  const [pilotMetaLoading, setPilotMetaLoading] = useState(false);
+  const [pilotMeta, setPilotMeta] = useState<PilotoMetadataPayload>({
+    version: 1,
+    invitados: [],
+    aceptados: [],
+  });
+  const isPilotCategory = selectedCategory === "piloto_ia";
+  const role = String(user?.role ?? user?.tipo ?? "")
+    .trim()
+    .toLowerCase();
+  const isAdminUser = role === "admin";
+
+  const pilotProgress = useMemo(() => {
+    const invited = pilotMeta.invitados.length;
+    const accepted = pilotMeta.aceptados.length;
+    if (invited === 0) return 0;
+    return Math.round((accepted / invited) * 100);
+  }, [pilotMeta]);
+
+  const consentUrl = useMemo(() => {
+    return `${getPublicAppOrigin()}/consentimiento-piloto`;
+  }, []);
+
+  const selectedStudents = useMemo(() => {
+    const selectedSet = new Set(selectedEmails);
+    return students.filter((s) => selectedSet.has(s.email));
+  }, [students, selectedEmails]);
 
   const activeTemplates = useMemo(
     () => templates.filter((item) => item.activo),
@@ -898,6 +966,187 @@ export default function PlantillasMailsPage() {
   useEffect(() => {
     loadTemplates();
   }, [loadTemplates]);
+
+  const loadPilotMetadata = useCallback(async () => {
+    setPilotMetaLoading(true);
+    try {
+      const res = await listMetadata<any>();
+      const allItems = res.items || [];
+      const rec = allItems.find(
+        (item: any) =>
+          String(item?.entity || "") === PILOTO_ENTITY &&
+          String(item?.entity_id || "") === PILOTO_ENTITY_ID,
+      );
+
+      const payload = (rec?.payload ?? {
+        version: 1,
+        invitados: [],
+        aceptados: [],
+      }) as PilotoMetadataPayload;
+
+      setPilotMeta({
+        version: 1,
+        invitados: Array.isArray(payload.invitados) ? payload.invitados : [],
+        aceptados: Array.isArray(payload.aceptados) ? payload.aceptados : [],
+      });
+    } catch (error: any) {
+      toast({
+        title: "No se pudo cargar el estado del piloto",
+        description: String(error?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setPilotMetaLoading(false);
+    }
+  }, [toast]);
+
+  const loadStudents = useCallback(
+    async (search = "") => {
+      setStudentsLoading(true);
+      try {
+        const qs = new URLSearchParams({
+          page: "1",
+          pageSize: "120",
+          search,
+        });
+
+        const res = await fetch(`/api/users?${qs.toString()}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...(getAuthToken()
+              ? { Authorization: `Bearer ${getAuthToken()}` }
+              : {}),
+          },
+          credentials: "include",
+        });
+
+        const raw = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(String(raw?.message || "No se pudo listar usuarios"));
+        }
+
+        const source: any[] = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.items)
+            ? raw.items
+            : Array.isArray(raw?.data?.items)
+              ? raw.data.items
+              : Array.isArray(raw?.data)
+                ? raw.data
+                : [];
+
+        const normalized = source
+          .map((u) => {
+            const email = String(u?.email || "")
+              .trim()
+              .toLowerCase();
+            const nombre = String(u?.name || u?.nombre || "").trim();
+            const role = String(u?.role || u?.tipo || "").toLowerCase();
+            return { email, nombre, role };
+          })
+          .filter(
+            (u) =>
+              u.email &&
+              ["student", "alumno", "cliente", "user"].includes(u.role),
+          )
+          .map((u) => ({ email: u.email, nombre: u.nombre || u.email }));
+
+        const map = new Map<string, PilotoAlumno>();
+        for (const item of normalized) map.set(item.email, item);
+        setStudents(Array.from(map.values()));
+      } catch (error: any) {
+        toast({
+          title: "No se pudo cargar alumnos",
+          description: String(error?.message || "Intenta nuevamente."),
+          variant: "destructive",
+        });
+      } finally {
+        setStudentsLoading(false);
+      }
+    },
+    [toast],
+  );
+
+  useEffect(() => {
+    if (selectedCategory !== "piloto_ia") return;
+    loadStudents(studentsSearch.trim());
+  }, [selectedCategory, studentsSearch, loadStudents]);
+
+  useEffect(() => {
+    if (selectedCategory !== "piloto_ia") return;
+    loadPilotMetadata();
+  }, [selectedCategory, loadPilotMetadata]);
+
+  function toggleStudent(email: string, checked: boolean) {
+    setSelectedEmails((prev) => {
+      const set = new Set(prev);
+      if (checked) set.add(email);
+      else set.delete(email);
+      return Array.from(set);
+    });
+  }
+
+  function toggleAllVisible(checked: boolean) {
+    setSelectedEmails((prev) => {
+      if (!checked) {
+        const visible = new Set(students.map((s) => s.email));
+        return prev.filter((email) => !visible.has(email));
+      }
+      const set = new Set(prev);
+      students.forEach((s) => set.add(s.email));
+      return Array.from(set);
+    });
+  }
+
+  async function sendPilotInvitations() {
+    if (selectedStudents.length === 0) {
+      toast({
+        title: "Selecciona al menos un alumno",
+        description: "Marca destinatarios para enviar la invitación.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendingPilotInvites(true);
+    try {
+      const res = await fetch("/api/brevo/send-piloto-ia", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAuthToken()
+            ? { Authorization: `Bearer ${getAuthToken()}` }
+            : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ alumnos: selectedStudents }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || String(data?.status || "") !== "success") {
+        throw new Error(
+          String(data?.message || "No se pudieron enviar invitaciones"),
+        );
+      }
+
+      toast({
+        title: "Invitaciones enviadas",
+        description: `${data.okCount ?? selectedStudents.length} envío(s) exitosos.`,
+      });
+
+      setSelectedEmails([]);
+      await loadPilotMetadata();
+    } catch (error: any) {
+      toast({
+        title: "Error enviando invitaciones",
+        description: String(error?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setSendingPilotInvites(false);
+    }
+  }
 
   function openEditDialog() {
     if (!selectedTemplate) return;
@@ -1216,7 +1465,7 @@ export default function PlantillasMailsPage() {
                   type="button"
                   onClick={openEditDialog}
                   className="gap-2"
-                  disabled={!selectedTemplate || loading}
+                  disabled={!selectedTemplate || loading || isPilotCategory}
                 >
                   <Pencil className="h-4 w-4" />
                   Editar seleccionada
@@ -1226,7 +1475,10 @@ export default function PlantillasMailsPage() {
                   variant="outline"
                   className="gap-2"
                   disabled={
-                    !selectedTemplate || loading || sendingTestKey !== null
+                    !selectedTemplate ||
+                    loading ||
+                    sendingTestKey !== null ||
+                    isPilotCategory
                   }
                   onClick={() =>
                     selectedTemplate && sendTemplateTest(selectedTemplate)
@@ -1259,9 +1511,12 @@ export default function PlantillasMailsPage() {
                   <CardTitle className="text-base">Plantillas</CardTitle>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {TEMPLATE_CATEGORIES.map((cat) => {
-                      const count = activeTemplates.filter(
-                        (t) => TEMPLATE_CATEGORY_MAP[t.key] === cat.id,
-                      ).length;
+                      const count =
+                        cat.id === "piloto_ia"
+                          ? 1
+                          : activeTemplates.filter(
+                              (t) => TEMPLATE_CATEGORY_MAP[t.key] === cat.id,
+                            ).length;
                       const isActive = selectedCategory === cat.id;
                       return (
                         <button
@@ -1288,6 +1543,18 @@ export default function PlantillasMailsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 pt-2">
+                  {selectedCategory === "piloto_ia" && (
+                    <div className="rounded-lg border p-3 bg-violet-50/50 dark:bg-violet-950/20">
+                      <p className="font-medium text-sm">
+                        Campaña Piloto IA ATC
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Selección de alumnos, envío de invitaciones y
+                        seguimiento de aceptaciones.
+                      </p>
+                    </div>
+                  )}
+
                   {categoryTemplates.map((item) => {
                     const isSelected = selectedTemplate?.key === item.key;
                     return (
@@ -1393,7 +1660,239 @@ export default function PlantillasMailsPage() {
                 </CardContent>
               </Card>
 
-              {selectedTemplate ? (
+              {selectedCategory === "piloto_ia" ? (
+                <Card className="rounded-xl">
+                  <CardHeader className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CardTitle className="text-xl flex items-center gap-2">
+                        <Bot className="h-5 w-5 text-violet-500" />
+                        Piloto IA ATC · Invitaciones
+                      </CardTitle>
+                      <Badge variant="outline">
+                        Público: /consentimiento-piloto
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Selecciona alumnos para enviar la invitación al piloto, y
+                      monitorea quién ya aceptó el consentimiento.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="rounded-lg border p-4 space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Enviar invitaciones
+                          </p>
+                          <Badge variant="secondary">
+                            {selectedStudents.length} seleccionados
+                          </Badge>
+                        </div>
+
+                        <Input
+                          placeholder="Buscar alumnos por nombre o email..."
+                          value={studentsSearch}
+                          onChange={(e) => setStudentsSearch(e.target.value)}
+                          className="h-9"
+                        />
+
+                        <div className="flex items-center justify-between text-xs">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={
+                                students.length > 0 &&
+                                students.every((s) =>
+                                  selectedEmails.includes(s.email),
+                                )
+                              }
+                              onChange={(e) =>
+                                toggleAllVisible(e.target.checked)
+                              }
+                            />
+                            Seleccionar todos visibles
+                          </label>
+                          <span className="text-muted-foreground">
+                            {students.length} alumno
+                            {students.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+
+                        <div className="max-h-[360px] overflow-y-auto space-y-2 pr-1">
+                          {studentsLoading ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Cargando alumnos...
+                            </div>
+                          ) : students.length === 0 ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground">
+                              No se encontraron alumnos.
+                            </div>
+                          ) : (
+                            students.map((student) => {
+                              const checked = selectedEmails.includes(
+                                student.email,
+                              );
+                              return (
+                                <label
+                                  key={student.email}
+                                  className="flex items-start gap-2 rounded-md border p-2.5 cursor-pointer hover:bg-muted/40"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      toggleStudent(
+                                        student.email,
+                                        e.target.checked,
+                                      )
+                                    }
+                                    className="mt-1"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                      {student.nombre}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {student.email}
+                                    </p>
+                                  </div>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <Button
+                          type="button"
+                          className="w-full gap-2"
+                          disabled={
+                            sendingPilotInvites ||
+                            selectedStudents.length === 0 ||
+                            !isAdminUser
+                          }
+                          onClick={sendPilotInvitations}
+                        >
+                          {sendingPilotInvites ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Enviando invitaciones...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4" />
+                              Enviar invitación a seleccionados
+                            </>
+                          )}
+                        </Button>
+
+                        {!isAdminUser && (
+                          <p className="text-xs text-amber-600">
+                            Solo usuarios admin pueden enviar invitaciones.
+                          </p>
+                        )}
+
+                        <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+                          <p className="font-medium text-foreground">
+                            Link público de consentimiento
+                          </p>
+                          <p className="break-all">{consentUrl}</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border p-4 space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            Estado del piloto
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7"
+                            onClick={loadPilotMetadata}
+                            disabled={pilotMetaLoading}
+                          >
+                            {pilotMetaLoading ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="rounded-md border p-2.5">
+                            <p className="text-[11px] text-muted-foreground">
+                              Invitados
+                            </p>
+                            <p className="text-lg font-semibold">
+                              {pilotMeta.invitados.length}
+                            </p>
+                          </div>
+                          <div className="rounded-md border p-2.5">
+                            <p className="text-[11px] text-muted-foreground">
+                              Aceptados
+                            </p>
+                            <p className="text-lg font-semibold text-emerald-600">
+                              {pilotMeta.aceptados.length}
+                            </p>
+                          </div>
+                          <div className="rounded-md border p-2.5">
+                            <p className="text-[11px] text-muted-foreground">
+                              Progreso
+                            </p>
+                            <p className="text-lg font-semibold">
+                              {pilotProgress}%
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium">
+                            Aceptados recientes
+                          </p>
+                          <div className="max-h-[260px] overflow-y-auto space-y-2 pr-1">
+                            {pilotMeta.aceptados.length === 0 ? (
+                              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                                Aún no hay aceptaciones registradas.
+                              </div>
+                            ) : (
+                              [...pilotMeta.aceptados]
+                                .sort((a, b) =>
+                                  String(b.aceptado_en).localeCompare(
+                                    String(a.aceptado_en),
+                                  ),
+                                )
+                                .slice(0, 50)
+                                .map((item) => (
+                                  <div
+                                    key={`${item.email}-${item.aceptado_en}`}
+                                    className="rounded-md border p-2.5"
+                                  >
+                                    <p className="text-sm font-medium truncate">
+                                      {item.nombre || item.email}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {item.email}
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                      {new Date(
+                                        item.aceptado_en,
+                                      ).toLocaleString()}
+                                    </p>
+                                  </div>
+                                ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : selectedTemplate ? (
                 <Card className="rounded-xl">
                   <CardHeader className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">

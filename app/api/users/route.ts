@@ -5,7 +5,16 @@ import { buildUrl } from "@/lib/api-config";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const token = cookies().get("token")?.value;
+  const authHeader = req.headers.get("authorization");
+  const tokenFromHeader = (() => {
+    const v = String(authHeader ?? "").trim();
+    if (!v) return null;
+    const m = v.match(/^Bearer\s+(.+)$/i);
+    return m?.[1]?.trim() || null;
+  })();
+
+  const tokenFromCookie = cookies().get("token")?.value ?? null;
+  const token = tokenFromHeader || tokenFromCookie;
   if (!token) {
     return NextResponse.json({ status: "error", message: "No autorizado" }, { status: 401 });
   }
