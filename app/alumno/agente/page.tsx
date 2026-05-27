@@ -606,10 +606,11 @@ function AgentePageContent() {
           </div>
           <button
             onClick={() => setShowFeedback(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
+            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-linear-to-r from-violet-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-violet-500/30 transition hover:shadow-lg hover:shadow-violet-500/40 hover:brightness-110 active:scale-95"
           >
+            <span className="absolute inset-0 bg-white/10 opacity-0 transition group-hover:opacity-100" />
             <MessageSquarePlus className="h-4 w-4" />
-            Dar feedback
+            💬 ¿Qué podemos mejorar?
           </button>
         </div>
       </div>
