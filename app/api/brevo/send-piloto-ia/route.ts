@@ -113,7 +113,7 @@ function buildInvitationEmail(opts: {
         <ul>
           <li>Resolver dudas operativas frecuentes</li>
           <li>Solicitar ayuda de manera más rápida</li>
-          <li>Levantar tickets de soporte directamente desde el agente</li>
+          <li>Levantar tickets de consultas a tu coach directamente desde el agente</li>
           <li>Escalar conversaciones a un humano cuando sea necesario</li>
           <li>Facilitar la gestión y seguimiento de solicitudes dentro del ecosistema Hotselling</li>
         </ul>

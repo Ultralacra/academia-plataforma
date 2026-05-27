@@ -19,7 +19,7 @@ const CONSENT_ITEMS = [
 const VOLUNTEER_BULLETS = [
   "Resolver dudas operativas frecuentes",
   "Solicitar ayuda de manera más rápida",
-  "Levantar tickets de soporte directamente desde el agente",
+  "Levantar tickets de consultas a tu coach directamente desde el agente",
   "Escalar conversaciones a un humano cuando sea necesario",
   "Facilitar la gestión y seguimiento de solicitudes dentro del ecosistema Hotselling",
 ];
