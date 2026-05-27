@@ -6,16 +6,19 @@ import {
   ArrowLeft,
   Bot,
   BookOpen,
+  Calendar,
   CheckCircle2,
   Clock,
   Database,
   FileText,
   Loader2,
+  MessageSquarePlus,
   Save,
   Search,
   ShieldCheck,
   Target,
   Timer,
+  User2,
   Users,
   Zap,
 } from "lucide-react";
@@ -27,6 +30,7 @@ import { AgenteAtcChat } from "@/components/chat/AgenteAtcChat";
 import { type AIProvider } from "@/components/chat/AgenteAtcChat";
 import { AI_PROVIDER_KEY } from "@/app/admin/agentes/page";
 import { io } from "socket.io-client";
+import { listMetadata } from "@/lib/metadata";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,7 +48,7 @@ const ATC_TEAM_CODES = [
   { code: "PKBT2jVtzKzN7TpnLZkPj", label: "Katherine" },
 ];
 
-type Tab = "kb" | "test";
+type Tab = "kb" | "test" | "feedbacks";
 
 // ─── KB Types ─────────────────────────────────────────────────────────────────
 
@@ -449,6 +453,130 @@ const KB_SECTIONS: {
       "El agente NO puede:\n- Aprobar reembolsos\n- Aprobar garantías sin auditoría...",
   },
 ];
+
+// ─── Feedbacks Tab ───────────────────────────────────────────────────────────
+
+interface FeedbackRecord {
+  id: string | number;
+  entity: string;
+  entity_id: string;
+  payload: {
+    nombre: string;
+    codigo: string;
+    feedback: string;
+    fecha: string;
+  };
+  created_at?: string;
+}
+
+function FeedbacksTab() {
+  const [feedbacks, setFeedbacks] = useState<FeedbackRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    listMetadata()
+      .then(({ items }) => {
+        const filtered = items
+          .filter((item) => item.entity === "feedback_super_atc")
+          .sort((a, b) => {
+            const fa = (a.payload as any).fecha ?? a.created_at ?? "";
+            const fb = (b.payload as any).fecha ?? b.created_at ?? "";
+            return fb.localeCompare(fa);
+          });
+        setFeedbacks(filtered as FeedbackRecord[]);
+      })
+      .catch(() => setFeedbacks([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function formatDate(dateStr?: string) {
+    if (!dateStr) return "—";
+    try {
+      return new Intl.DateTimeFormat("es-ES", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(dateStr));
+    } catch {
+      return dateStr;
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-violet-400 to-purple-500 shadow-sm">
+            <MessageSquarePlus className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-foreground">
+              Feedbacks de alumnos
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Opiniones enviadas sobre el Super Agente ATC
+            </p>
+          </div>
+        </div>
+        {!loading && (
+          <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+            {feedbacks.length}{" "}
+            {feedbacks.length === 1 ? "feedback" : "feedbacks"}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : feedbacks.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <MessageSquarePlus className="h-10 w-10 text-muted-foreground/30" />
+          <p className="text-sm font-medium text-muted-foreground">
+            Aún no hay feedbacks
+          </p>
+          <p className="text-xs text-muted-foreground/60">
+            Cuando los alumnos envíen feedback aparecerá aquí
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {feedbacks.map((fb) => (
+            <div
+              key={fb.id}
+              className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-violet-400 to-purple-500">
+                  <User2 className="h-4 w-4 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {fb.payload.nombre || "Alumno"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {fb.payload.codigo}
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed text-foreground/80">
+                {fb.payload.feedback}
+              </p>
+              <div className="mt-auto flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Calendar className="h-3 w-3" />
+                {formatDate(fb.payload.fecha ?? fb.created_at)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Test Tab ─────────────────────────────────────────────────────────────────
 
@@ -1080,6 +1208,7 @@ function SuperAtcContent() {
   }[] = [
     { id: "kb", label: "Base de Conocimiento", icon: Database },
     { id: "test", label: "Probar Agente", icon: Users },
+    { id: "feedbacks", label: "Feedbacks", icon: MessageSquarePlus },
   ];
 
   return (
@@ -1148,6 +1277,7 @@ function SuperAtcContent() {
       <div className="flex-1 overflow-auto">
         {activeTab === "kb" && <KbEditorTab />}
         {activeTab === "test" && <TestAlumnoTab provider={provider} />}
+        {activeTab === "feedbacks" && <FeedbacksTab />}
       </div>
     </div>
   );

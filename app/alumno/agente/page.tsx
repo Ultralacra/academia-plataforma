@@ -10,12 +10,23 @@ import {
   Clock,
   FileText,
   Loader2,
+  MessageSquarePlus,
+  Send,
   User2,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { useAuth } from "@/hooks/use-auth";
 import { authService, getAuthToken } from "@/lib/auth";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { createMetadata } from "@/lib/metadata";
 import {
   AgenteAtcChat,
   type AIProvider,
@@ -236,6 +247,130 @@ function StudentSidebar({
   );
 }
 
+// ─── Feedback Modal ──────────────────────────────────────────────────────────
+
+function FeedbackModal({
+  open,
+  onClose,
+  alumnoNombre,
+  alumnoCodigo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  alumnoNombre: string;
+  alumnoCodigo: string;
+}) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  function handleClose() {
+    if (sending) return;
+    setText("");
+    setSent(false);
+    onClose();
+  }
+
+  async function handleSubmit() {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    try {
+      await createMetadata({
+        entity: "feedback_super_atc",
+        entity_id: `${alumnoCodigo}_${Date.now()}`,
+        payload: {
+          nombre: alumnoNombre,
+          codigo: alumnoCodigo,
+          feedback: trimmed,
+          fecha: new Date().toISOString(),
+        },
+      });
+      setSent(true);
+      setText("");
+    } catch {
+      // silencioso
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <div className="mb-1 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-violet-400 to-purple-500 shadow-sm">
+              <MessageSquarePlus className="h-5 w-5 text-white" />
+            </div>
+            <DialogTitle className="text-lg">¿Qué podemos mejorar?</DialogTitle>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Tu opinión ayuda a mejorar el Asistente ATC para todos los alumnos.
+          </p>
+        </DialogHeader>
+
+        {sent ? (
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+              <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+            </div>
+            <p className="font-semibold text-foreground">
+              ¡Gracias por tu feedback!
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Lo revisaremos para seguir mejorando el agente.
+            </p>
+            <button
+              onClick={handleClose}
+              className="mt-1 text-sm font-medium text-primary hover:underline"
+            >
+              Cerrar
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Textarea
+                placeholder="Contanos qué mejorarías, qué te faltó o qué no funcionó como esperabas..."
+                className="min-h-30 resize-none text-sm"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                maxLength={1000}
+                disabled={sending}
+              />
+              <p className="text-right text-xs text-muted-foreground">
+                {text.length}/1000
+              </p>
+            </div>
+            <DialogFooter>
+              <button
+                onClick={handleClose}
+                className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition hover:text-foreground"
+                disabled={sending}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={!text.trim() || sending}
+                className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-violet-500 to-purple-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+              >
+                {sending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Enviar feedback
+              </button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Page content ─────────────────────────────────────────────────────────────
 
 function AgentePageContent() {
@@ -244,6 +379,7 @@ function AgentePageContent() {
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [provider, setProvider] = useState<AIProvider>("anthropic");
   const [chatHistory, setChatHistory] = useState("");
+  const [showFeedback, setShowFeedback] = useState(false);
   // Si el user no tiene codigo (datos incompletos de localStorage), forzar refetch
   const [retryedCode, setRetryedCode] = useState<string | null>(null);
   const retryRef = useRef(false);
@@ -454,18 +590,36 @@ function AgentePageContent() {
     <div className="flex h-full flex-col gap-0">
       {/* Page header */}
       <div className="mb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
-            <Bot className="h-5 w-5 text-white" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+              <Bot className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">
+                Asistente ATC
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Tu asistente personal de atención al cliente
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Asistente ATC</h1>
-            <p className="text-sm text-muted-foreground">
-              Tu asistente personal de atención al cliente
-            </p>
-          </div>
+          <button
+            onClick={() => setShowFeedback(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/30"
+          >
+            <MessageSquarePlus className="h-4 w-4" />
+            Dar feedback
+          </button>
         </div>
       </div>
+
+      <FeedbackModal
+        open={showFeedback}
+        onClose={() => setShowFeedback(false)}
+        alumnoNombre={alumnoName}
+        alumnoCodigo={alumnoCode}
+      />
 
       {/* Layout */}
       <div className="flex flex-1 flex-col gap-5 overflow-hidden lg:flex-row">
