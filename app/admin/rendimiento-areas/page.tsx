@@ -38,11 +38,15 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 
 const ENTITY = "team_performance_space_state";
 const ENTITY_ID = "global";
 const SHARED_SESSION_KEY = "bm-vault-auth";
 const SHARED_DEFAULT_PASSWORD = "JJWEPNTLDIJE";
+
+const ENTITY_ACCESS = "rendimiento_area_access";
+const ENTITY_ACCESS_ID = "global";
 
 type KrStatus = "on_track" | "at_risk" | "off_track" | "paused";
 type KrMeasurementType = "numeric" | "percentage" | "boolean" | "manual";
@@ -84,6 +88,17 @@ type AreaNode = {
 type TeamPerformanceState = {
   ownerCodes: string[];
   areas: AreaNode[];
+};
+
+type RendimientoAreaAccess = {
+  version: 1;
+  permisos: {
+    [userCodigo: string]: {
+      nombre: string;
+      areas: string[];
+      subareas: string[];
+    };
+  };
 };
 
 function uid() {
@@ -730,6 +745,16 @@ function TeamPerformancePageContent() {
   const [pwError, setPwError] = useState(false);
   const [activeAreaId, setActiveAreaId] = useState("");
   const [showAccessPanel, setShowAccessPanel] = useState(false);
+  const [showUserAccessPanel, setShowUserAccessPanel] = useState(false);
+  const [accessState, setAccessState] = useState<RendimientoAreaAccess>({
+    version: 1,
+    permisos: {},
+  });
+  const [accessMetaId, setAccessMetaId] = useState<string | null>(null);
+  const [teamUsers, setTeamUsers] = useState<CoachItem[]>([]);
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessSaved, setAccessSaved] = useState(false);
+  const [accessUserSearch, setAccessUserSearch] = useState("");
   const [sharedVaultPassword, setSharedVaultPassword] = useState(
     SHARED_DEFAULT_PASSWORD,
   );
@@ -772,6 +797,23 @@ function TeamPerformancePageContent() {
   const visibleAreas = useMemo(() => {
     if (isOwner) return state.areas;
 
+    const userCodigo = String((user as any)?.codigo || user?.id || "");
+
+    // Si el sistema de accesos tiene un registro guardado, aplicar permisos explícitos
+    if (accessMetaId !== null) {
+      const explicitPerms = accessState.permisos[userCodigo];
+      if (!explicitPerms) return [];
+      const allowedAreas = new Set(explicitPerms.areas);
+      const allowedSubareas = new Set(explicitPerms.subareas);
+      return state.areas
+        .filter((a) => allowedAreas.has(a.id))
+        .map((a) => ({
+          ...a,
+          subareas: a.subareas.filter((s) => allowedSubareas.has(s.id)),
+        }));
+    }
+
+    // Fallback: leaderCodes (sistema de accesos aún no configurado)
     const scoped: AreaNode[] = [];
     for (const area of state.areas) {
       const areaLeader = canLeadArea(area);
@@ -787,7 +829,15 @@ function TeamPerformancePageContent() {
       }
     }
     return scoped;
-  }, [canLeadArea, canLeadSubarea, isOwner, state.areas]);
+  }, [
+    canLeadArea,
+    canLeadSubarea,
+    isOwner,
+    state.areas,
+    accessState,
+    accessMetaId,
+    user,
+  ]);
 
   useEffect(() => {
     if (visibleAreas.length === 0) {
@@ -814,13 +864,20 @@ function TeamPerformancePageContent() {
       setLoadingMeta(true);
       try {
         const token = getAuthToken();
-        const [perfRes, businessRes] = await Promise.all([
+        const [perfRes, businessRes, accessRes] = await Promise.all([
           fetch(`/api/metadata?entity=${ENTITY}&entity_id=${ENTITY_ID}`, {
             headers: { Authorization: `Bearer ${token ?? ""}` },
             cache: "no-store",
           }),
           fetch(
             "/api/metadata?entity=business_metrics_state&entity_id=global",
+            {
+              headers: { Authorization: `Bearer ${token ?? ""}` },
+              cache: "no-store",
+            },
+          ),
+          fetch(
+            `/api/metadata?entity=${ENTITY_ACCESS}&entity_id=${ENTITY_ACCESS_ID}`,
             {
               headers: { Authorization: `Bearer ${token ?? ""}` },
               cache: "no-store",
@@ -874,12 +931,51 @@ function TeamPerformancePageContent() {
           ).trim();
           setSharedVaultPassword(fromMetadata || SHARED_DEFAULT_PASSWORD);
         }
+
+        if (!cancelled && accessRes.ok) {
+          const json = await accessRes.json().catch(() => null);
+          const items: any[] = Array.isArray(json)
+            ? json
+            : Array.isArray(json?.data)
+              ? json.data
+              : Array.isArray(json?.items)
+                ? json.items
+                : json
+                  ? [json]
+                  : [];
+          const found = items.find(
+            (m: any) =>
+              m?.entity === ENTITY_ACCESS &&
+              String(m?.entity_id ?? "") === ENTITY_ACCESS_ID,
+          );
+          if (found) {
+            setAccessState(found.payload ?? { version: 1, permisos: {} });
+            setAccessMetaId(String(found.id));
+          }
+        }
       } finally {
         if (!cancelled) setLoadingMeta(false);
       }
     }
 
     void loadAll();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!canAccessBusinessMetrics(user)) return;
+    let cancelled = false;
+    async function loadTeamUsers() {
+      try {
+        const coaches = await getCoaches({ page: 1, pageSize: 500 });
+        if (!cancelled) setTeamUsers(coaches);
+      } catch (e) {
+        console.error("[rendimiento-areas] loadTeamUsers failed", e);
+      }
+    }
+    void loadTeamUsers();
     return () => {
       cancelled = true;
     };
@@ -894,6 +990,134 @@ function TeamPerformancePageContent() {
     }
     setPwError(true);
   };
+
+  const handleToggleAreaAccess = useCallback(
+    (userCodigo: string, areaId: string, checked: boolean) => {
+      const area = state.areas.find((a) => a.id === areaId);
+      const allSubareaIds = (area?.subareas ?? []).map((s) => s.id);
+      setAccessState((prev) => {
+        const nombre =
+          teamUsers.find((u) => u.codigo === userCodigo)?.nombre ?? userCodigo;
+        const cur = prev.permisos[userCodigo] ?? {
+          nombre,
+          areas: [],
+          subareas: [],
+        };
+        if (checked) {
+          return {
+            ...prev,
+            permisos: {
+              ...prev.permisos,
+              [userCodigo]: {
+                nombre,
+                areas: [...new Set([...cur.areas, areaId])],
+                subareas: [...new Set([...cur.subareas, ...allSubareaIds])],
+              },
+            },
+          };
+        } else {
+          return {
+            ...prev,
+            permisos: {
+              ...prev.permisos,
+              [userCodigo]: {
+                nombre,
+                areas: cur.areas.filter((a) => a !== areaId),
+                subareas: cur.subareas.filter(
+                  (s) => !allSubareaIds.includes(s),
+                ),
+              },
+            },
+          };
+        }
+      });
+      setAccessSaved(false);
+    },
+    [state.areas, teamUsers],
+  );
+
+  const handleToggleSubareaAccess = useCallback(
+    (userCodigo: string, subareaId: string, checked: boolean) => {
+      setAccessState((prev) => {
+        const nombre =
+          teamUsers.find((u) => u.codigo === userCodigo)?.nombre ?? userCodigo;
+        const cur = prev.permisos[userCodigo] ?? {
+          nombre,
+          areas: [],
+          subareas: [],
+        };
+        return {
+          ...prev,
+          permisos: {
+            ...prev.permisos,
+            [userCodigo]: {
+              nombre,
+              areas: cur.areas,
+              subareas: checked
+                ? [...new Set([...cur.subareas, subareaId])]
+                : cur.subareas.filter((s) => s !== subareaId),
+            },
+          },
+        };
+      });
+      setAccessSaved(false);
+    },
+    [teamUsers],
+  );
+
+  const handleSaveAccess = useCallback(async () => {
+    if (accessSaving) return;
+    setAccessSaving(true);
+    try {
+      const token = getAuthToken();
+      if (!accessMetaId) {
+        const res = await fetch("/api/metadata", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token ?? ""}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            entity: ENTITY_ACCESS,
+            entity_id: ENTITY_ACCESS_ID,
+            payload: accessState,
+          }),
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+        const json = await res.json().catch(() => null);
+        const newId = json?.id ?? json?.data?.id ?? null;
+        if (newId) setAccessMetaId(String(newId));
+      } else {
+        const res = await fetch(
+          `/api/metadata/${encodeURIComponent(accessMetaId)}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token ?? ""}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              entity: ENTITY_ACCESS,
+              entity_id: ENTITY_ACCESS_ID,
+              payload: accessState,
+            }),
+          },
+        );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+      }
+      setAccessSaved(true);
+    } catch (err) {
+      console.error("[rendimiento-areas] access save failed", err);
+    } finally {
+      setAccessSaving(false);
+    }
+  }, [accessMetaId, accessSaving, accessState]);
 
   const saveNow = useCallback(async () => {
     if (savingMeta) return;
@@ -1257,8 +1481,8 @@ function TeamPerformancePageContent() {
           </div>
           <h3 className="font-semibold">Sin permisos asignados</h3>
           <p className="text-sm text-muted-foreground">
-            Tu usuario no está asignado como líder de ningún área o subárea.
-            Pide al owner que agregue tu código.
+            No tienes acceso a ninguna área. Solicita al administrador que
+            configure tus permisos de vista.
           </p>
         </div>
       </div>
@@ -1310,6 +1534,22 @@ function TeamPerformancePageContent() {
                 className={cn(
                   "h-3 w-3 transition-transform duration-200",
                   showAccessPanel && "rotate-180",
+                )}
+              />
+            </button>
+          )}
+          {canAccessBusinessMetrics(user) && (
+            <button
+              type="button"
+              onClick={() => setShowUserAccessPanel((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-3 h-8 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Gestión de accesos
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 transition-transform duration-200",
+                  showUserAccessPanel && "rotate-180",
                 )}
               />
             </button>
@@ -1392,6 +1632,191 @@ function TeamPerformancePageContent() {
                   className="h-8 text-sm bg-muted/50 text-muted-foreground"
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── User access management panel ─────────────────────────────── */}
+      {canAccessBusinessMetrics(user) && showUserAccessPanel && (
+        <Card>
+          <CardHeader className="py-4 px-5 border-b">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-violet-500" />
+              Gestión de accesos por usuario
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Define qué áreas y subáreas puede ver cada miembro del equipo. Sin
+              permisos asignados, el usuario no verá ninguna área.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              <Input
+                placeholder="Buscar usuario por nombre o puesto…"
+                value={accessUserSearch}
+                onChange={(e) => setAccessUserSearch(e.target.value)}
+                className="h-8 text-sm max-w-sm"
+              />
+              <span className="text-xs text-muted-foreground ml-auto">
+                {teamUsers.length} usuario{teamUsers.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {teamUsers.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Cargando usuarios…</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+                {teamUsers
+                  .filter((u) =>
+                    accessUserSearch.trim()
+                      ? u.nombre
+                          .toLowerCase()
+                          .includes(accessUserSearch.toLowerCase()) ||
+                        (u.puesto ?? "")
+                          .toLowerCase()
+                          .includes(accessUserSearch.toLowerCase())
+                      : true,
+                  )
+                  .map((teamUser) => {
+                    const perms = accessState.permisos[teamUser.codigo] ?? {
+                      areas: [],
+                      subareas: [],
+                    };
+                    const areaCount = perms.areas.length;
+                    const subareaCount = perms.subareas.length;
+                    return (
+                      <div
+                        key={teamUser.codigo}
+                        className="rounded-lg border bg-muted/20 p-3 space-y-3"
+                      >
+                        {/* User info row */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">
+                            {teamUser.nombre}
+                          </span>
+                          {teamUser.puesto && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] h-4 px-1.5"
+                            >
+                              {teamUser.puesto}
+                            </Badge>
+                          )}
+                          {teamUser.area && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] h-4 px-1.5"
+                            >
+                              {teamUser.area}
+                            </Badge>
+                          )}
+                          <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+                            {areaCount > 0
+                              ? `${areaCount} área${areaCount !== 1 ? "s" : ""}${
+                                  subareaCount > 0
+                                    ? ` · ${subareaCount} subárea${subareaCount !== 1 ? "s" : ""}`
+                                    : ""
+                                }`
+                              : "Sin acceso"}
+                          </span>
+                        </div>
+
+                        {/* Area + subarea checkboxes */}
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {state.areas.map((area) => {
+                            const areaChecked = perms.areas.includes(area.id);
+                            return (
+                              <div key={area.id} className="space-y-1">
+                                <label className="flex items-center gap-2 cursor-pointer group select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={areaChecked}
+                                    onChange={(e) =>
+                                      handleToggleAreaAccess(
+                                        teamUser.codigo,
+                                        area.id,
+                                        e.target.checked,
+                                      )
+                                    }
+                                    className="h-3.5 w-3.5 rounded accent-violet-600"
+                                  />
+                                  <span className="text-xs font-medium text-foreground">
+                                    {area.name}
+                                  </span>
+                                  {area.subareas.length > 0 && (
+                                    <span className="text-[10px] text-muted-foreground/60">
+                                      ({area.subareas.length})
+                                    </span>
+                                  )}
+                                </label>
+                                {areaChecked && area.subareas.length > 0 && (
+                                  <div className="ml-5 space-y-1">
+                                    {area.subareas.map((sub) => (
+                                      <label
+                                        key={sub.id}
+                                        className="flex items-center gap-2 cursor-pointer group select-none"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={perms.subareas.includes(
+                                            sub.id,
+                                          )}
+                                          onChange={(e) =>
+                                            handleToggleSubareaAccess(
+                                              teamUser.codigo,
+                                              sub.id,
+                                              e.target.checked,
+                                            )
+                                          }
+                                          className="h-3 w-3 rounded accent-violet-600"
+                                        />
+                                        <span className="text-[11px] text-muted-foreground group-hover:text-foreground">
+                                          {sub.name}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t">
+              <Button
+                size="sm"
+                onClick={handleSaveAccess}
+                disabled={accessSaving}
+                className="h-8 gap-1.5"
+              >
+                {accessSaving ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Guardando…
+                  </>
+                ) : accessSaved ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    Guardado
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Guardar permisos
+                  </>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
