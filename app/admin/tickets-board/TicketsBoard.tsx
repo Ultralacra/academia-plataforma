@@ -1468,11 +1468,6 @@ function TicketsBoardContent({
     if (!canEdit) return;
     e.preventDefault();
 
-    // Solo usuarios con permisos de gestión pueden pasar un ticket a PAUSADO
-    if (coerceStatus(targetEstado) === "PAUSADO" && !canManageTickets) {
-      return;
-    }
-
     const id =
       e.dataTransfer.getData("text/ticket-id") ||
       e.dataTransfer.getData("text/plain");
@@ -5147,79 +5142,73 @@ function TicketsBoardContent({
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start">
-                                {estados
-                                  .filter(
-                                    (st) =>
-                                      st !== "PAUSADO" || canManageTickets,
-                                  )
-                                  .map((st) => (
-                                    <DropdownMenuItem
-                                      key={st}
-                                      onClick={async () => {
-                                        const newStatus = st as StatusKey;
-                                        setEditForm((prev) => ({
-                                          ...prev,
-                                          estado: newStatus,
-                                        }));
+                                {estados.map((st) => (
+                                  <DropdownMenuItem
+                                    key={st}
+                                    onClick={async () => {
+                                      const newStatus = st as StatusKey;
+                                      setEditForm((prev) => ({
+                                        ...prev,
+                                        estado: newStatus,
+                                      }));
 
-                                        if (selectedTicket?.codigo) {
-                                          try {
-                                            await updateTicket(
-                                              selectedTicket.codigo,
-                                              { estado: newStatus },
-                                            );
+                                      if (selectedTicket?.codigo) {
+                                        try {
+                                          await updateTicket(
+                                            selectedTicket.codigo,
+                                            { estado: newStatus },
+                                          );
 
-                                            setTickets((prev) =>
-                                              prev.map((t) =>
-                                                t.id === selectedTicket.id
-                                                  ? {
-                                                      ...t,
-                                                      estado: newStatus,
-                                                    }
-                                                  : t,
-                                              ),
-                                            );
-
-                                            if (ticketDetail) {
-                                              setTicketDetail((prev: any) => ({
-                                                ...prev,
-                                                estado: newStatus,
-                                              }));
-                                            }
-
-                                            setSelectedTicket((prev) =>
-                                              prev
+                                          setTickets((prev) =>
+                                            prev.map((t) =>
+                                              t.id === selectedTicket.id
                                                 ? {
-                                                    ...prev,
+                                                    ...t,
                                                     estado: newStatus,
                                                   }
-                                                : null,
-                                            );
+                                                : t,
+                                            ),
+                                          );
 
-                                            toast({
-                                              title: "Estado actualizado",
-                                            });
-                                          } catch (e) {
-                                            console.error(e);
-                                            toast({
-                                              title:
-                                                "Error al actualizar estado",
-                                              variant: "destructive",
-                                            });
+                                          if (ticketDetail) {
+                                            setTicketDetail((prev: any) => ({
+                                              ...prev,
+                                              estado: newStatus,
+                                            }));
                                           }
+
+                                          setSelectedTicket((prev) =>
+                                            prev
+                                              ? {
+                                                  ...prev,
+                                                  estado: newStatus,
+                                                }
+                                              : null,
+                                          );
+
+                                          toast({
+                                            title: "Estado actualizado",
+                                          });
+                                        } catch (e) {
+                                          console.error(e);
+                                          toast({
+                                            title: "Error al actualizar estado",
+                                            variant: "destructive",
+                                          });
                                         }
-                                      }}
-                                      className="text-xs"
+                                      }
+                                    }}
+                                    className="text-xs"
+                                  >
+                                    <div
+                                      className={`inline-flex items-center rounded-md px-2 py-0.5 border ${
+                                        STATUS_STYLE[st as StatusKey]
+                                      }`}
                                     >
-                                      <div
-                                        className={`inline-flex items-center rounded-md px-2 py-0.5 border ${
-                                          STATUS_STYLE[st as StatusKey]
-                                        }`}
-                                      >
-                                        {STATUS_LABEL[st as StatusKey]}
-                                      </div>
-                                    </DropdownMenuItem>
-                                  ))}
+                                      {STATUS_LABEL[st as StatusKey]}
+                                    </div>
+                                  </DropdownMenuItem>
+                                ))}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
