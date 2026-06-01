@@ -1321,6 +1321,7 @@ Si no sabe la respuesta con certeza → decir "te ayudo a gestionar esto con el 
 `;
 
 interface KbSecciones {
+  personalidad?: string;
   garantias?: string;
   pausas?: string;
   extensiones?: string;
@@ -1367,6 +1368,9 @@ async function loadSuperAtcKnowledgeBase(
     if (!secciones) return null;
 
     const parts: string[] = ["## BASE DE CONOCIMIENTO OPERATIVA ATC\n"];
+    // Personalidad del agente (Emma) — va primero para fijar tono e identidad
+    if (secciones.personalidad?.trim())
+      parts.push(`### PERSONALIDAD DEL AGENTE\n${secciones.personalidad}\n`);
     // nuevas secciones dedicadas
     if (secciones.garantias?.trim())
       parts.push(`### GARANTÍAS\n${secciones.garantias}\n`);
