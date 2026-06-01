@@ -70,6 +70,7 @@ import {
   LayoutGrid,
   List,
   Trash2,
+  Bot,
 } from "lucide-react";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import {
@@ -783,6 +784,7 @@ function TicketsBoardContent({
   const [tipoFiltro, setTipoFiltro] = useState("");
   const [areaFiltro, setAreaFiltro] = useState("");
   const [onlyMyTickets, setOnlyMyTickets] = useState(false);
+  const [onlyAgentTickets, setOnlyAgentTickets] = useState(false);
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">(
     studentCode ? "table" : "kanban",
@@ -822,6 +824,31 @@ function TicketsBoardContent({
     shouldUseYearRange ? oneYearAgoStr : fourDaysAgoStr,
   );
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
+
+  // Helper: detectar si un ticket fue generado por el agente IA
+  // (informante === id_alumno → el propio alumno lo creo a traves del agente)
+  const isGeneratedByAgent = (t: TicketBoardItem): boolean => {
+    const informante = String((t as any)?.informante ?? "").trim();
+    const idAlumno = String((t as any)?.id_alumno ?? "").trim();
+    return !!(informante && idAlumno && informante === idAlumno);
+  };
+
+  // Helper: obtener el ATC asignado al alumno de un ticket (de alumno_coaches)
+  const getAtcFromTicket = (
+    t: TicketBoardItem,
+  ): { nombre: string; codigo_equipo: string } | null => {
+    const alumnoCoaches: any[] = Array.isArray((t as any)?.alumno_coaches)
+      ? (t as any).alumno_coaches
+      : [];
+    const found = alumnoCoaches.find((co: any) => isAtcCoach(co));
+    if (!found) return null;
+    return {
+      nombre: String(found.nombre ?? found.name ?? "ATC"),
+      codigo_equipo: String(
+        found.codigo_equipo ?? found.codigo ?? found.id ?? "",
+      ),
+    };
+  };
 
   // Helper: detectar si un coach del ticket tiene puesto/area de ATC
   const ATC_KEYWORDS = [
@@ -1038,10 +1065,15 @@ function TicketsBoardContent({
       });
     }
 
+    if (onlyAgentTickets) {
+      result = result.filter((t) => isGeneratedByAgent(t));
+    }
+
     return result;
   }, [
     tickets,
     onlyMyTickets,
+    onlyAgentTickets,
     user,
     isUserAtc,
     coachFiltro,
@@ -2833,6 +2865,16 @@ function TicketsBoardContent({
               >
                 <User className="h-4 w-4" />
               </Button>
+
+              <Button
+                variant={onlyAgentTickets ? "default" : "outline"}
+                size="icon"
+                onClick={() => setOnlyAgentTickets((prev) => !prev)}
+                className={`h-8 w-8 ${onlyAgentTickets ? "bg-violet-600 hover:bg-violet-700 border-violet-600" : ""}`}
+                title="Mostrar solo tickets generados por el agente IA"
+              >
+                <Bot className="h-4 w-4" />
+              </Button>
             </>
           )}
 
@@ -2988,7 +3030,32 @@ function TicketsBoardContent({
                           )}
                       </TableCell>
                       <TableCell className="font-medium">
-                        {subjectLabel}
+                        <div className="flex flex-col gap-1">
+                          <span>{subjectLabel}</span>
+                          {isGeneratedByAgent(t) && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className="inline-flex items-center gap-1 border-violet-200 bg-violet-50 text-[10px] text-violet-700 dark:border-violet-800/40 dark:bg-violet-900/20 dark:text-violet-300"
+                              >
+                                <Bot className="h-3 w-3" />
+                                Generado mediante el agente
+                              </Badge>
+                              {(() => {
+                                const atc = getAtcFromTicket(t);
+                                if (!atc) return null;
+                                return (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    ATC:{" "}
+                                    <span className="font-medium text-foreground/80">
+                                      {atc.nombre}
+                                    </span>
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       {isFeedbackMode && (
                         <TableCell>{(t as any)?.tipo || "—"}</TableCell>
@@ -3164,13 +3231,43 @@ function TicketsBoardContent({
                               )}
 
                               {/* Informante */}
-                              {(t.informante_nombre || t.informante) && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                                  <span className="font-medium text-foreground/90">
-                                    {t.informante_nombre || t.informante}
-                                  </span>
-                                </div>
+                              {(t.informante_nombre || t.informante) &&
+                                !isGeneratedByAgent(t) && (
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="font-medium text-foreground/90">
+                                      {t.informante_nombre || t.informante}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {/* Badge + ATC para tickets generados por el agente IA */}
+                              {isGeneratedByAgent(t) && (
+                                <>
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge
+                                      variant="outline"
+                                      className="inline-flex items-center gap-1 border-violet-200 bg-violet-50 text-[10px] text-violet-700 dark:border-violet-800/40 dark:bg-violet-900/20 dark:text-violet-300"
+                                    >
+                                      <Bot className="h-3 w-3" />
+                                      Generado mediante el agente
+                                    </Badge>
+                                  </div>
+                                  {(() => {
+                                    const atc = getAtcFromTicket(t);
+                                    if (!atc) return null;
+                                    return (
+                                      <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-muted-foreground">
+                                          ATC:
+                                        </span>
+                                        <span className="font-medium text-foreground/90">
+                                          {atc.nombre}
+                                        </span>
+                                      </div>
+                                    );
+                                  })()}
+                                </>
                               )}
 
                               {(() => {

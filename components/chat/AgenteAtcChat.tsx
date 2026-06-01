@@ -1,20 +1,25 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Bot,
   Calendar,
   CheckCircle2,
   Loader2,
+  MessageSquare,
+  Mic,
   Paperclip,
   RefreshCw,
   SendHorizonal,
   ShieldAlert,
+  Square,
   Ticket,
   X,
   XCircle,
 } from "lucide-react";
+import { convertBlobToMp3 } from "@/lib/audio-converter";
 import { getAuthToken } from "@/lib/auth";
 import {
   createTicket,
@@ -289,27 +294,110 @@ function EscalationCard({ motivo }: { motivo: string }) {
 
 // ─── Transfer card ────────────────────────────────────────────────────────────
 
-function TransferCard({ motivo }: { motivo: string }) {
+function TransferCard({
+  motivo,
+  mode = "alumno",
+  alumnoCode = "",
+}: {
+  motivo: string;
+  mode?: AgenteMode;
+  alumnoCode?: string;
+}) {
+  const router = useRouter();
+  const [confirmed, setConfirmed] = useState(false);
+
+  const chatUrl = alumnoCode
+    ? `/admin/alumnos/${encodeURIComponent(alumnoCode)}/chat`
+    : "/admin/alumnos";
+
+  if (mode !== "alumno") {
+    // En modo ATC team: tarjeta informativa simple (sin confirmación)
+    return (
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-500 shadow-sm">
+          <Bot className="h-4 w-4 text-white" />
+        </div>
+        <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200 bg-teal-50 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+          <div className="mb-1.5 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+              Transferencia a ATC sugerida
+            </span>
+          </div>
+          <p className="text-sm text-teal-700 dark:text-teal-300">
+            El alumno solicitó ser atendido por un agente humano.
+          </p>
+          {motivo && (
+            <p className="mt-1.5 text-xs text-teal-500 dark:text-teal-400">
+              Motivo: {motivo}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-start gap-2.5">
       <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-500 shadow-sm">
         <Bot className="h-4 w-4 text-white" />
       </div>
       <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200 bg-teal-50 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
-        <div className="mb-1.5 flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
-            Conectando con tu agente atc
-          </span>
-        </div>
-        <p className="text-sm text-teal-700 dark:text-teal-300">
-          Entendido, te estoy pasando con tu Agente de Atención al Cliente.
-          Puedes continuar la conversación directamente en tu chat.
-        </p>
-        {motivo && (
-          <p className="mt-1.5 text-xs text-teal-500 dark:text-teal-400">
-            Motivo: {motivo}
-          </p>
+        {!confirmed ? (
+          <>
+            <div className="mb-1.5 flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+                Conectar con tu Agente ATC
+              </span>
+            </div>
+            <p className="mb-3 text-sm text-teal-700 dark:text-teal-300">
+              ¿Quieres que te conecte con tu Agente de Atención al Cliente?
+              Podrás continuar la conversación directamente en tu chat.
+            </p>
+            {motivo && (
+              <p className="mb-3 text-xs text-teal-500 dark:text-teal-400">
+                Motivo: {motivo}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmed(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Sí, conectarme
+              </button>
+              <button
+                onClick={() => {
+                  /* dismiss silencioso */
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+              >
+                <X className="h-3.5 w-3.5" />
+                No, gracias
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mb-1.5 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+                ¡Listo! Tu ATC te espera en el chat
+              </span>
+            </div>
+            <p className="mb-3 text-sm text-teal-700 dark:text-teal-300">
+              Haz clic en el botón para abrir tu chat y continuar con tu agente.
+            </p>
+            <button
+              onClick={() => router.push(chatUrl)}
+              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-teal-700"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Ir a mi chat con ATC
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -465,9 +553,18 @@ export function AgenteAtcChat({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const welcomeInitialized = useRef(false);
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [isConvertingAudio, setIsConvertingAudio] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [pendingAudioFile, setPendingAudioFile] = useState<File | null>(null);
 
   // ── Welcome message ──────────────────────────────────────────────────────────
   // Solo se inicializa una vez con el primer welcomeMessage no vacío.
@@ -515,6 +612,152 @@ export function AgenteAtcChat({
     }
   }, [pendingPause?.status]);
 
+  // ── Audio recording ──────────────────────────────────────────────────────────
+
+  async function startRecording() {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const options: MediaRecorderOptions = {};
+      const supported = ["audio/webm", "audio/ogg"].filter((t) =>
+        MediaRecorder.isTypeSupported ? MediaRecorder.isTypeSupported(t) : true,
+      );
+      if (supported.length > 0) options.mimeType = supported[0] as any;
+      const mr = new MediaRecorder(stream, options);
+      const chunks: BlobPart[] = [];
+      let recordedType = "";
+      mr.ondataavailable = (ev) => {
+        if (ev.data?.size) {
+          chunks.push(ev.data);
+          try {
+            recordedType = (ev.data as Blob).type || recordedType;
+          } catch {}
+        }
+      };
+      mr.onstop = () => {
+        const blob = new Blob(chunks, { type: recordedType || "audio/webm" });
+        setRecordedBlob(blob);
+        setRecordedUrl(URL.createObjectURL(blob));
+        try {
+          mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        } catch {}
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+      };
+      mediaRecorderRef.current = mr;
+      mr.start(1000);
+      setIsRecording(true);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function stopRecording() {
+    setTimeout(() => {
+      try {
+        if (
+          mediaRecorderRef.current &&
+          mediaRecorderRef.current.state !== "inactive"
+        ) {
+          mediaRecorderRef.current.stop();
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      setIsRecording(false);
+    }, 500);
+  }
+
+  async function addRecordedToFiles() {
+    if (!recordedBlob) return;
+    setIsConvertingAudio(true);
+    try {
+      const mp3File = await convertBlobToMp3(recordedBlob);
+      setAttachedFiles((prev) => [...prev, mp3File]);
+    } catch {
+      // fallback: adjuntar original
+      const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+      const file = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
+        type: recordedBlob.type || "audio/webm",
+      });
+      setAttachedFiles((prev) => [...prev, file]);
+    } finally {
+      setIsConvertingAudio(false);
+      if (recordedUrl) {
+        URL.revokeObjectURL(recordedUrl);
+        setRecordedUrl(null);
+      }
+      setRecordedBlob(null);
+    }
+  }
+
+  function discardRecording() {
+    try {
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    } catch {}
+    mediaStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+    if (recordedUrl) {
+      URL.revokeObjectURL(recordedUrl);
+      setRecordedUrl(null);
+    }
+    setRecordedBlob(null);
+  }
+
+  async function transcribeAndSend() {
+    if (!recordedBlob) return;
+    setIsTranscribing(true);
+    try {
+      // 1. Convertir a MP3 para potencial adjunto al ticket
+      let mp3File: File;
+      try {
+        mp3File = await convertBlobToMp3(recordedBlob);
+      } catch {
+        const ext = recordedBlob.type?.includes("ogg") ? "ogg" : "webm";
+        mp3File = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
+          type: recordedBlob.type || "audio/webm",
+        });
+      }
+
+      // 2. Limpiar UI de grabación
+      if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+      setRecordedUrl(null);
+      setRecordedBlob(null);
+
+      // 3. Guardar como audio pendiente (se adjuntará automáticamente si se crea un ticket)
+      setPendingAudioFile(mp3File);
+
+      // 4. Transcribir con Whisper
+      const fd = new FormData();
+      fd.append("audio", recordedBlob, mp3File.name);
+      const token = getAuthToken();
+      const res = await fetch("/api/agentes/transcribir", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+      const json = (await res.json()) as { text?: string; error?: string };
+      if (!res.ok || !json.text) {
+        throw new Error(json.error ?? "Error al transcribir el audio");
+      }
+
+      // 5. Enviar texto transcrito al agente
+      await handleSend(json.text);
+    } catch (err: unknown) {
+      setError((err as Error)?.message ?? "Error de transcripción");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }
+
   // ── Textarea auto-resize ─────────────────────────────────────────────────────
 
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -525,13 +768,15 @@ export function AgenteAtcChat({
 
   // ── Send message ─────────────────────────────────────────────────────────────
 
-  async function handleSend() {
-    const text = input.trim();
+  async function handleSend(textOverride?: string) {
+    const text = (textOverride ?? input).trim();
     if (!text || isStreaming) return;
 
-    setInput("");
+    if (!textOverride) {
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    }
     setError(null);
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     // Build content text — include attached file names so the agent has context
     const filesSuffix =
@@ -647,6 +892,11 @@ export function AgenteAtcChat({
         );
 
         if (action.tipo === "ticket") {
+          // Si hay audio pendiente, auto-adjuntarlo al ticket
+          if (pendingAudioFile) {
+            setAttachedFiles((prev) => [...prev, pendingAudioFile]);
+            setPendingAudioFile(null);
+          }
           setPendingTicket({
             action,
             messageId: assistantMsgId,
@@ -860,7 +1110,12 @@ export function AgenteAtcChat({
 
         {/* Transfer to human ATC cards */}
         {transfers.map((t) => (
-          <TransferCard key={t.id} motivo={t.motivo} />
+          <TransferCard
+            key={t.id}
+            motivo={t.motivo}
+            mode={mode}
+            alumnoCode={alumnoCode}
+          />
         ))}
 
         {/* Pause action card */}
@@ -894,57 +1149,187 @@ export function AgenteAtcChat({
         {/* Attached files chips */}
         {attachedFiles.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
-            {attachedFiles.map((f, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground"
-              >
-                <Paperclip className="h-3 w-3 shrink-0" />
-                <span className="max-w-30 truncate">{f.name}</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAttachedFiles((prev) =>
-                      prev.filter((_, idx) => idx !== i),
-                    )
-                  }
-                  className="ml-0.5 rounded hover:text-foreground"
+            {attachedFiles.map((f, i) => {
+              const isAudio = f.type.startsWith("audio/");
+              return (
+                <span
+                  key={i}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs ${
+                    isAudio
+                      ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800/40 dark:bg-violet-900/20 dark:text-violet-300"
+                      : "border-border bg-muted/60 text-muted-foreground"
+                  }`}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
+                  {isAudio ? (
+                    <Mic className="h-3 w-3 shrink-0" />
+                  ) : (
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                  )}
+                  <span className="max-w-30 truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAttachedFiles((prev) =>
+                        prev.filter((_, idx) => idx !== i),
+                      )
+                    }
+                    className="ml-0.5 rounded hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
           </div>
         )}
 
-        {/* Hidden file input */}
+        {/* AUDIO FEATURES TEMPORARILY DISABLED */}
+        {/* Recording in progress indicator */}
+        {/* {isRecording && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-600 dark:border-red-800/40 dark:bg-red-900/20 dark:text-red-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+            <span>Grabando audio...</span>
+            <button
+              type="button"
+              onClick={discardRecording}
+              className="ml-auto rounded hover:text-red-800 dark:hover:text-red-300"
+              title="Descartar grabación"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )} */}
+
+        {/* Recorded audio preview */}
+        {/* {recordedBlob && recordedUrl && !isRecording && (
+          <div className="mb-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-800/40 dark:bg-violet-900/20">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
+                Audio grabado — escúchalo y envíalo
+              </span>
+              <button
+                type="button"
+                onClick={discardRecording}
+                className="rounded text-violet-400 hover:text-violet-700 dark:hover:text-violet-300"
+                title="Descartar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <audio
+              src={recordedUrl}
+              controls
+              className="w-full"
+              style={{ minHeight: "40px" }}
+            />
+            <button
+              type="button"
+              onClick={() => void transcribeAndSend()}
+              disabled={isTranscribing || isStreaming}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-600 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
+            >
+              {isTranscribing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Transcribiendo y enviando...
+                </>
+              ) : (
+                <>
+                  <Mic className="h-3.5 w-3.5" />
+                  Enviar mensaje de voz
+                </>
+              )}
+            </button>
+            <p className="mt-1.5 text-center text-[10px] text-violet-400 dark:text-violet-500">
+              El agente entiende el audio · si crea un ticket, se adjuntará
+              automáticamente
+            </p>
+          </div>
+        )} */}
+
+        {/* Pending audio file indicator */}
+        {/* {pendingAudioFile && !pendingTicket && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs text-violet-700 dark:border-violet-800/40 dark:bg-violet-900/20 dark:text-violet-300">
+            <Mic className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">
+              Audio listo — se adjuntará al ticket si se crea uno
+            </span>
+            <button
+              type="button"
+              onClick={() => setPendingAudioFile(null)}
+              className="rounded hover:text-violet-900 dark:hover:text-violet-100"
+              title="Descartar audio"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )} */}
+
+        {/* Hidden file input — documentos e imágenes */}
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,application/pdf,audio/*,video/*,.doc,.docx,.xls,.xlsx,.txt,.csv"
+          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
           className="hidden"
           onChange={(e) => {
             const selected = Array.from(e.target.files ?? []);
             if (selected.length > 0) {
               setAttachedFiles((prev) => [...prev, ...selected]);
             }
-            // Reset so same file can be re-selected
             e.target.value = "";
           }}
         />
 
+        {/* Hidden audio input — TEMPORARILY DISABLED */}
+        {/* <input
+          ref={audioInputRef}
+          type="file"
+          multiple
+          accept="audio/*"
+          className="hidden"
+          onChange={(e) => {
+            const selected = Array.from(e.target.files ?? []);
+            if (selected.length > 0) {
+              setAttachedFiles((prev) => [...prev, ...selected]);
+            }
+            e.target.value = "";
+          }}
+        /> */}
+
         <div className="flex items-end gap-2 rounded-xl border border-border bg-background px-3 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/20 transition-all">
-          {/* Attachment button */}
+          {/* Attachment button — documentos */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isStreaming}
-            title="Adjuntar archivos"
+            title="Adjuntar documentos"
             className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:bg-muted disabled:opacity-40"
           >
             <Paperclip className="h-4 w-4" />
           </button>
+
+          {/* Audio button — TEMPORARILY DISABLED */}
+          {/* <button
+            type="button"
+            onClick={() => {
+              if (isRecording) stopRecording();
+              else void startRecording();
+            }}
+            disabled={isStreaming || isConvertingAudio}
+            title={isRecording ? "Detener grabación" : "Grabar audio"}
+            className={`mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition disabled:opacity-40 ${
+              isRecording
+                ? "animate-pulse border-red-400 bg-red-50 text-red-500 dark:bg-red-900/20"
+                : "border-border text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+            }`}
+          >
+            {isRecording ? (
+              <Square className="h-3.5 w-3.5 fill-current" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+          </button> */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -1001,6 +1386,7 @@ export function AgenteAtcChat({
               prev ? { ...prev, status: "created" } : null,
             );
             setAttachedFiles([]);
+            setPendingAudioFile(null);
             onTicketCreated?.();
           }}
         />
@@ -1023,6 +1409,7 @@ export function AgenteAtcChat({
               prev ? { ...prev, status: "created" } : null,
             );
             setAttachedFiles([]);
+            setPendingAudioFile(null);
           }}
         />
       )}
