@@ -713,6 +713,63 @@ function buildSurveyBlock(survey: Record<string, unknown>): string {
   return lines.join("\n");
 }
 
+// ─── Student bonos ────────────────────────────────────────────────────────────
+
+async function fetchStudentBonos(
+  authorization: string,
+  alumnoCode: string,
+): Promise<Record<string, unknown>[]> {
+  try {
+    const url = buildUrl(
+      `/bonos/get/assignments/${encodeURIComponent(alumnoCode)}?page=1&pageSize=1000`,
+    );
+    const res = await fetch(url, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as unknown;
+    if (Array.isArray(json)) return json as Record<string, unknown>[];
+    if (json && typeof json === "object") {
+      const j = json as Record<string, unknown>;
+      if (Array.isArray(j.data)) return j.data as Record<string, unknown>[];
+      if (j.data && typeof j.data === "object") {
+        const d = j.data as Record<string, unknown>;
+        if (Array.isArray(d.data)) return d.data as Record<string, unknown>[];
+        if (Array.isArray(d.items)) return d.items as Record<string, unknown>[];
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function buildBonosBlock(bonos: Record<string, unknown>[]): string {
+  if (bonos.length === 0)
+    return "## BONOS ASIGNADOS AL ALUMNO\n\n- Sin bonos asignados actualmente.";
+
+  const lines: string[] = ["## BONOS ASIGNADOS AL ALUMNO\n"];
+  for (const b of bonos) {
+    const nombre = String(b.nombre ?? b.name ?? b.bono_codigo ?? b.codigo ?? "—");
+    const codigo = String(b.bono_codigo ?? b.codigo ?? "");
+    const descripcion = String(b.descripcion ?? b.description ?? "");
+    const usado = b.usado === true || b.usado === 1;
+    const notas = b.notas ? String(b.notas) : null;
+
+    const statusTag = usado ? " [USADO]" : " [DISPONIBLE]";
+    const meta: string[] = [];
+    if (codigo) meta.push(`código: ${codigo}`);
+
+    lines.push(
+      `- **${nombre}**${statusTag}${meta.length ? ` (${meta.join(" · ")})` : ""}`,
+    );
+    if (descripcion) lines.push(`  ${descripcion}`);
+    if (notas) lines.push(`  Notas: ${notas}`);
+  }
+  return lines.join("\n");
+}
+
 // ─── Student coaches ──────────────────────────────────────────────────────────
 
 async function fetchStudentCoaches(
@@ -1030,7 +1087,7 @@ async function buildAtcContext(
     ).trim() || undefined;
 
   // Fase 2: resto en paralelo usando el ID numérico para metadata
-  const [rawTickets, coaches, venceItems, membresiaItems, estatusRows, etapasRows, surveyPayload] =
+  const [rawTickets, coaches, venceItems, membresiaItems, estatusRows, etapasRows, surveyPayload, bonosRows] =
     await Promise.all([
       fetchStudentTickets(authorization, alumnoCode),
       fetchStudentCoaches(authorization, alumnoCode),
@@ -1039,6 +1096,7 @@ async function buildAtcContext(
       fetchEstatusRows(authorization, alumnoCode),
       fetchEtapasHistory(authorization, alumnoCode),
       fetchWelcomeSurvey(authorization, metadataEntityId, alumnoCode),
+      fetchStudentBonos(authorization, alumnoCode),
     ]);
 
   const weeklyTickets = countWeeklyTickets(rawTickets);
@@ -1123,6 +1181,10 @@ async function buildAtcContext(
     lines.push(buildSurveyBlock(surveyPayload));
     lines.push("");
   }
+
+  // Bonos asignados al alumno
+  lines.push(buildBonosBlock(bonosRows));
+  lines.push("");
 
   lines.push(
     "Usa este historial para entender el contexto del caso actual. Identifica patrones, consultas recurrentes y tono de las interacciones.\n",
