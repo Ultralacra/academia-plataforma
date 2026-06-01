@@ -418,8 +418,8 @@ function computeAutomaticInterventionDecision(next: {
   if (inversionUsd == null || roasValue == null) return null;
   if (inversionUsd <= 150) return null;
   if (roasValue < 0.4) return true;
-  if (roasValue > 0.6) return false;
-  return null;
+  // A partir de ROAS >= 0.4 el alumno deja de requerir intervención automáticamente.
+  return false;
 }
 
 export default function AdsMetricsForm({
