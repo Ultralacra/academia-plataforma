@@ -378,6 +378,18 @@ const CUOTA_ALLOWED_STATUS = ALLOWED_PAYMENT_STATUS.filter(
   (status) => status !== "listo",
 );
 
+const METODO_PAGO_OPTIONS = [
+  { value: "hotmart", label: "Hotmart" },
+  { value: "paypal", label: "PayPal" },
+  { value: "binance", label: "Binance" },
+  { value: "payoneer", label: "Payoneer" },
+  { value: "zelle", label: "Zelle" },
+  { value: "bancolombia", label: "Bancolombia" },
+  { value: "nequi", label: "Nequi" },
+  { value: "bofa", label: "BOFA" },
+  { value: "otra", label: "Otra" },
+] as const;
+
 const allowedPaymentStatusSet = new Set<string>(ALLOWED_PAYMENT_STATUS);
 
 function normalizePaymentStatus(input: unknown): string {
@@ -1396,6 +1408,7 @@ function PaymentsContent() {
     concepto: "",
     notas: "",
   });
+  const [cuotaMetodoSelect, setCuotaMetodoSelect] = useState("");
 
   // Estado para edición inline del pago principal
   const [paymentEditingField, setPaymentEditingField] = useState<string | null>(
@@ -1535,13 +1548,19 @@ function PaymentsContent() {
     if (cuota) {
       // Editar existente
       setCuotaEditing(cuota);
+      const metodoVal = cuota.metodo || "";
+      const metodoNorm = metodoVal.toLowerCase();
+      const isKnown = METODO_PAGO_OPTIONS.some(
+        (o) => o.value !== "otra" && o.value === metodoNorm,
+      );
+      setCuotaMetodoSelect(isKnown ? metodoNorm : metodoVal ? "otra" : "");
       setCuotaForm({
         cuota_codigo: cuota.cuota_codigo || "",
         monto: cuota.monto != null ? String(cuota.monto) : "",
         moneda: cuota.moneda || detail?.moneda || "USD",
         estatus: normalizeCuotaEditableStatus(cuota.estatus) || "pendiente",
         fecha_pago: cuota.fecha_pago ? cuota.fecha_pago.slice(0, 16) : "",
-        metodo: cuota.metodo || "",
+        metodo: isKnown ? metodoNorm : metodoVal,
         referencia: cuota.referencia || "",
         concepto: cuota.concepto || "",
         notas: cuota.notas || "",
@@ -1549,6 +1568,7 @@ function PaymentsContent() {
     } else {
       // Crear nueva
       setCuotaEditing(null);
+      setCuotaMetodoSelect("");
       const existingCuotas = Array.isArray(detail?.detalles)
         ? detail.detalles.length
         : 0;
@@ -5178,17 +5198,42 @@ function PaymentsContent() {
               </div>
 
               <div className="grid gap-1">
-                <Label>Método</Label>
-                <Input
-                  value={cuotaForm.metodo}
-                  onChange={(e) =>
-                    setCuotaForm((prev) => ({
-                      ...prev,
-                      metodo: e.target.value,
-                    }))
-                  }
-                  placeholder="card, transfer, cash..."
-                />
+                <Label>Método de pago</Label>
+                <Select
+                  value={cuotaMetodoSelect}
+                  onValueChange={(v) => {
+                    setCuotaMetodoSelect(v);
+                    if (v !== "otra") {
+                      setCuotaForm((prev) => ({ ...prev, metodo: v }));
+                    } else {
+                      setCuotaForm((prev) => ({ ...prev, metodo: "" }));
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar método" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METODO_PAGO_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {cuotaMetodoSelect === "otra" && (
+                  <Input
+                    className="mt-1"
+                    value={cuotaForm.metodo}
+                    onChange={(e) =>
+                      setCuotaForm((prev) => ({
+                        ...prev,
+                        metodo: e.target.value,
+                      }))
+                    }
+                    placeholder="Especifica el método de pago..."
+                  />
+                )}
               </div>
 
               <div className="grid gap-1 md:col-span-2">
