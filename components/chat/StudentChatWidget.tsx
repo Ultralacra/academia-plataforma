@@ -19,7 +19,7 @@ export default function StudentChatWidget({
   const [code, setCode] = React.useState<string>("");
   const [room, setRoom] = React.useState<string | null>(null);
 
-  // Cargar código inicial desde query/localStorage
+  // Cargar código inicial desde query/localStoragesse, si se proporciona `initialCode` se prioriza sobre lo almacenado
   React.useEffect(() => {
     if (initialCode) {
       setCode(initialCode);
