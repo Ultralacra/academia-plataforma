@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
@@ -22,6 +23,7 @@ import { getAuthToken } from "@/lib/auth";
 import {
   BUSINESS_METRICS_ADMIN_ID,
   canAccessBusinessMetrics,
+  canAccessTeamPerformance,
 } from "@/lib/business-metrics";
 import {
   AlertTriangle,
@@ -36,14 +38,20 @@ import {
   Target,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 
 const ENTITY = "team_performance_space_state";
 const ENTITY_ID = "global";
-const SHARED_SESSION_KEY = "bm-vault-auth";
-const SHARED_DEFAULT_PASSWORD = "JJWEPNTLDIJE";
+// Vault propio del módulo "Rendimiento áreas" (independiente del de
+// Inteligencia de negocio). Tiene su propia sesión y su propia entidad de
+// metadata para que cambiar una contraseña no afecte a la otra.
+const SHARED_SESSION_KEY = "team-perf-vault-auth";
+const SHARED_DEFAULT_PASSWORD = "PHLFQKZFBIPK";
+const VAULT_ENTITY = "rendimiento_area_vault";
+const VAULT_ENTITY_ID = "global";
 
 const ENTITY_ACCESS = "rendimiento_area_access";
 const ENTITY_ACCESS_ID = "global";
@@ -409,6 +417,15 @@ function KrCard({
 }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    improvedDescription: string;
+    improvementNotes: string;
+    reasoning: string;
+    measurementType: KrMeasurementType;
+    unit: string;
+    targetSuggestion: number | null;
+    formula: string;
+  } | null>(null);
   const st = STATUS_STYLES[kr.status];
 
   const callAi = async () => {
@@ -419,26 +436,65 @@ function KrCard({
       const res = await fetch("/api/kr-ai-suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: kr.title, areaName }),
+        body: JSON.stringify({
+          title: kr.title,
+          areaName,
+          description: kr.description,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      onUpdate({
-        description: data.description || kr.description,
-        measurementType: data.measurementType || kr.measurementType,
-        unit: data.unit || kr.unit,
-        targetValue:
-          data.targetSuggestion !== null && data.targetSuggestion !== undefined
+      // La IA NO sobreescribe lo que el usuario escribió: se muestra como
+      // propuesta de mejora para que el usuario decida si la aplica.
+      setAiSuggestion({
+        improvedDescription: String(
+          data.improvedDescription ?? data.description ?? "",
+        ),
+        improvementNotes: String(data.improvementNotes ?? ""),
+        reasoning: String(data.reasoning ?? ""),
+        measurementType: ([
+          "numeric",
+          "percentage",
+          "boolean",
+          "manual",
+        ].includes(data.measurementType)
+          ? data.measurementType
+          : kr.measurementType) as KrMeasurementType,
+        unit: String(data.unit ?? ""),
+        targetSuggestion:
+          typeof data.targetSuggestion === "number"
             ? data.targetSuggestion
-            : kr.targetValue,
-        formula: data.formula || kr.formula,
-        aiReasoning: data.reasoning || kr.aiReasoning,
+            : null,
+        formula: String(data.formula ?? ""),
       });
     } catch {
       setAiError("No se pudo conectar con el agente IA.");
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const applyAiDescription = () => {
+    if (!aiSuggestion) return;
+    onUpdate({
+      description: aiSuggestion.improvedDescription,
+      aiReasoning: aiSuggestion.reasoning,
+    });
+    setAiSuggestion(null);
+  };
+
+  const applyAiMeasurement = () => {
+    if (!aiSuggestion) return;
+    onUpdate({
+      measurementType: aiSuggestion.measurementType,
+      unit: aiSuggestion.unit || kr.unit,
+      targetValue:
+        aiSuggestion.targetSuggestion !== null
+          ? aiSuggestion.targetSuggestion
+          : kr.targetValue,
+      formula: aiSuggestion.formula || kr.formula,
+      aiReasoning: aiSuggestion.reasoning,
+    });
   };
 
   return (
@@ -449,51 +505,170 @@ function KrCard({
       )}
     >
       <div className="p-4 space-y-3">
-        {/* Title row */}
-        <div className="flex items-start gap-2">
-          <Input
-            value={kr.title}
-            disabled={!canEdit}
-            onChange={(e) => onUpdate({ title: e.target.value })}
-            className="h-auto border-0 bg-transparent p-0 text-sm font-semibold focus-visible:ring-0 disabled:opacity-100 disabled:cursor-default leading-snug flex-1"
-            placeholder="Nombre del KR…"
-          />
-          {canEdit && (
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                title="Analizar KR con IA"
-                disabled={!kr.title.trim() || aiLoading}
-                onClick={callAi}
-                className="text-muted-foreground/60 hover:text-violet-500 disabled:opacity-30 transition-colors"
-              >
-                {aiLoading ? (
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-              </button>
+        {/* Nombre del KR */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label
+              htmlFor={`kr-title-${kr.id}`}
+              className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium"
+            >
+              Nombre del KR
+            </Label>
+            {canEdit && (
               <button
                 type="button"
                 onClick={onRemove}
+                title="Eliminar KR"
                 className="text-muted-foreground/40 hover:text-destructive transition-colors"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
-            </div>
-          )}
+            )}
+          </div>
+          <Input
+            id={`kr-title-${kr.id}`}
+            value={kr.title}
+            disabled={!canEdit}
+            onChange={(e) => onUpdate({ title: e.target.value })}
+            className="h-8 text-sm font-semibold disabled:opacity-100 disabled:cursor-default"
+            placeholder="Ej: Aumentar ventas mensuales high ticket"
+          />
         </div>
 
-        {/* AI description */}
-        {kr.description && (
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {kr.description}
-          </p>
-        )}
+        {/* Descripción del usuario */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label
+              htmlFor={`kr-desc-${kr.id}`}
+              className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium"
+            >
+              Descripción
+            </Label>
+            {canEdit && (
+              <button
+                type="button"
+                title="Pedir a la IA propuestas de mejora (no reemplaza lo que escribiste)"
+                disabled={!kr.title.trim() || aiLoading}
+                onClick={callAi}
+                className="inline-flex items-center gap-1 text-[11px] text-violet-600 hover:text-violet-700 disabled:opacity-30 transition-colors"
+              >
+                {aiLoading ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3" />
+                )}
+                Mejorar con IA
+              </button>
+            )}
+          </div>
+          <Textarea
+            id={`kr-desc-${kr.id}`}
+            value={kr.description}
+            disabled={!canEdit}
+            onChange={(e) => onUpdate({ description: e.target.value })}
+            className="min-h-[60px] text-xs leading-relaxed disabled:opacity-100 disabled:cursor-default"
+            placeholder="Escribe qué mide este KR y por qué es importante. La IA solo propondrá mejoras sobre tu texto."
+          />
+        </div>
+
         {aiError && (
           <p className="text-xs text-destructive flex items-center gap-1">
             <AlertTriangle className="h-3 w-3" /> {aiError}
           </p>
+        )}
+
+        {aiSuggestion && canEdit && (
+          <div className="rounded-md border border-violet-200 bg-violet-50/60 dark:border-violet-900/40 dark:bg-violet-950/30 p-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-violet-700 dark:text-violet-300">
+                <Sparkles className="h-3 w-3" /> Propuesta de la IA
+              </span>
+              <button
+                type="button"
+                onClick={() => setAiSuggestion(null)}
+                title="Descartar propuesta"
+                className="text-violet-500/60 hover:text-violet-700 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {aiSuggestion.improvedDescription && (
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-violet-700/70 dark:text-violet-300/70">
+                  Descripción mejorada
+                </p>
+                <p className="text-xs leading-relaxed text-foreground/90 whitespace-pre-line">
+                  {aiSuggestion.improvedDescription}
+                </p>
+                <button
+                  type="button"
+                  onClick={applyAiDescription}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-800 dark:text-violet-300"
+                >
+                  <Check className="h-3 w-3" /> Aplicar a mi descripción
+                </button>
+              </div>
+            )}
+
+            {aiSuggestion.improvementNotes && (
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-violet-700/70 dark:text-violet-300/70">
+                  Sugerencias
+                </p>
+                <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
+                  {aiSuggestion.improvementNotes}
+                </p>
+              </div>
+            )}
+
+            {(aiSuggestion.unit ||
+              aiSuggestion.formula ||
+              aiSuggestion.targetSuggestion !== null) && (
+              <div className="space-y-1 border-t border-violet-200/60 dark:border-violet-900/40 pt-2">
+                <p className="text-[10px] uppercase tracking-wider text-violet-700/70 dark:text-violet-300/70">
+                  Medición propuesta
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Tipo:{" "}
+                  <span className="font-medium text-foreground/80">
+                    {MEASUREMENT_LABELS[aiSuggestion.measurementType]}
+                  </span>
+                  {aiSuggestion.unit ? (
+                    <>
+                      {" "}
+                      · Unidad:{" "}
+                      <span className="font-medium text-foreground/80">
+                        {aiSuggestion.unit}
+                      </span>
+                    </>
+                  ) : null}
+                  {aiSuggestion.targetSuggestion !== null ? (
+                    <>
+                      {" "}
+                      · Meta sugerida:{" "}
+                      <span className="font-medium text-foreground/80">
+                        {aiSuggestion.targetSuggestion}
+                      </span>
+                    </>
+                  ) : null}
+                </p>
+                {aiSuggestion.formula && (
+                  <p className="text-[11px] italic text-muted-foreground">
+                    {aiSuggestion.formula}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={applyAiMeasurement}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-800 dark:text-violet-300"
+                >
+                  <Check className="h-3 w-3" /> Aplicar configuración de
+                  medición
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Quarter + Status row */}
@@ -771,6 +946,9 @@ function TeamPerformancePageContent() {
   }, [user?.id, user?.codigo]);
 
   const isOwner = useMemo(() => {
+    // Solo los usuarios designados como dueños del módulo
+    // pueden administrar permisos, ver todo y editar libremente.
+    if (canAccessTeamPerformance(user)) return true;
     if (canAccessBusinessMetrics(user)) return true;
     for (const key of state.ownerCodes) {
       if (userKeys.has(String(key))) return true;
@@ -864,13 +1042,13 @@ function TeamPerformancePageContent() {
       setLoadingMeta(true);
       try {
         const token = getAuthToken();
-        const [perfRes, businessRes, accessRes] = await Promise.all([
+        const [perfRes, vaultRes, accessRes] = await Promise.all([
           fetch(`/api/metadata?entity=${ENTITY}&entity_id=${ENTITY_ID}`, {
             headers: { Authorization: `Bearer ${token ?? ""}` },
             cache: "no-store",
           }),
           fetch(
-            "/api/metadata?entity=business_metrics_state&entity_id=global",
+            `/api/metadata?entity=${VAULT_ENTITY}&entity_id=${VAULT_ENTITY_ID}`,
             {
               headers: { Authorization: `Bearer ${token ?? ""}` },
               cache: "no-store",
@@ -910,8 +1088,8 @@ function TeamPerformancePageContent() {
           }
         }
 
-        if (!cancelled && businessRes.ok) {
-          const json = await businessRes.json().catch(() => null);
+        if (!cancelled && vaultRes.ok) {
+          const json = await vaultRes.json().catch(() => null);
           const items: any[] = Array.isArray(json)
             ? json
             : Array.isArray(json?.data)
@@ -923,11 +1101,11 @@ function TeamPerformancePageContent() {
                   : [];
           const found = items.find(
             (m: any) =>
-              m?.entity === "business_metrics_state" &&
-              String(m?.entity_id ?? "") === "global",
+              m?.entity === VAULT_ENTITY &&
+              String(m?.entity_id ?? "") === VAULT_ENTITY_ID,
           );
           const fromMetadata = String(
-            found?.payload?.vaultPassword ?? "",
+            found?.payload?.password ?? found?.payload?.vaultPassword ?? "",
           ).trim();
           setSharedVaultPassword(fromMetadata || SHARED_DEFAULT_PASSWORD);
         }

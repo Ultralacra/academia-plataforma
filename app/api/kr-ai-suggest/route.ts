@@ -8,20 +8,28 @@ const anthropic = new Anthropic({
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { title, areaName } = body as { title?: string; areaName?: string };
+    const { title, areaName, description } = body as {
+      title?: string;
+      areaName?: string;
+      description?: string;
+    };
 
     if (!title?.trim()) {
       return NextResponse.json({ error: "title required" }, { status: 400 });
     }
 
-    const prompt = `Eres un experto en OKRs y gestión de equipos de alto rendimiento. Analiza el siguiente Key Result y genera una sugerencia estructurada para medirlo objetivamente.
+    const userDescription = (description ?? "").trim();
+
+    const prompt = `Eres un experto en OKRs y gestión de equipos de alto rendimiento. El usuario está creando un Key Result y ya escribió un nombre y una descripción inicial. Tu rol NO es reescribir su descripción, sino PROPONER MEJORAS para que el KR sea más claro, medible y accionable, respetando la intención original del usuario.
 
 Área: ${areaName?.trim() || "General"}
-KR: "${title.trim()}"
+Nombre del KR: "${title.trim()}"
+Descripción del usuario: ${userDescription ? `"${userDescription}"` : "(no proporcionada)"}
 
 Responde ÚNICAMENTE con un objeto JSON válido (sin markdown, sin explicaciones adicionales, solo el JSON):
 {
-  "description": "descripción clara de qué mide este KR y por qué es importante para el equipo (máximo 2 oraciones)",
+  "improvedDescription": "versión MEJORADA y enriquecida de la descripción del usuario (manteniendo su intención original). Si el usuario no proporcionó descripción, redacta una breve a partir del nombre. Máximo 2 oraciones.",
+  "improvementNotes": "lista breve (1-3 puntos, separados por ' • ') de qué se mejoró o sugerencias concretas para que el usuario haga el KR más medible/accionable",
   "measurementType": "numeric",
   "unit": "unidad de medida (ejemplos: $, USD, clientes, leads, contratos, horas, %, puntos). Elige la más apropiada.",
   "targetSuggestion": 0,
@@ -59,7 +67,10 @@ Para unit: sé específico y conciso (máximo 10 caracteres).`;
     const parsed = JSON.parse(jsonMatch[0]);
 
     return NextResponse.json({
-      description: String(parsed.description ?? ""),
+      improvedDescription: String(parsed.improvedDescription ?? ""),
+      improvementNotes: String(parsed.improvementNotes ?? ""),
+      // Se mantiene `description` por retrocompatibilidad (clientes antiguos).
+      description: String(parsed.improvedDescription ?? ""),
       measurementType: ["numeric", "percentage", "boolean", "manual"].includes(
         parsed.measurementType,
       )

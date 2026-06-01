@@ -201,6 +201,24 @@ export function canAccessBusinessMetrics(user?: User | null): boolean {
   );
 }
 
+/**
+ * IDs/códigos de los dueños del módulo "Rendimiento áreas".
+ * Solo estos usuarios ven el ítem en el sidebar y pueden asignar
+ * permisos de acceso al resto del equipo desde la pantalla.
+ */
+export const TEAM_PERFORMANCE_OWNER_IDS = new Set<string>([
+  "jW1djJJnTqKI6sfM",
+  "hQycZczVb77e9eLwJpxPJ",
+]);
+
+export function canAccessTeamPerformance(user?: User | null): boolean {
+  if (!user) return false;
+  return (
+    TEAM_PERFORMANCE_OWNER_IDS.has(String(user.id)) ||
+    (!!user.codigo && TEAM_PERFORMANCE_OWNER_IDS.has(user.codigo))
+  );
+}
+
 export function buildBusinessSeedState(): BusinessMetricsState {
   const records: BusinessMonthRecord[] = [
     {

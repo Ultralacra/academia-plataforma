@@ -51,7 +51,10 @@ import { useMemo, useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { useTheme } from "next-themes";
 import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
-import { canAccessBusinessMetrics } from "@/lib/business-metrics";
+import {
+  canAccessBusinessMetrics,
+  canAccessTeamPerformance,
+} from "@/lib/business-metrics";
 
 /* ====================== Tipos ====================== */
 type MenuItem = {
@@ -317,13 +320,17 @@ export function AppSidebar() {
               ]
             : baseAdmin;
 
+          const showTeamPerformance = canAccessTeamPerformance(user);
           const adminWithConfidentialModule = canAccessBusinessMetrics(user)
             ? [
                 ...baseAdminWithAccesos,
                 businessMetricsMenuItem,
-                teamPerformanceMenuItem,
+                ...(showTeamPerformance ? [teamPerformanceMenuItem] : []),
               ]
-            : [...baseAdminWithAccesos, teamPerformanceMenuItem];
+            : [
+                ...baseAdminWithAccesos,
+                ...(showTeamPerformance ? [teamPerformanceMenuItem] : []),
+              ];
 
           return (
             alumnoCodeInPath
@@ -553,7 +560,9 @@ export function AppSidebar() {
                   url: "/admin/preguntas-frecuentes",
                   icon: CircleHelp,
                 },
-                teamPerformanceMenuItem,
+                ...(canAccessTeamPerformance(user)
+                  ? [teamPerformanceMenuItem]
+                  : []),
               ]
             : [
                 {
@@ -634,7 +643,9 @@ export function AppSidebar() {
                   url: "/admin/preguntas-frecuentes",
                   icon: CircleHelp,
                 },
-                teamPerformanceMenuItem,
+                ...(canAccessTeamPerformance(user)
+                  ? [teamPerformanceMenuItem]
+                  : []),
               ];
 
           // Filtrar ítems según el área del usuario equipo
