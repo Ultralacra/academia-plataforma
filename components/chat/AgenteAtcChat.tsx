@@ -28,6 +28,7 @@ import {
 } from "@/app/admin/alumnos/api";
 import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
 import { AgentTicketPreviewModal } from "@/components/chat/AgentTicketPreviewModal";
+import { useAgenteAtcHistory } from "@/components/chat/useAgenteAtcHistory";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -566,12 +567,41 @@ export function AgenteAtcChat({
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [pendingAudioFile, setPendingAudioFile] = useState<File | null>(null);
 
+  // ── Persistencia del historial en metadata ──────────────────────────────────
+  // 1 sólo registro por alumno; se crea con POST la primera vez y se va
+  // editando con PUT en cada cambio (debounced).
+  const {
+    loaded: historyLoaded,
+    initialMessages: persistedMessages,
+    initialContextInfo: persistedContextInfo,
+    scheduleSave: schedulePersistHistory,
+  } = useAgenteAtcHistory(alumnoCode);
+
   // ── Welcome message ──────────────────────────────────────────────────────────
   // Solo se inicializa una vez con el primer welcomeMessage no vacío.
   // Esto evita que el chat se resetee cuando authState se refresca (cambio de pestaña, etc.)
+  // Si hay historial persistido, se hidrata primero y NO se muestra welcome.
 
   useEffect(() => {
-    if (welcomeMessage && !welcomeInitialized.current) {
+    if (!historyLoaded || welcomeInitialized.current) return;
+
+    if (persistedMessages.length > 0) {
+      welcomeInitialized.current = true;
+      setMessages(
+        persistedMessages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: new Date(m.timestamp),
+        })),
+      );
+      if (persistedContextInfo) {
+        setContextInfo(persistedContextInfo);
+      }
+      return;
+    }
+
+    if (welcomeMessage) {
       welcomeInitialized.current = true;
       setMessages([
         {
@@ -582,7 +612,41 @@ export function AgenteAtcChat({
         },
       ]);
     }
-  }, [welcomeMessage]);
+  }, [historyLoaded, persistedMessages, persistedContextInfo, welcomeMessage]);
+
+  // ── Auto-guardar en metadata cuando cambia el historial ──────────────────────
+  // Se ignora hasta que la carga inicial haya terminado, y se excluye el welcome.
+  useEffect(() => {
+    if (!historyLoaded || !alumnoCode) return;
+    const persistable = messages
+      .filter((m) => m.id !== "welcome")
+      .map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp.toISOString(),
+      }));
+    // No persistir cuando aún no hay nada que guardar y tampoco había historial.
+    if (persistable.length === 0 && persistedMessages.length === 0) return;
+    schedulePersistHistory({
+      alumnoCode,
+      alumnoName,
+      messages: persistable,
+      contextInfo: contextInfo,
+      lastMode: mode,
+      lastProvider: provider,
+    });
+  }, [
+    messages,
+    contextInfo,
+    historyLoaded,
+    alumnoCode,
+    alumnoName,
+    mode,
+    provider,
+    persistedMessages.length,
+    schedulePersistHistory,
+  ]);
 
   // ── Auto scroll ──────────────────────────────────────────────────────────────
 

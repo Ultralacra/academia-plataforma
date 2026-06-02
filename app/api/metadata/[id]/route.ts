@@ -10,6 +10,7 @@ function buildUrl(path: string) {
 
 type MeUser = {
   id?: string | number;
+  codigo?: string;
   role?: string;
   tipo?: string;
 };
@@ -66,6 +67,26 @@ async function fetchMe(authorization: string): Promise<MeUser | null> {
   return payload as MeUser;
 }
 
+/**
+ * Entidades que un alumno (student) puede leer/escribir, siempre que
+ * el `entity_id` coincida con su propio código (es decir, son sus datos).
+ */
+const STUDENT_OWNED_ENTITIES = new Set<string>([
+  "super_atc_chat_history",
+]);
+
+function isStudentAllowedForEntity(
+  me: MeUser | null,
+  entity: string | null | undefined,
+  entityId: string | null | undefined,
+) {
+  if (!me || !entity || !entityId) return false;
+  if (!STUDENT_OWNED_ENTITIES.has(entity)) return false;
+  const ownerKey = String(me.codigo ?? me.id ?? "").trim();
+  if (!ownerKey) return false;
+  return ownerKey === String(entityId).trim();
+}
+
 export async function PUT(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
@@ -77,15 +98,28 @@ export async function PUT(
   }
 
   // Seguridad: evitar que un alumno (student) modifique metadata desde F12.
+  // Excepción: entidades "propias" del alumno (ver STUDENT_OWNED_ENTITIES).
   const me = await fetchMe(auth);
+  const bodyText = await req.text();
   if (me) {
     const role = normalizeRole(me.role, me.tipo);
     if (role === "student") {
-      return NextResponse.json({ error: "Prohibido" }, { status: 403 });
+      let entity: string | null = null;
+      let entityId: string | null = null;
+      try {
+        const parsed = bodyText ? JSON.parse(bodyText) : null;
+        entity = parsed && typeof parsed === "object" ? String((parsed as any).entity ?? "") || null : null;
+        const rawId = parsed && typeof parsed === "object" ? (parsed as any).entity_id : null;
+        entityId = rawId != null ? String(rawId) : null;
+      } catch {
+        /* ignore */
+      }
+      if (!isStudentAllowedForEntity(me, entity, entityId)) {
+        return NextResponse.json({ error: "Prohibido" }, { status: 403 });
+      }
     }
   }
 
-  const bodyText = await req.text();
   const upstream = await fetch(buildUrl(`/metadata/${encodeURIComponent(id)}`), {
     method: "PUT",
     headers: {
