@@ -540,8 +540,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 2. Verificar rol de alumno
-  const me = await fetchMe(authorization);
+  // 2. Parsear body y verificar rol de alumno en paralelo
+  let body: { messages?: unknown; agentType?: unknown };
+  let me: Awaited<ReturnType<typeof fetchMe>>;
+  try {
+    [body, me] = await Promise.all([
+      request.json() as Promise<{ messages?: unknown; agentType?: unknown }>,
+      fetchMe(authorization),
+    ]);
+  } catch {
+    return new Response(JSON.stringify({ error: "Body JSON inválido" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   if (!me) {
     return new Response(JSON.stringify({ error: "Token inválido" }), {
       status: 401,
@@ -573,17 +586,6 @@ export async function POST(request: NextRequest) {
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
-  }
-
-  // 4. Parsear body
-  let body: { messages?: unknown; agentType?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return new Response(JSON.stringify({ error: "Body JSON inválido" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
   }
 
   const messages = body.messages;
@@ -635,7 +637,7 @@ export async function POST(request: NextRequest) {
           messages: openaiMessages,
           stream: true,
           stream_options: { include_usage: true },
-          max_completion_tokens: 16000,
+          max_completion_tokens: 4000,
         });
 
         for await (const chunk of completion) {

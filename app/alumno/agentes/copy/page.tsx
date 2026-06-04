@@ -451,7 +451,13 @@ function CopyAlumnoWorkspace() {
       setAttachedFiles([]);
       setIsStreaming(true);
 
-      const history = updatedMessages.map((m) => ({
+      // Limitar historial a los últimos 10 mensajes para reducir tokens de entrada
+      const MAX_HISTORY = 10;
+      const trimmedMessages =
+        updatedMessages.length > MAX_HISTORY
+          ? updatedMessages.slice(-MAX_HISTORY)
+          : updatedMessages;
+      const history = trimmedMessages.map((m) => ({
         role: m.role,
         content: m.id === userMsg.id ? userContent : m.content,
       }));
