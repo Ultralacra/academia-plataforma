@@ -774,7 +774,7 @@ export function AppSidebar() {
             ...(hasHotsellingAccess
               ? [
                   {
-                    title: "Tu Asistente HotSelling",
+                    title: "Tu Coach Virtual",
                     url: "/alumno/agentes/copy",
                     icon: Sparkles,
                   } as MenuItem,
@@ -1346,7 +1346,7 @@ export function AppSidebar() {
                   Emma
                 </p>
                 <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5">
-                  Tu asistente de IA
+                  Tu Coach Virtual
                 </p>
               </div>
 

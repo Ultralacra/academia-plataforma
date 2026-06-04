@@ -645,7 +645,7 @@ function CopyAlumnoWorkspace() {
             </div>
             <div>
               <div className="text-sm font-semibold">
-                Tu Asistente HotSelling
+                Tu Coach Virtual
               </div>
             </div>
           </div>

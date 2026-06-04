@@ -84,7 +84,7 @@ function AgentesAlumnoHome() {
 
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Tu Asistente HotSelling
+                  Tu Coach Virtual
                 </h3>
                 <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                   5 agentes especializados para guiarte en Fase 1, VSL, Mini
