@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
@@ -600,14 +600,14 @@ export async function POST(request: NextRequest) {
 
   const systemPrompt = SYSTEM_PROMPTS[agentType] ?? SYSTEM_HOTSYSTEM;
 
-  // 5. OpenAI streaming (modelo gpt-4.5 dedicado para alumnos starter)
-  const apiKey = process.env.OPENAI_API_KEY_STARTER;
-  const modelId = process.env.OPENAI_MODEL_STARTER ?? "gpt-4.5";
+  // 5. Anthropic Claude streaming
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const modelId = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
 
   if (!apiKey) {
     return new Response(
       JSON.stringify({
-        error: "OPENAI_API_KEY_STARTER no configurada en el servidor",
+        error: "ANTHROPIC_API_KEY no configurada en el servidor",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
@@ -620,36 +620,39 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        const client = new OpenAI({ apiKey });
+        const client = new Anthropic({ apiKey });
 
-        const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-          { role: "system", content: systemPrompt },
-          ...(messages as Array<{ role: string; content: string }>).map(
-            (m) => ({
-              role: m.role as "user" | "assistant",
-              content: String(m.content ?? ""),
-            }),
-          ),
-        ];
+        const anthropicMessages = (messages as Array<{ role: string; content: string }>).map(
+          (m) => ({
+            role: m.role as "user" | "assistant",
+            content: String(m.content ?? ""),
+          }),
+        );
 
-        const completion = await client.chat.completions.create({
+        const completion = await client.messages.stream({
           model: modelId,
-          messages: openaiMessages,
-          stream: true,
-          stream_options: { include_usage: true },
-          max_completion_tokens: 4000,
+          system: systemPrompt,
+          messages: anthropicMessages,
+          max_tokens: 16000,
         });
 
         for await (const chunk of completion) {
-          const text = chunk.choices[0]?.delta?.content ?? "";
-          if (text) {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
-            );
+          if (
+            chunk.type === "content_block_delta" &&
+            chunk.delta.type === "text_delta"
+          ) {
+            const text = chunk.delta.text;
+            if (text) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
+              );
+            }
           }
-          if (chunk.usage) {
-            inputTokens = chunk.usage.prompt_tokens ?? inputTokens;
-            outputTokens = chunk.usage.completion_tokens ?? outputTokens;
+          if (chunk.type === "message_delta" && chunk.usage) {
+            outputTokens = chunk.usage.output_tokens ?? outputTokens;
+          }
+          if (chunk.type === "message_start" && chunk.message?.usage) {
+            inputTokens = chunk.message.usage.input_tokens ?? inputTokens;
           }
         }
 
@@ -680,12 +683,11 @@ export async function POST(request: NextRequest) {
         });
       } catch (err: any) {
         const status = err?.status ?? "?";
-        const code = err?.code ?? err?.error?.code ?? "?";
         let msg = err?.message ?? "Error desconocido";
-        if (status === 401) msg = "API key de OpenAI inválida o expirada.";
-        else if (status === 429) msg = "Sin créditos o rate limit en OpenAI.";
-        else if (status === 404 || code === "model_not_found")
-          msg = `Modelo "${modelId}" no disponible para esta cuenta.`;
+        if (status === 401) msg = "API key de Anthropic inválida o expirada.";
+        else if (status === 429) msg = "Rate limit de Anthropic alcanzado.";
+        else if (status === 404)
+          msg = `Modelo "${modelId}" no disponible.`;
         else if (status === 400) msg = `Petición inválida (400): ${msg}`;
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`),
