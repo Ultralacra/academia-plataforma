@@ -85,7 +85,7 @@ const agents = [
     active: true,
   },
   {
-    name: "Super Agente ATC",
+    name: "Emma IA",
     description:
       "Asistente autónomo para alumnos y copiloto para el equipo ATC. Crea tickets, clasifica riesgos y escala casos automáticamente.",
     icon: Bot,
@@ -231,7 +231,7 @@ function AgentsHome() {
           className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
         >
           <BarChart3 className="h-4 w-4" />
-          Uso Super ATC (equipo)
+          Uso Emma IA (equipo)
         </Link>
         <Link
           href="/admin/agentes/uso-tickets"
@@ -393,10 +393,10 @@ function FeedbacksPanel() {
           </div>
           <div>
             <h2 className="text-lg font-bold text-foreground">
-              Feedbacks del Super Agente ATC
+              Feedbacks de Emma IA
             </h2>
             <p className="text-sm text-muted-foreground">
-              Opiniones de alumnos para mejorar el asistente
+              Opiniones de alumnos para mejorar a Emma
             </p>
           </div>
         </div>

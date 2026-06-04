@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -15,8 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthToken } from "@/lib/auth";
@@ -30,6 +34,7 @@ import {
   Check,
   ChevronDown,
   Lock,
+  PanelRight,
   Plus,
   RefreshCw,
   Settings2,
@@ -64,6 +69,7 @@ type KrItem = {
   id: string;
   title: string;
   description: string;
+  assignedCodes: string[];
   periodQuarter: KrQuarter;
   periodYear: number;
   status: KrStatus;
@@ -76,12 +82,23 @@ type KrItem = {
   formula: string;
   aiReasoning: string;
   updatedAt: string;
+  evidences: EvidenceItem[];
 };
 
-type SubareaNode = {
+type EvidenceItem = {
   id: string;
-  name: string;
-  leaderCodes: string[];
+  type: "link" | "note" | "file";
+  label: string;
+  url?: string;
+  note?: string;
+  addedAt: string;
+};
+
+type OkrItem = {
+  id: string;
+  title: string;
+  description: string;
+  assignedCodes: string[];
   krs: KrItem[];
 };
 
@@ -89,8 +106,7 @@ type AreaNode = {
   id: string;
   name: string;
   leaderCodes: string[];
-  krs: KrItem[];
-  subareas: SubareaNode[];
+  okrs: OkrItem[];
 };
 
 type TeamPerformanceState = {
@@ -104,7 +120,6 @@ type RendimientoAreaAccess = {
     [userCodigo: string]: {
       nombre: string;
       areas: string[];
-      subareas: string[];
     };
   };
 };
@@ -192,6 +207,9 @@ function normalizeKr(raw: any): KrItem {
     id: String(raw?.id ?? uid()),
     title: String(raw?.title ?? "KR"),
     description: String(raw?.description ?? ""),
+    assignedCodes: Array.isArray(raw?.assignedCodes)
+      ? raw.assignedCodes.map((x: any) => String(x)).filter(Boolean)
+      : [],
     periodQuarter,
     periodYear,
     status,
@@ -203,6 +221,28 @@ function normalizeKr(raw: any): KrItem {
     formula: String(raw?.formula ?? ""),
     aiReasoning: String(raw?.aiReasoning ?? ""),
     updatedAt: String(raw?.updatedAt ?? nowIso()),
+    evidences: Array.isArray(raw?.evidences)
+      ? raw.evidences.map((e: any) => ({
+          id: String(e.id ?? uid()),
+          type: ["link", "note", "file"].includes(e.type) ? e.type : "note",
+          label: String(e.label ?? ""),
+          url: e.url ? String(e.url) : undefined,
+          note: e.note ? String(e.note) : undefined,
+          addedAt: String(e.addedAt ?? nowIso()),
+        }))
+      : [],
+  };
+}
+
+function normalizeOkr(raw: any): OkrItem {
+  return {
+    id: String(raw?.id ?? uid()),
+    title: String(raw?.title ?? "Objetivo"),
+    description: String(raw?.description ?? ""),
+    assignedCodes: Array.isArray(raw?.assignedCodes)
+      ? raw.assignedCodes.map((x: any) => String(x)).filter(Boolean)
+      : [],
+    krs: Array.isArray(raw?.krs) ? raw.krs.map((k: any) => normalizeKr(k)) : [],
   };
 }
 
@@ -218,27 +258,49 @@ function normalizeState(raw: unknown): TeamPerformanceState {
   const areasRaw = Array.isArray(r.areas) ? r.areas : [];
   const areas: AreaNode[] = areasRaw.map((areaAny) => {
     const area = (areaAny ?? {}) as Record<string, unknown>;
-    const subareasRaw = Array.isArray(area.subareas) ? area.subareas : [];
-    const krsRaw = Array.isArray(area.krs) ? area.krs : [];
+
+    let okrs: OkrItem[] = [];
+
+    if (Array.isArray(area.okrs) && area.okrs.length > 0) {
+      // New format
+      okrs = area.okrs.map((o: any) => normalizeOkr(o));
+    } else {
+      // Migration from old format: krs at area level + subareas
+      const krsRaw = Array.isArray(area.krs) ? area.krs : [];
+      const subareasRaw = Array.isArray(area.subareas) ? area.subareas : [];
+
+      if (krsRaw.length > 0) {
+        okrs.push({
+          id: "migrated-" + String(area.id ?? uid()),
+          title: "Objetivo principal",
+          description: "",
+          assignedCodes: [],
+          krs: krsRaw.map((k: any) => normalizeKr(k)),
+        });
+      }
+
+      for (const subAny of subareasRaw) {
+        const sub = (subAny ?? {}) as Record<string, unknown>;
+        const subKrsRaw = Array.isArray(sub.krs) ? sub.krs : [];
+        okrs.push({
+          id: String(sub.id ?? uid()),
+          title: String(sub.name ?? "Objetivo"),
+          description: "",
+          assignedCodes: Array.isArray(sub.leaderCodes)
+            ? sub.leaderCodes.map((x: any) => String(x)).filter(Boolean)
+            : [],
+          krs: subKrsRaw.map((k: any) => normalizeKr(k)),
+        });
+      }
+    }
+
     return {
       id: String(area.id ?? uid()),
       name: String(area.name ?? "Area"),
       leaderCodes: Array.isArray(area.leaderCodes)
         ? area.leaderCodes.map((x) => String(x)).filter(Boolean)
         : [],
-      krs: krsRaw.map((k) => normalizeKr(k)),
-      subareas: subareasRaw.map((subAny) => {
-        const sub = (subAny ?? {}) as Record<string, unknown>;
-        const subKrsRaw = Array.isArray(sub.krs) ? sub.krs : [];
-        return {
-          id: String(sub.id ?? uid()),
-          name: String(sub.name ?? "Subarea"),
-          leaderCodes: Array.isArray(sub.leaderCodes)
-            ? sub.leaderCodes.map((x) => String(x)).filter(Boolean)
-            : [],
-          krs: subKrsRaw.map((k) => normalizeKr(k)),
-        };
-      }),
+      okrs,
     };
   });
 
@@ -252,35 +314,11 @@ function buildSeedState(): TeamPerformanceState {
   return {
     ownerCodes: [String(BUSINESS_METRICS_ADMIN_ID)],
     areas: [
-      {
-        id: "marketing",
-        name: "Marketing",
-        leaderCodes: [],
-        krs: [],
-        subareas: [],
-      },
-      { id: "ventas", name: "Ventas", leaderCodes: [], krs: [], subareas: [] },
-      {
-        id: "delivery",
-        name: "Delivery",
-        leaderCodes: [],
-        krs: [],
-        subareas: [],
-      },
-      {
-        id: "rrhh",
-        name: "Recursos Humanos",
-        leaderCodes: [],
-        krs: [],
-        subareas: [],
-      },
-      {
-        id: "finanzas",
-        name: "Finanzas",
-        leaderCodes: [],
-        krs: [],
-        subareas: [],
-      },
+      { id: "marketing", name: "Marketing", leaderCodes: [], okrs: [] },
+      { id: "ventas", name: "Ventas", leaderCodes: [], okrs: [] },
+      { id: "delivery", name: "Delivery", leaderCodes: [], okrs: [] },
+      { id: "rrhh", name: "Recursos Humanos", leaderCodes: [], okrs: [] },
+      { id: "finanzas", name: "Finanzas", leaderCodes: [], okrs: [] },
     ],
   };
 }
@@ -354,13 +392,118 @@ const STATUS_STYLES: Record<
   },
 };
 
-function KrProgressBar({ value, status }: { value: number; status: KrStatus }) {
+// ─── AddEvidenceForm ──────────────────────────────────────────────────────────
+function AddEvidenceForm({ onAdd }: { onAdd: (ev: EvidenceItem) => void }) {
+  const [label, setLabel] = React.useState("");
+  const [type, setType] = React.useState<EvidenceItem["type"]>("link");
+  const [url, setUrl] = React.useState("");
+  const [note, setNote] = React.useState("");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!label.trim()) return;
+    onAdd({
+      id: uid(),
+      type,
+      label: label.trim(),
+      url: url.trim() || undefined,
+      note: note.trim() || undefined,
+      addedAt: nowIso(),
+    });
+    setLabel("");
+    setUrl("");
+    setNote("");
+    setType("link");
+  }
+
   return (
-    <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-lg border bg-muted/10 p-4 space-y-3"
+    >
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        Agregar evidencia
+      </p>
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Tipo</label>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value as EvidenceItem["type"])}
+          className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+        >
+          <option value="link">Enlace</option>
+          <option value="note">Nota</option>
+          <option value="file">Archivo (URL)</option>
+        </select>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Etiqueta *</label>
+        <input
+          type="text"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Ej: Reporte Q1 Ventas"
+          className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+          required
+        />
+      </div>
+      {(type === "link" || type === "file") && (
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">URL</label>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://..."
+            className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+          />
+        </div>
+      )}
+      {type === "note" && (
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Nota</label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="Describe la evidencia..."
+            className="w-full rounded-md border bg-background px-3 py-1.5 text-sm resize-none"
+          />
+        </div>
+      )}
+      <button
+        type="submit"
+        disabled={!label.trim()}
+        className="w-full rounded-md bg-blue-600 text-white text-sm py-1.5 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Agregar
+      </button>
+    </form>
+  );
+}
+
+function KrProgressBar({ value, status }: { value: number; status: KrStatus }) {
+  // Verde SOLO al 100% (completado). Resto: basado en progreso + estado.
+  const fillClass =
+    status === "paused"
+      ? "bg-slate-400"
+      : value >= 100
+        ? "bg-emerald-500"
+        : status === "off_track"
+          ? "bg-red-500"
+          : status === "at_risk"
+            ? "bg-amber-500"
+            : value >= 70
+              ? "bg-blue-500"
+              : value >= 35
+                ? "bg-amber-400"
+                : "bg-red-400";
+  return (
+    <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
       <div
         className={cn(
           "h-full rounded-full transition-all duration-500",
-          STATUS_STYLES[status].progressFill,
+          fillClass,
         )}
         style={{ width: `${value}%` }}
       />
@@ -406,12 +549,14 @@ function KrCard({
   kr,
   canEdit,
   areaName,
+  isOwner,
   onUpdate,
   onRemove,
 }: {
   kr: KrItem;
   canEdit: boolean;
   areaName: string;
+  isOwner: boolean;
   onUpdate: (patch: Partial<KrItem>) => void;
   onRemove: () => void;
 }) {
@@ -566,7 +711,7 @@ function KrCard({
             value={kr.description}
             disabled={!canEdit}
             onChange={(e) => onUpdate({ description: e.target.value })}
-            className="min-h-[60px] text-xs leading-relaxed disabled:opacity-100 disabled:cursor-default"
+            className="min-h-15 text-xs leading-relaxed disabled:opacity-100 disabled:cursor-default"
             placeholder="Escribe qué mide este KR y por qué es importante. La IA solo propondrá mejoras sobre tu texto."
           />
         </div>
@@ -891,6 +1036,35 @@ function KrCard({
           </p>
         )}
 
+        {/* Assigned codes – editable by owners/leaders */}
+        {canEdit && (
+          <div className="flex items-center gap-1.5 border-t pt-2">
+            <Users className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+            <Input
+              value={codesToCsv(kr.assignedCodes)}
+              onChange={(e) =>
+                onUpdate({ assignedCodes: csvToCodes(e.target.value) })
+              }
+              placeholder="Asignar a (códigos separados por coma)…"
+              className="h-5 text-[10px] border-dashed bg-transparent px-1.5 flex-1"
+            />
+          </div>
+        )}
+        {!canEdit && kr.assignedCodes.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap border-t pt-2">
+            <Users className="h-3 w-3 text-muted-foreground/50" />
+            {kr.assignedCodes.map((c) => (
+              <Badge
+                key={c}
+                variant="secondary"
+                className="text-[10px] h-4 px-1.5"
+              >
+                {c}
+              </Badge>
+            ))}
+          </div>
+        )}
+
         {/* Footer timestamp */}
         <p className="text-[10px] text-muted-foreground/40">
           {new Date(kr.updatedAt).toLocaleString("es-ES", {
@@ -902,6 +1076,601 @@ function KrCard({
           })}
         </p>
       </div>
+    </div>
+  );
+}
+
+// ── Panel expandible de KR (se muestra como fila extra en la tabla) ──────────
+function KrExpandedPanel({
+  kr,
+  canEdit,
+  areaName,
+  isOwner,
+  onUpdate,
+  teamUsers,
+}: {
+  kr: KrItem;
+  canEdit: boolean;
+  areaName: string;
+  isOwner: boolean;
+  onUpdate: (patch: Partial<KrItem>) => void;
+  teamUsers: CoachItem[];
+}) {
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showUserPicker, setShowUserPicker] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    improvedDescription: string;
+    improvementNotes: string;
+    reasoning: string;
+    measurementType: KrMeasurementType;
+    unit: string;
+    targetSuggestion: number | null;
+    formula: string;
+  } | null>(null);
+
+  const callAi = async () => {
+    if (!kr.title.trim() || aiLoading) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch("/api/kr-ai-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: kr.title,
+          areaName,
+          description: kr.description,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAiSuggestion({
+        improvedDescription: String(
+          data.improvedDescription ?? data.description ?? "",
+        ),
+        improvementNotes: String(data.improvementNotes ?? ""),
+        reasoning: String(data.reasoning ?? ""),
+        measurementType: ([
+          "numeric",
+          "percentage",
+          "boolean",
+          "manual",
+        ].includes(data.measurementType)
+          ? data.measurementType
+          : kr.measurementType) as KrMeasurementType,
+        unit: String(data.unit ?? ""),
+        targetSuggestion:
+          typeof data.targetSuggestion === "number"
+            ? data.targetSuggestion
+            : null,
+        formula: String(data.formula ?? ""),
+      });
+    } catch {
+      setAiError("No se pudo conectar con el agente IA.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyAiDescription = () => {
+    if (!aiSuggestion) return;
+    onUpdate({
+      description: aiSuggestion.improvedDescription,
+      aiReasoning: aiSuggestion.reasoning,
+    });
+    setAiSuggestion(null);
+  };
+
+  const applyAiMeasurement = () => {
+    if (!aiSuggestion) return;
+    onUpdate({
+      measurementType: aiSuggestion.measurementType,
+      unit: aiSuggestion.unit || kr.unit,
+      targetValue:
+        aiSuggestion.targetSuggestion !== null
+          ? aiSuggestion.targetSuggestion
+          : kr.targetValue,
+      formula: aiSuggestion.formula || kr.formula,
+      aiReasoning: aiSuggestion.reasoning,
+    });
+  };
+
+  return (
+    <div className="px-4 py-3 bg-muted/5 border-t space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {/* Left: Descripción + Periodo + Asignados */}
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                Descripción
+              </Label>
+              {canEdit && (
+                <button
+                  type="button"
+                  title="Pedir a la IA propuestas de mejora"
+                  disabled={!kr.title.trim() || aiLoading}
+                  onClick={callAi}
+                  className="inline-flex items-center gap-1 text-[11px] text-violet-600 hover:text-violet-700 disabled:opacity-30 transition-colors"
+                >
+                  {aiLoading ? (
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  Mejorar con IA
+                </button>
+              )}
+            </div>
+            <Textarea
+              value={kr.description}
+              disabled={!canEdit}
+              onChange={(e) => onUpdate({ description: e.target.value })}
+              className="min-h-15 text-xs leading-relaxed disabled:opacity-100 disabled:cursor-default"
+              placeholder="Describe qué mide este KR y por qué es importante…"
+            />
+          </div>
+          {/* Period selectors */}
+          <div className="flex items-center gap-2">
+            <Target className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+            {canEdit ? (
+              <>
+                <select
+                  value={kr.periodQuarter}
+                  onChange={(e) =>
+                    onUpdate({ periodQuarter: e.target.value as KrQuarter })
+                  }
+                  className="h-6 rounded border bg-muted/50 px-1.5 text-xs cursor-pointer"
+                >
+                  {QUARTERS.map((q) => (
+                    <option key={q} value={q}>
+                      {q}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={kr.periodYear}
+                  onChange={(e) =>
+                    onUpdate({ periodYear: Number(e.target.value) })
+                  }
+                  className="h-6 rounded border bg-muted/50 px-1.5 text-xs cursor-pointer"
+                >
+                  {YEAR_OPTIONS.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {kr.periodQuarter}-{kr.periodYear}
+              </span>
+            )}
+          </div>
+          {/* Assigned users */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Users className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+            {kr.assignedCodes.length === 0 ? (
+              <span className="text-[10px] text-muted-foreground italic">
+                Sin usuarios asignados
+              </span>
+            ) : (
+              kr.assignedCodes.map((code) => {
+                const u = teamUsers.find((t) => t.codigo === code);
+                return (
+                  <span
+                    key={code}
+                    className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2 py-0.5 text-[10px]"
+                  >
+                    {u?.nombre ?? code}
+                  </span>
+                );
+              })
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setShowUserPicker(true)}
+                className="ml-1 inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+              >
+                <Plus className="h-2.5 w-2.5" />
+                Gestionar
+              </button>
+            )}
+          </div>
+
+          {/* User picker modal */}
+          {showUserPicker && (
+            <div
+              className="fixed inset-0 z-60 flex items-center justify-center backdrop-blur-sm bg-black/60 p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowUserPicker(false);
+              }}
+            >
+              <div className="bg-background rounded-xl shadow-2xl border w-full max-w-sm max-h-[70vh] flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-500" />
+                    <span className="font-semibold text-sm">
+                      Asignar usuarios a KR
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowUserPicker(false)}
+                    className="text-muted-foreground hover:text-foreground transition-colors rounded-md p-1 hover:bg-muted"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* KR title */}
+                <div className="px-4 py-2 bg-muted/30 border-b shrink-0">
+                  <p className="text-xs text-muted-foreground line-clamp-1">
+                    <span className="font-medium text-foreground">
+                      {kr.title || "KR sin título"}
+                    </span>
+                  </p>
+                </div>
+
+                {/* Search */}
+                <div className="px-4 py-2 border-b shrink-0">
+                  <Input
+                    placeholder="Buscar usuario…"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    className="h-7 text-xs"
+                    autoFocus
+                  />
+                </div>
+
+                {/* User list */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                  {teamUsers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">
+                      No hay usuarios cargados.
+                    </p>
+                  ) : (
+                    teamUsers
+                      .filter((u) =>
+                        userSearch.trim()
+                          ? u.nombre
+                              .toLowerCase()
+                              .includes(userSearch.toLowerCase()) ||
+                            (u.puesto ?? "")
+                              .toLowerCase()
+                              .includes(userSearch.toLowerCase())
+                          : true,
+                      )
+                      .map((u) => {
+                        const assigned = kr.assignedCodes.includes(u.codigo);
+                        return (
+                          <label
+                            key={u.codigo}
+                            className="flex items-center gap-3 rounded-lg p-2 cursor-pointer hover:bg-muted/40 select-none transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={assigned}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...kr.assignedCodes, u.codigo]
+                                  : kr.assignedCodes.filter(
+                                      (c) => c !== u.codigo,
+                                    );
+                                onUpdate({ assignedCodes: next });
+                              }}
+                              className="h-4 w-4 rounded accent-blue-600 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {u.nombre}
+                              </p>
+                              {(u.puesto || u.area) && (
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  {[u.puesto, u.area]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              )}
+                            </div>
+                            {assigned && (
+                              <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            )}
+                          </label>
+                        );
+                      })
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between px-4 py-3 border-t shrink-0 bg-background">
+                  <span className="text-xs text-muted-foreground">
+                    {kr.assignedCodes.length} asignado
+                    {kr.assignedCodes.length !== 1 ? "s" : ""}
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowUserPicker(false)}
+                    className="h-7 text-xs"
+                  >
+                    Listo
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Measurement */}
+        <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+              Medición
+            </span>
+            {canEdit && (
+              <select
+                value={kr.measurementType}
+                onChange={(e) =>
+                  onUpdate({
+                    measurementType: e.target.value as KrMeasurementType,
+                  })
+                }
+                className="h-6 rounded border bg-background px-1.5 text-xs cursor-pointer max-w-40"
+              >
+                {(Object.keys(MEASUREMENT_LABELS) as KrMeasurementType[]).map(
+                  (mt) => (
+                    <option key={mt} value={mt}>
+                      {MEASUREMENT_LABELS[mt]}
+                    </option>
+                  ),
+                )}
+              </select>
+            )}
+            {!canEdit && (
+              <span className="text-xs text-muted-foreground">
+                {MEASUREMENT_LABELS[kr.measurementType]}
+              </span>
+            )}
+          </div>
+
+          {kr.measurementType === "numeric" && (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <label className="text-[10px] text-muted-foreground">
+                  Meta
+                </label>
+                <Input
+                  type="number"
+                  value={kr.targetValue ?? ""}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    onUpdate({
+                      targetValue: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    })
+                  }
+                  className="h-7 text-xs"
+                  placeholder="1000"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <label className="text-[10px] text-muted-foreground">
+                  Actual
+                </label>
+                <Input
+                  type="number"
+                  value={kr.currentValue ?? ""}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    onUpdate({
+                      currentValue: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    })
+                  }
+                  className="h-7 text-xs"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <label className="text-[10px] text-muted-foreground">
+                  Unidad
+                </label>
+                <Input
+                  value={kr.unit}
+                  disabled={!canEdit}
+                  onChange={(e) => onUpdate({ unit: e.target.value })}
+                  className="h-7 text-xs"
+                  placeholder="$"
+                />
+              </div>
+            </div>
+          )}
+
+          {kr.measurementType === "percentage" && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">
+                Valor actual
+              </label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={kr.currentValue ?? ""}
+                disabled={!canEdit}
+                onChange={(e) =>
+                  onUpdate({
+                    currentValue: e.target.value
+                      ? Number(e.target.value)
+                      : null,
+                  })
+                }
+                className="h-7 w-20 text-xs"
+                placeholder="0"
+              />
+              <span className="text-xs text-muted-foreground">%</span>
+            </div>
+          )}
+
+          {kr.measurementType === "boolean" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id={`bool-exp-${kr.id}`}
+                checked={!!kr.currentValue}
+                disabled={!canEdit}
+                onChange={(e) =>
+                  onUpdate({ currentValue: e.target.checked ? 1 : 0 })
+                }
+                className="h-4 w-4 rounded accent-blue-600"
+              />
+              <label
+                htmlFor={`bool-exp-${kr.id}`}
+                className="text-xs text-muted-foreground cursor-pointer"
+              >
+                {kr.currentValue ? "Completado ✓" : "Pendiente"}
+              </label>
+            </div>
+          )}
+
+          {kr.measurementType === "manual" && canEdit && (
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={kr.progress}
+              onChange={(e) => onUpdate({ progress: Number(e.target.value) })}
+              className="w-full h-1.5 accent-blue-600 cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
+            />
+          )}
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">Avance</span>
+              <span className="text-xs font-bold tabular-nums">
+                {kr.progress}%
+              </span>
+            </div>
+            <KrProgressBar value={kr.progress} status={kr.status} />
+          </div>
+        </div>
+      </div>
+
+      {aiError && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3" /> {aiError}
+        </p>
+      )}
+
+      {aiSuggestion && canEdit && (
+        <div className="rounded-md border border-violet-200 bg-violet-50/60 dark:border-violet-900/40 dark:bg-violet-950/30 p-2.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-violet-700 dark:text-violet-300">
+              <Sparkles className="h-3 w-3" /> Propuesta de la IA
+            </span>
+            <button
+              type="button"
+              onClick={() => setAiSuggestion(null)}
+              className="text-violet-500/60 hover:text-violet-700 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {aiSuggestion.improvedDescription && (
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-wider text-violet-700/70 dark:text-violet-300/70">
+                Descripción mejorada
+              </p>
+              <p className="text-xs leading-relaxed text-foreground/90 whitespace-pre-line">
+                {aiSuggestion.improvedDescription}
+              </p>
+              <button
+                type="button"
+                onClick={applyAiDescription}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-800 dark:text-violet-300"
+              >
+                <Check className="h-3 w-3" /> Aplicar a mi descripción
+              </button>
+            </div>
+          )}
+          {aiSuggestion.improvementNotes && (
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-wider text-violet-700/70 dark:text-violet-300/70">
+                Sugerencias
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
+                {aiSuggestion.improvementNotes}
+              </p>
+            </div>
+          )}
+          {(aiSuggestion.unit ||
+            aiSuggestion.formula ||
+            aiSuggestion.targetSuggestion !== null) && (
+            <div className="space-y-1 border-t border-violet-200/60 dark:border-violet-900/40 pt-2">
+              <p className="text-[10px] uppercase tracking-wider text-violet-700/70 dark:text-violet-300/70">
+                Medición propuesta
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Tipo:{" "}
+                <span className="font-medium text-foreground/80">
+                  {MEASUREMENT_LABELS[aiSuggestion.measurementType]}
+                </span>
+                {aiSuggestion.unit ? (
+                  <>
+                    {" "}
+                    · Unidad:{" "}
+                    <span className="font-medium text-foreground/80">
+                      {aiSuggestion.unit}
+                    </span>
+                  </>
+                ) : null}
+                {aiSuggestion.targetSuggestion !== null ? (
+                  <>
+                    {" "}
+                    · Meta:{" "}
+                    <span className="font-medium text-foreground/80">
+                      {aiSuggestion.targetSuggestion}
+                    </span>
+                  </>
+                ) : null}
+              </p>
+              {aiSuggestion.formula && (
+                <p className="text-[11px] italic text-muted-foreground">
+                  {aiSuggestion.formula}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={applyAiMeasurement}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-800 dark:text-violet-300"
+              >
+                <Check className="h-3 w-3" /> Aplicar configuración de medición
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {kr.formula && (
+        <p className="text-[10px] text-muted-foreground/60 italic border-t pt-2">
+          {kr.formula}
+        </p>
+      )}
+      <p className="text-[10px] text-muted-foreground/40">
+        {new Date(kr.updatedAt).toLocaleString("es-ES", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </p>
     </div>
   );
 }
@@ -921,6 +1690,18 @@ function TeamPerformancePageContent() {
   const [activeAreaId, setActiveAreaId] = useState("");
   const [showAccessPanel, setShowAccessPanel] = useState(false);
   const [showUserAccessPanel, setShowUserAccessPanel] = useState(false);
+  const [okrUserPicker, setOkrUserPicker] = useState<{
+    areaId: string;
+    okrId: string;
+  } | null>(null);
+  const [okrUserSearch, setOkrUserSearch] = useState("");
+  const [areaUserPicker, setAreaUserPicker] = useState<string | null>(null);
+  const [areaUserSearch, setAreaUserSearch] = useState("");
+  const [krDetail, setKrDetail] = useState<{
+    areaId: string;
+    okrId: string;
+    krId: string;
+  } | null>(null);
   const [accessState, setAccessState] = useState<RendimientoAreaAccess>({
     version: 1,
     permisos: {},
@@ -933,6 +1714,7 @@ function TeamPerformancePageContent() {
   const [sharedVaultPassword, setSharedVaultPassword] = useState(
     SHARED_DEFAULT_PASSWORD,
   );
+  const [expandedKrs, setExpandedKrs] = useState<Set<string>>(new Set());
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipSaveRef = useRef(false);
@@ -964,58 +1746,70 @@ function TeamPerformancePageContent() {
     [isOwner, userKeys],
   );
 
-  const canLeadSubarea = useCallback(
-    (subarea: SubareaNode) => {
-      if (isOwner) return true;
-      return subarea.leaderCodes.some((code) => userKeys.has(String(code)));
-    },
-    [isOwner, userKeys],
-  );
-
   const visibleAreas = useMemo(() => {
     if (isOwner) return state.areas;
 
     const userCodigo = String((user as any)?.codigo || user?.id || "");
 
-    // Si el sistema de accesos tiene un registro guardado, aplicar permisos explícitos
-    if (accessMetaId !== null) {
-      const explicitPerms = accessState.permisos[userCodigo];
-      if (!explicitPerms) return [];
-      const allowedAreas = new Set(explicitPerms.areas);
-      const allowedSubareas = new Set(explicitPerms.subareas);
-      return state.areas
-        .filter((a) => allowedAreas.has(a.id))
-        .map((a) => ({
-          ...a,
-          subareas: a.subareas.filter((s) => allowedSubareas.has(s.id)),
-        }));
-    }
+    return state.areas
+      .filter((area) => {
+        const hasAreaAccess =
+          area.leaderCodes.some((code) => userKeys.has(String(code))) ||
+          (accessMetaId !== null &&
+            (accessState.permisos[userCodigo]?.areas ?? []).includes(area.id));
+        if (!hasAreaAccess) return false;
 
-    // Fallback: leaderCodes (sistema de accesos aún no configurado)
-    const scoped: AreaNode[] = [];
-    for (const area of state.areas) {
-      const areaLeader = canLeadArea(area);
-      if (areaLeader) {
-        scoped.push(area);
-        continue;
-      }
-      const visibleSubareas = area.subareas.filter((sub) =>
-        canLeadSubarea(sub),
-      );
-      if (visibleSubareas.length > 0) {
-        scoped.push({ ...area, krs: [], subareas: visibleSubareas });
-      }
-    }
-    return scoped;
-  }, [
-    canLeadArea,
-    canLeadSubarea,
-    isOwner,
-    state.areas,
-    accessState,
-    accessMetaId,
-    user,
-  ]);
+        // Must have at least one visible OKR or KR
+        return (
+          area.okrs.length === 0 ||
+          area.okrs.some((okr) => {
+            const okrVisible =
+              okr.assignedCodes.length === 0 ||
+              okr.assignedCodes.some((code) => userKeys.has(String(code)));
+            if (okrVisible) return true;
+            return okr.krs.some(
+              (kr) =>
+                kr.assignedCodes.length > 0 &&
+                kr.assignedCodes.some((code) => userKeys.has(String(code))),
+            );
+          })
+        );
+      })
+      .map((area) => {
+        const hasLeaderAccess = area.leaderCodes.some((code) =>
+          userKeys.has(String(code)),
+        );
+        if (hasLeaderAccess) return area;
+
+        const visibleOkrs = area.okrs
+          .map((okr) => {
+            const okrVisible =
+              okr.assignedCodes.length === 0 ||
+              okr.assignedCodes.some((code) => userKeys.has(String(code)));
+
+            if (okrVisible) {
+              const visibleKrs = okr.krs.filter(
+                (kr) =>
+                  kr.assignedCodes.length === 0 ||
+                  kr.assignedCodes.some((code) => userKeys.has(String(code))),
+              );
+              return { ...okr, krs: visibleKrs };
+            }
+
+            // OKR not directly assigned — show only explicitly-assigned KRs
+            const assignedKrs = okr.krs.filter(
+              (kr) =>
+                kr.assignedCodes.length > 0 &&
+                kr.assignedCodes.some((code) => userKeys.has(String(code))),
+            );
+            if (assignedKrs.length === 0) return null;
+            return { ...okr, krs: assignedKrs };
+          })
+          .filter(Boolean) as OkrItem[];
+
+        return { ...area, okrs: visibleOkrs };
+      });
+  }, [isOwner, state.areas, userKeys, accessState, accessMetaId, user]);
 
   useEffect(() => {
     if (visibleAreas.length === 0) {
@@ -1171,69 +1965,19 @@ function TeamPerformancePageContent() {
 
   const handleToggleAreaAccess = useCallback(
     (userCodigo: string, areaId: string, checked: boolean) => {
-      const area = state.areas.find((a) => a.id === areaId);
-      const allSubareaIds = (area?.subareas ?? []).map((s) => s.id);
       setAccessState((prev) => {
         const nombre =
           teamUsers.find((u) => u.codigo === userCodigo)?.nombre ?? userCodigo;
-        const cur = prev.permisos[userCodigo] ?? {
-          nombre,
-          areas: [],
-          subareas: [],
-        };
-        if (checked) {
-          return {
-            ...prev,
-            permisos: {
-              ...prev.permisos,
-              [userCodigo]: {
-                nombre,
-                areas: [...new Set([...cur.areas, areaId])],
-                subareas: [...new Set([...cur.subareas, ...allSubareaIds])],
-              },
-            },
-          };
-        } else {
-          return {
-            ...prev,
-            permisos: {
-              ...prev.permisos,
-              [userCodigo]: {
-                nombre,
-                areas: cur.areas.filter((a) => a !== areaId),
-                subareas: cur.subareas.filter(
-                  (s) => !allSubareaIds.includes(s),
-                ),
-              },
-            },
-          };
-        }
-      });
-      setAccessSaved(false);
-    },
-    [state.areas, teamUsers],
-  );
-
-  const handleToggleSubareaAccess = useCallback(
-    (userCodigo: string, subareaId: string, checked: boolean) => {
-      setAccessState((prev) => {
-        const nombre =
-          teamUsers.find((u) => u.codigo === userCodigo)?.nombre ?? userCodigo;
-        const cur = prev.permisos[userCodigo] ?? {
-          nombre,
-          areas: [],
-          subareas: [],
-        };
+        const cur = prev.permisos[userCodigo] ?? { nombre, areas: [] };
         return {
           ...prev,
           permisos: {
             ...prev.permisos,
             [userCodigo]: {
               nombre,
-              areas: cur.areas,
-              subareas: checked
-                ? [...new Set([...cur.subareas, subareaId])]
-                : cur.subareas.filter((s) => s !== subareaId),
+              areas: checked
+                ? [...new Set([...cur.areas, areaId])]
+                : cur.areas.filter((a) => a !== areaId),
             },
           },
         };
@@ -1243,6 +1987,65 @@ function TeamPerformancePageContent() {
     [teamUsers],
   );
 
+  const handleToggleOkrAssignment = useCallback(
+    (userCodigo: string, areaId: string, okrId: string, checked: boolean) => {
+      setState((current) => ({
+        ...current,
+        areas: current.areas.map((area) => {
+          if (area.id !== areaId) return area;
+          return {
+            ...area,
+            okrs: area.okrs.map((okr) => {
+              if (okr.id !== okrId) return okr;
+              return {
+                ...okr,
+                assignedCodes: checked
+                  ? [...new Set([...okr.assignedCodes, userCodigo])]
+                  : okr.assignedCodes.filter((c) => c !== userCodigo),
+              };
+            }),
+          };
+        }),
+      }));
+    },
+    [],
+  );
+
+  const handleToggleKrAssignment = useCallback(
+    (
+      userCodigo: string,
+      areaId: string,
+      okrId: string,
+      krId: string,
+      checked: boolean,
+    ) => {
+      setState((current) => ({
+        ...current,
+        areas: current.areas.map((area) => {
+          if (area.id !== areaId) return area;
+          return {
+            ...area,
+            okrs: area.okrs.map((okr) => {
+              if (okr.id !== okrId) return okr;
+              return {
+                ...okr,
+                krs: okr.krs.map((kr) => {
+                  if (kr.id !== krId) return kr;
+                  return {
+                    ...kr,
+                    assignedCodes: checked
+                      ? [...new Set([...kr.assignedCodes, userCodigo])]
+                      : kr.assignedCodes.filter((c) => c !== userCodigo),
+                  };
+                }),
+              };
+            }),
+          };
+        }),
+      }));
+    },
+    [],
+  );
   const handleSaveAccess = useCallback(async () => {
     if (accessSaving) return;
     setAccessSaving(true);
@@ -1410,8 +2213,7 @@ function TeamPerformancePageContent() {
       id: uid(),
       name: `Area ${state.areas.length + 1}`,
       leaderCodes: [],
-      krs: [],
-      subareas: [],
+      okrs: [],
     };
     setState((current) => ({ ...current, areas: [...current.areas, next] }));
   };
@@ -1424,154 +2226,111 @@ function TeamPerformancePageContent() {
     }));
   };
 
-  const addAreaKr = (areaId: string) => {
+  const addOkr = (areaId: string) => {
     updateArea(areaId, (area) => ({
       ...area,
-      krs: [
-        ...area.krs,
+      okrs: [
+        ...area.okrs,
         {
           id: uid(),
           title: "",
           description: "",
-          periodQuarter: "Q2" as KrQuarter,
-          periodYear: CURRENT_YEAR,
-          status: "on_track" as KrStatus,
-          progress: 0,
-          measurementType: "manual" as KrMeasurementType,
-          targetValue: null,
-          currentValue: null,
-          unit: "",
-          formula: "",
-          aiReasoning: "",
-          updatedAt: nowIso(),
-        },
-      ],
-    }));
-  };
-
-  const removeAreaKr = (areaId: string, krId: string) => {
-    updateArea(areaId, (area) => ({
-      ...area,
-      krs: area.krs.filter((kr) => kr.id !== krId),
-    }));
-  };
-
-  const updateAreaKr = (
-    areaId: string,
-    krId: string,
-    patch: Partial<KrItem>,
-  ) => {
-    updateArea(areaId, (area) => ({
-      ...area,
-      krs: area.krs.map((kr) => {
-        if (kr.id !== krId) return kr;
-        const merged: KrItem = {
-          ...kr,
-          ...patch,
-          progress:
-            patch.progress !== undefined
-              ? clampProgress(Number(patch.progress))
-              : kr.progress,
-          updatedAt: nowIso(),
-        };
-        if (merged.measurementType !== "manual") {
-          merged.progress = recalcProgress(merged);
-        }
-        return merged;
-      }),
-    }));
-  };
-
-  const addSubarea = (areaId: string) => {
-    updateArea(areaId, (area) => ({
-      ...area,
-      subareas: [
-        ...area.subareas,
-        {
-          id: uid(),
-          name: `Subarea ${area.subareas.length + 1}`,
-          leaderCodes: [],
+          assignedCodes: [],
           krs: [],
         },
       ],
     }));
   };
 
-  const removeSubarea = (areaId: string, subareaId: string) => {
+  const removeOkr = (areaId: string, okrId: string) => {
     updateArea(areaId, (area) => ({
       ...area,
-      subareas: area.subareas.filter((sub) => sub.id !== subareaId),
+      okrs: area.okrs.filter((o) => o.id !== okrId),
     }));
   };
 
-  const updateSubarea = (
+  const updateOkrField = (
     areaId: string,
-    subareaId: string,
-    updater: (sub: SubareaNode) => SubareaNode,
+    okrId: string,
+    patch: Partial<Omit<OkrItem, "krs">>,
   ) => {
     updateArea(areaId, (area) => ({
       ...area,
-      subareas: area.subareas.map((sub) =>
-        sub.id === subareaId ? updater(sub) : sub,
-      ),
+      okrs: area.okrs.map((o) => (o.id === okrId ? { ...o, ...patch } : o)),
     }));
   };
 
-  const addSubareaKr = (areaId: string, subareaId: string) => {
-    updateSubarea(areaId, subareaId, (sub) => ({
-      ...sub,
-      krs: [
-        ...sub.krs,
-        {
-          id: uid(),
-          title: "",
-          description: "",
-          periodQuarter: "Q2" as KrQuarter,
-          periodYear: CURRENT_YEAR,
-          status: "on_track" as KrStatus,
-          progress: 0,
-          measurementType: "manual" as KrMeasurementType,
-          targetValue: null,
-          currentValue: null,
-          unit: "",
-          formula: "",
-          aiReasoning: "",
-          updatedAt: nowIso(),
-        },
-      ],
+  const addKr = (areaId: string, okrId: string) => {
+    updateArea(areaId, (area) => ({
+      ...area,
+      okrs: area.okrs.map((o) => {
+        if (o.id !== okrId) return o;
+        return {
+          ...o,
+          krs: [
+            ...o.krs,
+            {
+              id: uid(),
+              title: "",
+              description: "",
+              assignedCodes: [],
+              periodQuarter: "Q2" as KrQuarter,
+              periodYear: CURRENT_YEAR,
+              status: "on_track" as KrStatus,
+              progress: 0,
+              measurementType: "manual" as KrMeasurementType,
+              targetValue: null,
+              currentValue: null,
+              unit: "",
+              formula: "",
+              aiReasoning: "",
+              updatedAt: nowIso(),
+            },
+          ],
+        };
+      }),
     }));
   };
 
-  const removeSubareaKr = (areaId: string, subareaId: string, krId: string) => {
-    updateSubarea(areaId, subareaId, (sub) => ({
-      ...sub,
-      krs: sub.krs.filter((kr) => kr.id !== krId),
+  const removeKr = (areaId: string, okrId: string, krId: string) => {
+    updateArea(areaId, (area) => ({
+      ...area,
+      okrs: area.okrs.map((o) => {
+        if (o.id !== okrId) return o;
+        return { ...o, krs: o.krs.filter((k) => k.id !== krId) };
+      }),
     }));
   };
 
-  const updateSubareaKr = (
+  const updateKr = (
     areaId: string,
-    subareaId: string,
+    okrId: string,
     krId: string,
     patch: Partial<KrItem>,
   ) => {
-    updateSubarea(areaId, subareaId, (sub) => ({
-      ...sub,
-      krs: sub.krs.map((kr) => {
-        if (kr.id !== krId) return kr;
-        const merged: KrItem = {
-          ...kr,
-          ...patch,
-          progress:
-            patch.progress !== undefined
-              ? clampProgress(Number(patch.progress))
-              : kr.progress,
-          updatedAt: nowIso(),
+    updateArea(areaId, (area) => ({
+      ...area,
+      okrs: area.okrs.map((o) => {
+        if (o.id !== okrId) return o;
+        return {
+          ...o,
+          krs: o.krs.map((kr) => {
+            if (kr.id !== krId) return kr;
+            const merged: KrItem = {
+              ...kr,
+              ...patch,
+              progress:
+                patch.progress !== undefined
+                  ? clampProgress(Number(patch.progress))
+                  : kr.progress,
+              updatedAt: nowIso(),
+            };
+            if (merged.measurementType !== "manual") {
+              merged.progress = recalcProgress(merged);
+            }
+            return merged;
+          }),
         };
-        if (merged.measurementType !== "manual") {
-          merged.progress = recalcProgress(merged);
-        }
-        return merged;
       }),
     }));
   };
@@ -1668,24 +2427,13 @@ function TeamPerformancePageContent() {
   }
 
   // Global stats
-  const allKrs = visibleAreas.flatMap((a) => [
-    ...a.krs,
-    ...a.subareas.flatMap((s) => s.krs),
-  ]);
+  const allKrs = visibleAreas.flatMap((a) => a.okrs.flatMap((o) => o.krs));
+  const totalOkrs = visibleAreas.reduce((sum, a) => sum + a.okrs.length, 0);
   const totalKrs = allKrs.length;
   const avgProgress =
     totalKrs > 0
       ? Math.round(allKrs.reduce((sum, k) => sum + k.progress, 0) / totalKrs)
       : 0;
-  const statusCounts: Record<KrStatus, number> = {
-    on_track: 0,
-    at_risk: 0,
-    off_track: 0,
-    paused: 0,
-  };
-  for (const _kr of allKrs) {
-    statusCounts[_kr.status] = (statusCounts[_kr.status] ?? 0) + 1;
-  }
 
   return (
     <div className="space-y-6">
@@ -1712,22 +2460,6 @@ function TeamPerformancePageContent() {
                 className={cn(
                   "h-3 w-3 transition-transform duration-200",
                   showAccessPanel && "rotate-180",
-                )}
-              />
-            </button>
-          )}
-          {canAccessBusinessMetrics(user) && (
-            <button
-              type="button"
-              onClick={() => setShowUserAccessPanel((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-3 h-8 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-            >
-              <Users className="h-3.5 w-3.5" />
-              Gestión de accesos
-              <ChevronDown
-                className={cn(
-                  "h-3 w-3 transition-transform duration-200",
-                  showUserAccessPanel && "rotate-180",
                 )}
               />
             </button>
@@ -1815,191 +2547,6 @@ function TeamPerformancePageContent() {
         </Card>
       )}
 
-      {/* ── User access management panel ─────────────────────────────── */}
-      {canAccessBusinessMetrics(user) && showUserAccessPanel && (
-        <Card>
-          <CardHeader className="py-4 px-5 border-b">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-violet-500" />
-              Gestión de accesos por usuario
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Define qué áreas y subáreas puede ver cada miembro del equipo. Sin
-              permisos asignados, el usuario no verá ninguna área.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <Input
-                placeholder="Buscar usuario por nombre o puesto…"
-                value={accessUserSearch}
-                onChange={(e) => setAccessUserSearch(e.target.value)}
-                className="h-8 text-sm max-w-sm"
-              />
-              <span className="text-xs text-muted-foreground ml-auto">
-                {teamUsers.length} usuario{teamUsers.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-
-            {teamUsers.length === 0 ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Cargando usuarios…</span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-                {teamUsers
-                  .filter((u) =>
-                    accessUserSearch.trim()
-                      ? u.nombre
-                          .toLowerCase()
-                          .includes(accessUserSearch.toLowerCase()) ||
-                        (u.puesto ?? "")
-                          .toLowerCase()
-                          .includes(accessUserSearch.toLowerCase())
-                      : true,
-                  )
-                  .map((teamUser) => {
-                    const perms = accessState.permisos[teamUser.codigo] ?? {
-                      areas: [],
-                      subareas: [],
-                    };
-                    const areaCount = perms.areas.length;
-                    const subareaCount = perms.subareas.length;
-                    return (
-                      <div
-                        key={teamUser.codigo}
-                        className="rounded-lg border bg-muted/20 p-3 space-y-3"
-                      >
-                        {/* User info row */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-sm">
-                            {teamUser.nombre}
-                          </span>
-                          {teamUser.puesto && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[10px] h-4 px-1.5"
-                            >
-                              {teamUser.puesto}
-                            </Badge>
-                          )}
-                          {teamUser.area && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] h-4 px-1.5"
-                            >
-                              {teamUser.area}
-                            </Badge>
-                          )}
-                          <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-                            {areaCount > 0
-                              ? `${areaCount} área${areaCount !== 1 ? "s" : ""}${
-                                  subareaCount > 0
-                                    ? ` · ${subareaCount} subárea${subareaCount !== 1 ? "s" : ""}`
-                                    : ""
-                                }`
-                              : "Sin acceso"}
-                          </span>
-                        </div>
-
-                        {/* Area + subarea checkboxes */}
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                          {state.areas.map((area) => {
-                            const areaChecked = perms.areas.includes(area.id);
-                            return (
-                              <div key={area.id} className="space-y-1">
-                                <label className="flex items-center gap-2 cursor-pointer group select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={areaChecked}
-                                    onChange={(e) =>
-                                      handleToggleAreaAccess(
-                                        teamUser.codigo,
-                                        area.id,
-                                        e.target.checked,
-                                      )
-                                    }
-                                    className="h-3.5 w-3.5 rounded accent-violet-600"
-                                  />
-                                  <span className="text-xs font-medium text-foreground">
-                                    {area.name}
-                                  </span>
-                                  {area.subareas.length > 0 && (
-                                    <span className="text-[10px] text-muted-foreground/60">
-                                      ({area.subareas.length})
-                                    </span>
-                                  )}
-                                </label>
-                                {areaChecked && area.subareas.length > 0 && (
-                                  <div className="ml-5 space-y-1">
-                                    {area.subareas.map((sub) => (
-                                      <label
-                                        key={sub.id}
-                                        className="flex items-center gap-2 cursor-pointer group select-none"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={perms.subareas.includes(
-                                            sub.id,
-                                          )}
-                                          onChange={(e) =>
-                                            handleToggleSubareaAccess(
-                                              teamUser.codigo,
-                                              sub.id,
-                                              e.target.checked,
-                                            )
-                                          }
-                                          className="h-3 w-3 rounded accent-violet-600"
-                                        />
-                                        <span className="text-[11px] text-muted-foreground group-hover:text-foreground">
-                                          {sub.name}
-                                        </span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-
-            <div className="flex justify-end pt-2 border-t">
-              <Button
-                size="sm"
-                onClick={handleSaveAccess}
-                disabled={accessSaving}
-                className="h-8 gap-1.5"
-              >
-                {accessSaving ? (
-                  <>
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    Guardando…
-                  </>
-                ) : accessSaved ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-emerald-500" />
-                    Guardado
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Guardar permisos
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* ── Global summary ───────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4">
@@ -2007,6 +2554,12 @@ function TeamPerformancePageContent() {
             Áreas
           </p>
           <p className="text-2xl font-bold mt-1">{visibleAreas.length}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+            OKRs totales
+          </p>
+          <p className="text-2xl font-bold mt-1">{totalOkrs}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
@@ -2020,35 +2573,6 @@ function TeamPerformancePageContent() {
           </p>
           <p className="text-2xl font-bold mt-1">{avgProgress}%</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-            Estado
-          </p>
-          <div className="flex flex-wrap items-center gap-1.5 mt-1">
-            {(["on_track", "at_risk", "off_track", "paused"] as KrStatus[]).map(
-              (s) => {
-                const count = statusCounts[s] ?? 0;
-                if (!count) return null;
-                const st = STATUS_STYLES[s];
-                return (
-                  <span
-                    key={s}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
-                      st.badgeClass,
-                    )}
-                  >
-                    <span className={cn("h-1.5 w-1.5 rounded-full", st.dot)} />
-                    {count}
-                  </span>
-                );
-              },
-            )}
-            {totalKrs === 0 && (
-              <span className="text-sm text-muted-foreground">–</span>
-            )}
-          </div>
-        </Card>
       </div>
 
       {/* ── Area tabs ───────────────────────────────────────────────── */}
@@ -2056,10 +2580,7 @@ function TeamPerformancePageContent() {
         <div className="flex items-center gap-3">
           <TabsList className="h-auto flex-wrap gap-1 bg-muted/50 p-1 flex-1">
             {visibleAreas.map((area) => {
-              const areaAllKrs = [
-                ...area.krs,
-                ...area.subareas.flatMap((s) => s.krs),
-              ];
+              const areaAllKrs = area.okrs.flatMap((o) => o.krs);
               const areaAvgPct = areaAllKrs.length
                 ? Math.round(
                     areaAllKrs.reduce((a, k) => a + k.progress, 0) /
@@ -2094,10 +2615,7 @@ function TeamPerformancePageContent() {
 
         {visibleAreas.map((area) => {
           const canEditArea = isOwner || canLeadArea(area);
-          const areaAllKrs = [
-            ...area.krs,
-            ...area.subareas.flatMap((s) => s.krs),
-          ];
+          const areaAllKrs = area.okrs.flatMap((o) => o.krs);
           const areaAvgPct = areaAllKrs.length
             ? Math.round(
                 areaAllKrs.reduce((a, k) => a + k.progress, 0) /
@@ -2138,22 +2656,40 @@ function TeamPerformancePageContent() {
                   ) : (
                     <h2 className="text-xl font-bold">{area.name}</h2>
                   )}
-                  {isOwner ? (
-                    <div className="flex items-center gap-1">
-                      <Users className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                      <Input
-                        value={codesToCsv(area.leaderCodes)}
-                        onChange={(e) =>
-                          updateArea(area.id, (c) => ({
-                            ...c,
-                            leaderCodes: csvToCodes(e.target.value),
-                          }))
-                        }
-                        placeholder="Código del líder de área…"
-                        className="h-6 text-xs border-dashed bg-transparent px-2 w-52"
-                      />
-                    </div>
-                  ) : null}
+                  {/* Area leaders / who can see this area */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Users className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                    {area.leaderCodes.length === 0 ? (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        Sin acceso asignado
+                      </span>
+                    ) : (
+                      area.leaderCodes.map((code) => {
+                        const u = teamUsers.find((t) => t.codigo === code);
+                        return (
+                          <span
+                            key={code}
+                            className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2 py-0.5 text-[10px]"
+                          >
+                            {u?.nombre ?? code}
+                          </span>
+                        );
+                      })
+                    )}
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAreaUserSearch("");
+                          setAreaUserPicker(area.id);
+                        }}
+                        className="ml-1 inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+                      >
+                        <Plus className="h-2.5 w-2.5" />
+                        Gestionar acceso
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
@@ -2161,180 +2697,189 @@ function TeamPerformancePageContent() {
                       {areaAvgPct}%
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {areaAllKrs.length} KR
+                      {area.okrs.length} OKR · {areaAllKrs.length} KR
                     </p>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    {canEditArea && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs gap-1"
-                        onClick={() => addSubarea(area.id)}
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Subárea
-                      </Button>
-                    )}
-                    {isOwner && (
-                      <button
-                        type="button"
-                        className="text-xs text-muted-foreground/60 hover:text-destructive flex items-center gap-1 transition-colors"
-                        onClick={() => removeArea(area.id)}
-                      >
-                        <Trash2 className="h-3 w-3" /> Eliminar área
-                      </button>
-                    )}
-                  </div>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground/60 hover:text-destructive flex items-center gap-1 transition-colors"
+                      onClick={() => removeArea(area.id)}
+                    >
+                      <Trash2 className="h-3 w-3" /> Eliminar área
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Area overall progress bar */}
               <KrProgressBar value={areaAvgPct} status={dominantStatus} />
 
-              {/* KR del área */}
+              {/* OKRs del área */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    KR del área
+                    OKRs
                   </h3>
                   {canEditArea && (
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-7 gap-1 text-xs"
-                      onClick={() => addAreaKr(area.id)}
+                      onClick={() => addOkr(area.id)}
                     >
-                      <Plus className="h-3 w-3" /> Añadir KR
+                      <Plus className="h-3 w-3" /> Añadir OKR
                     </Button>
                   )}
                 </div>
 
-                {area.krs.length === 0 ? (
+                {area.okrs.length === 0 ? (
                   <div className="rounded-xl border border-dashed p-8 text-center">
                     <Target className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
                     <p className="text-sm text-muted-foreground">
-                      Sin KR de área todavía.
+                      Sin objetivos (OKRs) en esta área todavía.
                     </p>
                     {canEditArea && (
                       <Button
                         size="sm"
                         variant="outline"
                         className="mt-3 h-8"
-                        onClick={() => addAreaKr(area.id)}
+                        onClick={() => addOkr(area.id)}
                       >
-                        <Plus className="h-3.5 w-3.5 mr-1" /> Añadir primer KR
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Añadir primer OKR
                       </Button>
                     )}
                   </div>
                 ) : (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {area.krs.map((kr) => (
-                      <KrCard
-                        key={kr.id}
-                        kr={kr}
-                        canEdit={canEditArea}
-                        areaName={area.name}
-                        onUpdate={(patch) =>
-                          updateAreaKr(area.id, kr.id, patch)
-                        }
-                        onRemove={() => removeAreaKr(area.id, kr.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Subáreas */}
-              {area.subareas.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Subáreas
-                    </h3>
-                    {area.subareas.map((subarea) => {
-                      const canEditSub = canEditArea || canLeadSubarea(subarea);
-                      const subAvgPct = subarea.krs.length
+                  <div className="space-y-5">
+                    {area.okrs.map((okr, okrIdx) => {
+                      const okrAvgPct = okr.krs.length
                         ? Math.round(
-                            subarea.krs.reduce((a, k) => a + k.progress, 0) /
-                              subarea.krs.length,
+                            okr.krs.reduce((a, k) => a + k.progress, 0) /
+                              okr.krs.length,
                           )
                         : 0;
+                      const okrDominant: KrStatus =
+                        okr.krs.length === 0
+                          ? "paused"
+                          : okr.krs.some((k) => k.status === "off_track")
+                            ? "off_track"
+                            : okr.krs.some((k) => k.status === "at_risk")
+                              ? "at_risk"
+                              : okr.krs.every((k) => k.status === "on_track")
+                                ? "on_track"
+                                : "paused";
+                      const okrSt = STATUS_STYLES[okrDominant];
+
                       return (
                         <div
-                          key={subarea.id}
-                          className="rounded-xl border bg-muted/20 p-4 space-y-4"
+                          key={okr.id}
+                          className={cn(
+                            "rounded-xl border-l-4 border bg-muted/10 p-4 space-y-4",
+                            okrSt.border,
+                          )}
                         >
-                          {/* Subarea header */}
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-0.5 min-w-0">
-                              {canEditSub ? (
-                                <Input
-                                  value={subarea.name}
-                                  onChange={(e) =>
-                                    updateSubarea(area.id, subarea.id, (c) => ({
-                                      ...c,
-                                      name: e.target.value,
-                                    }))
-                                  }
-                                  className="h-7 text-sm font-semibold border-0 bg-transparent p-0 focus-visible:ring-0"
-                                />
-                              ) : (
-                                <p className="text-sm font-semibold">
-                                  {subarea.name}
-                                </p>
-                              )}
-                              {isOwner ? (
-                                <div className="flex items-center gap-1">
-                                  <Users className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                          {/* OKR header */}
+                          <div className="flex items-start gap-3 justify-between">
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] px-1.5 h-4 shrink-0 font-mono"
+                                >
+                                  OKR {okrIdx + 1}
+                                </Badge>
+                                {canEditArea ? (
                                   <Input
-                                    value={codesToCsv(subarea.leaderCodes)}
+                                    value={okr.title}
                                     onChange={(e) =>
-                                      updateSubarea(
-                                        area.id,
-                                        subarea.id,
-                                        (c) => ({
-                                          ...c,
-                                          leaderCodes: csvToCodes(
-                                            e.target.value,
-                                          ),
-                                        }),
-                                      )
+                                      updateOkrField(area.id, okr.id, {
+                                        title: e.target.value,
+                                      })
                                     }
-                                    placeholder="Código del líder…"
-                                    className="h-5 text-[10px] border-dashed bg-transparent px-1.5 w-36"
+                                    placeholder="Título del OKR…"
+                                    className="h-7 text-sm font-semibold border-0 bg-transparent p-0 focus-visible:ring-0 flex-1 min-w-0"
                                   />
-                                </div>
+                                ) : (
+                                  <p className="text-sm font-semibold">
+                                    {okr.title || "Sin título"}
+                                  </p>
+                                )}
+                              </div>
+
+                              {canEditArea ? (
+                                <Textarea
+                                  value={okr.description}
+                                  onChange={(e) =>
+                                    updateOkrField(area.id, okr.id, {
+                                      description: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Descripción del OKR…"
+                                  className="min-h-10 text-xs leading-relaxed border-dashed bg-transparent resize-none"
+                                />
+                              ) : okr.description ? (
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                  {okr.description}
+                                </p>
                               ) : null}
+
+                              {/* Assigned users */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <Users className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                                {okr.assignedCodes.length === 0 ? (
+                                  <span className="text-[10px] text-muted-foreground italic">
+                                    Sin usuarios asignados
+                                  </span>
+                                ) : (
+                                  okr.assignedCodes.map((code) => {
+                                    const u = teamUsers.find(
+                                      (t) => t.codigo === code,
+                                    );
+                                    return (
+                                      <span
+                                        key={code}
+                                        className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2 py-0.5 text-[10px]"
+                                      >
+                                        {u?.nombre ?? code}
+                                      </span>
+                                    );
+                                  })
+                                )}
+                                {isOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOkrUserSearch("");
+                                      setOkrUserPicker({
+                                        areaId: area.id,
+                                        okrId: okr.id,
+                                      });
+                                    }}
+                                    className="ml-1 inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+                                  >
+                                    <Plus className="h-2.5 w-2.5" />
+                                    Gestionar
+                                  </button>
+                                )}
+                              </div>
                             </div>
+
                             <div className="flex items-center gap-2 shrink-0">
                               <div className="text-right">
-                                <p className="text-xl font-bold tabular-nums leading-none">
-                                  {subAvgPct}%
+                                <p className="text-2xl font-bold tabular-nums leading-none">
+                                  {okrAvgPct}%
                                 </p>
                                 <p className="text-[10px] text-muted-foreground">
-                                  {subarea.krs.length} KR
+                                  {okr.krs.length} KR
                                 </p>
                               </div>
-                              {canEditSub && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() =>
-                                    addSubareaKr(area.id, subarea.id)
-                                  }
-                                >
-                                  <Plus className="h-3 w-3" /> KR
-                                </Button>
-                              )}
                               {canEditArea && (
                                 <button
                                   type="button"
-                                  className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                                  onClick={() =>
-                                    removeSubarea(area.id, subarea.id)
-                                  }
+                                  title="Eliminar OKR"
+                                  className="text-muted-foreground/40 hover:text-destructive transition-colors"
+                                  onClick={() => removeOkr(area.id, okr.id)}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -2342,57 +2887,726 @@ function TeamPerformancePageContent() {
                             </div>
                           </div>
 
-                          {subarea.krs.length === 0 ? (
-                            <div className="rounded-lg border border-dashed p-5 text-center">
-                              <p className="text-xs text-muted-foreground">
-                                Sin KR en esta subárea.
-                              </p>
-                              {canEditSub && (
+                          {/* OKR progress bar */}
+                          <KrProgressBar
+                            value={okrAvgPct}
+                            status={okrDominant}
+                          />
+
+                          {/* KRs dentro del OKR */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                                Resultados Clave
+                              </span>
+                              {canEditArea && (
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  className="mt-2 h-7 text-xs"
-                                  onClick={() =>
-                                    addSubareaKr(area.id, subarea.id)
-                                  }
+                                  variant="ghost"
+                                  className="h-6 gap-1 text-xs"
+                                  onClick={() => addKr(area.id, okr.id)}
                                 >
-                                  <Plus className="h-3 w-3 mr-1" /> Añadir KR
+                                  <Plus className="h-3 w-3" /> KR
                                 </Button>
                               )}
                             </div>
-                          ) : (
-                            <div className="grid gap-3 md:grid-cols-2">
-                              {subarea.krs.map((kr) => (
-                                <KrCard
-                                  key={kr.id}
-                                  kr={kr}
-                                  canEdit={canEditSub}
-                                  areaName={area.name}
-                                  onUpdate={(patch) =>
-                                    updateSubareaKr(
-                                      area.id,
-                                      subarea.id,
-                                      kr.id,
-                                      patch,
-                                    )
-                                  }
-                                  onRemove={() =>
-                                    removeSubareaKr(area.id, subarea.id, kr.id)
-                                  }
-                                />
-                              ))}
-                            </div>
-                          )}
+
+                            {okr.krs.length === 0 ? (
+                              <div className="rounded-lg border border-dashed p-5 text-center">
+                                <p className="text-xs text-muted-foreground">
+                                  Sin KR en este objetivo.
+                                </p>
+                                {canEditArea && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="mt-2 h-7 text-xs"
+                                    onClick={() => addKr(area.id, okr.id)}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" /> Añadir KR
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="rounded-lg border overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-muted/40 border-b">
+                                      <th className="w-7 px-2 py-2" />
+                                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                                        KR
+                                      </th>
+                                      <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden sm:table-cell">
+                                        Estado
+                                      </th>
+                                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                                        Progreso
+                                      </th>
+                                      <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden md:table-cell">
+                                        Período
+                                      </th>
+                                      <th className="w-8 px-2 py-2" />
+                                      {(canEditArea || isOwner) && (
+                                        <th className="w-8 px-2 py-2" />
+                                      )}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {okr.krs.map((kr) => {
+                                      const st = STATUS_STYLES[kr.status];
+                                      const isExpanded = expandedKrs.has(kr.id);
+                                      const toggleExpand = () =>
+                                        setExpandedKrs((prev) => {
+                                          const next = new Set(prev);
+                                          next.has(kr.id)
+                                            ? next.delete(kr.id)
+                                            : next.add(kr.id);
+                                          return next;
+                                        });
+                                      return (
+                                        <React.Fragment key={kr.id}>
+                                          <tr
+                                            key={kr.id}
+                                            className={`border-b last:border-b-0 transition-colors hover:bg-muted/20 ${isExpanded ? "bg-muted/10" : ""}`}
+                                          >
+                                            {/* Expand toggle */}
+                                            <td className="px-2 py-2 text-center">
+                                              <button
+                                                type="button"
+                                                onClick={toggleExpand}
+                                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                              >
+                                                <ChevronDown
+                                                  className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                                />
+                                              </button>
+                                            </td>
+
+                                            {/* Title */}
+                                            <td className="px-3 py-2">
+                                              <span
+                                                className="font-medium text-foreground line-clamp-2 cursor-pointer"
+                                                onClick={toggleExpand}
+                                              >
+                                                {kr.title || (
+                                                  <span className="text-muted-foreground italic">
+                                                    Sin título
+                                                  </span>
+                                                )}
+                                              </span>
+                                            </td>
+
+                                            {/* Status */}
+                                            <td className="px-3 py-2 hidden sm:table-cell">
+                                              <span
+                                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${st.badgeClass}`}
+                                              >
+                                                <span
+                                                  className={`h-1.5 w-1.5 rounded-full ${st.dot}`}
+                                                />
+                                                {st.label}
+                                              </span>
+                                            </td>
+
+                                            {/* Progress */}
+                                            <td className="px-3 py-2">
+                                              <div className="flex items-center gap-2 min-w-20">
+                                                <div className="flex-1">
+                                                  <KrProgressBar
+                                                    value={kr.progress}
+                                                    status={kr.status}
+                                                  />
+                                                </div>
+                                                <span className="tabular-nums text-[10px] text-muted-foreground w-8 text-right">
+                                                  {kr.progress}%
+                                                </span>
+                                              </div>
+                                            </td>
+
+                                            {/* Período */}
+                                            <td className="px-3 py-2 hidden md:table-cell text-muted-foreground">
+                                              {kr.periodQuarter ?? "—"}
+                                            </td>
+
+                                            {/* Detail button */}
+                                            <td className="px-2 py-2 text-center">
+                                              <button
+                                                type="button"
+                                                title="Ver detalle y evidencias"
+                                                onClick={() =>
+                                                  setKrDetail({
+                                                    areaId: area.id,
+                                                    okrId: okr.id,
+                                                    krId: kr.id,
+                                                  })
+                                                }
+                                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                              >
+                                                <PanelRight className="h-3.5 w-3.5" />
+                                              </button>
+                                            </td>
+
+                                            {/* Actions */}
+                                            {(canEditArea || isOwner) && (
+                                              <td className="px-2 py-2 text-center">
+                                                {canEditArea && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      removeKr(
+                                                        area.id,
+                                                        okr.id,
+                                                        kr.id,
+                                                      )
+                                                    }
+                                                    className="text-muted-foreground hover:text-red-500 transition-colors"
+                                                  >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                  </button>
+                                                )}
+                                              </td>
+                                            )}
+                                          </tr>
+
+                                          {/* Expanded panel row */}
+                                          {isExpanded && (
+                                            <tr
+                                              key={`${kr.id}-expanded`}
+                                              className="bg-muted/5 border-b last:border-b-0"
+                                            >
+                                              <td
+                                                colSpan={
+                                                  canEditArea || isOwner ? 6 : 5
+                                                }
+                                                className="px-0 py-0"
+                                              >
+                                                <KrExpandedPanel
+                                                  kr={kr}
+                                                  canEdit={canEditArea}
+                                                  areaName={area.name}
+                                                  isOwner={isOwner}
+                                                  teamUsers={teamUsers}
+                                                  onUpdate={(patch) =>
+                                                    updateKr(
+                                                      area.id,
+                                                      okr.id,
+                                                      kr.id,
+                                                      patch,
+                                                    )
+                                                  }
+                                                />
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-                </>
-              )}
+                )}
+              </div>
             </TabsContent>
           );
         })}
       </Tabs>
+
+      {/* ── Modal: Asignar usuarios a OKR ──────────────────────────────── */}
+      {okrUserPicker &&
+        (() => {
+          const pickerArea = state.areas.find(
+            (a) => a.id === okrUserPicker.areaId,
+          );
+          const pickerOkr = pickerArea?.okrs.find(
+            (o) => o.id === okrUserPicker.okrId,
+          );
+          if (!pickerOkr) return null;
+          return (
+            <div
+              className="fixed inset-0 z-60 flex items-center justify-center backdrop-blur-sm bg-black/60 p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setOkrUserPicker(null);
+              }}
+            >
+              <div className="bg-background rounded-xl shadow-2xl border w-full max-w-sm max-h-[70vh] flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-500" />
+                    <span className="font-semibold text-sm">
+                      Asignar usuarios a OKR
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOkrUserPicker(null)}
+                    className="text-muted-foreground hover:text-foreground transition-colors rounded-md p-1 hover:bg-muted"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* OKR title */}
+                <div className="px-4 py-2 bg-muted/30 border-b shrink-0">
+                  <p className="text-xs text-muted-foreground line-clamp-1">
+                    <span className="font-medium text-foreground">
+                      {pickerOkr.title || "OKR sin título"}
+                    </span>
+                  </p>
+                </div>
+
+                {/* Search */}
+                <div className="px-4 py-2 border-b shrink-0">
+                  <Input
+                    placeholder="Buscar usuario…"
+                    value={okrUserSearch}
+                    onChange={(e) => setOkrUserSearch(e.target.value)}
+                    className="h-7 text-xs"
+                    autoFocus
+                  />
+                </div>
+
+                {/* User list */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                  {teamUsers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">
+                      No hay usuarios cargados.
+                    </p>
+                  ) : (
+                    teamUsers
+                      .filter((u) =>
+                        okrUserSearch.trim()
+                          ? u.nombre
+                              .toLowerCase()
+                              .includes(okrUserSearch.toLowerCase()) ||
+                            (u.puesto ?? "")
+                              .toLowerCase()
+                              .includes(okrUserSearch.toLowerCase())
+                          : true,
+                      )
+                      .map((u) => {
+                        const assigned = pickerOkr.assignedCodes.includes(
+                          u.codigo,
+                        );
+                        return (
+                          <label
+                            key={u.codigo}
+                            className="flex items-center gap-3 rounded-lg p-2 cursor-pointer hover:bg-muted/40 select-none transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={assigned}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...pickerOkr.assignedCodes, u.codigo]
+                                  : pickerOkr.assignedCodes.filter(
+                                      (c) => c !== u.codigo,
+                                    );
+                                updateOkrField(
+                                  okrUserPicker.areaId,
+                                  okrUserPicker.okrId,
+                                  {
+                                    assignedCodes: next,
+                                  },
+                                );
+                              }}
+                              className="h-4 w-4 rounded accent-blue-600 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {u.nombre}
+                              </p>
+                              {(u.puesto || u.area) && (
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  {[u.puesto, u.area]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              )}
+                            </div>
+                            {assigned && (
+                              <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            )}
+                          </label>
+                        );
+                      })
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between px-4 py-3 border-t shrink-0 bg-background">
+                  <span className="text-xs text-muted-foreground">
+                    {pickerOkr.assignedCodes.length} asignado
+                    {pickerOkr.assignedCodes.length !== 1 ? "s" : ""}
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => setOkrUserPicker(null)}
+                    className="h-7 text-xs"
+                  >
+                    Listo
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* ── Modal: Quién puede ver esta área ─────────────────────────── */}
+      {areaUserPicker &&
+        (() => {
+          const pickerArea = state.areas.find((a) => a.id === areaUserPicker);
+          if (!pickerArea) return null;
+          return (
+            <div
+              className="fixed inset-0 z-60 flex items-center justify-center backdrop-blur-sm bg-black/60 p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setAreaUserPicker(null);
+              }}
+            >
+              <div className="bg-background rounded-xl shadow-2xl border w-full max-w-sm max-h-[70vh] flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-violet-500" />
+                    <span className="font-semibold text-sm">
+                      Acceso al área
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAreaUserPicker(null)}
+                    className="text-muted-foreground hover:text-foreground transition-colors rounded-md p-1 hover:bg-muted"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Area name */}
+                <div className="px-4 py-2 bg-muted/30 border-b shrink-0">
+                  <p className="text-xs">
+                    <span className="font-medium text-foreground">
+                      {pickerArea.name}
+                    </span>
+                    <span className="text-muted-foreground ml-2">
+                      · quién puede ver esta área
+                    </span>
+                  </p>
+                </div>
+
+                {/* Search */}
+                <div className="px-4 py-2 border-b shrink-0">
+                  <Input
+                    placeholder="Buscar usuario…"
+                    value={areaUserSearch}
+                    onChange={(e) => setAreaUserSearch(e.target.value)}
+                    className="h-7 text-xs"
+                    autoFocus
+                  />
+                </div>
+
+                {/* User list */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                  {teamUsers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">
+                      No hay usuarios cargados.
+                    </p>
+                  ) : (
+                    teamUsers
+                      .filter((u) =>
+                        areaUserSearch.trim()
+                          ? u.nombre
+                              .toLowerCase()
+                              .includes(areaUserSearch.toLowerCase()) ||
+                            (u.puesto ?? "")
+                              .toLowerCase()
+                              .includes(areaUserSearch.toLowerCase())
+                          : true,
+                      )
+                      .map((u) => {
+                        const assigned = pickerArea.leaderCodes.includes(
+                          u.codigo,
+                        );
+                        return (
+                          <label
+                            key={u.codigo}
+                            className="flex items-center gap-3 rounded-lg p-2 cursor-pointer hover:bg-muted/40 select-none transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={assigned}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...pickerArea.leaderCodes, u.codigo]
+                                  : pickerArea.leaderCodes.filter(
+                                      (c) => c !== u.codigo,
+                                    );
+                                updateArea(areaUserPicker, (a) => ({
+                                  ...a,
+                                  leaderCodes: next,
+                                }));
+                              }}
+                              className="h-4 w-4 rounded accent-violet-600 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {u.nombre}
+                              </p>
+                              {(u.puesto || u.area) && (
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  {[u.puesto, u.area]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              )}
+                            </div>
+                            {assigned && (
+                              <Check className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                            )}
+                          </label>
+                        );
+                      })
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between px-4 py-3 border-t shrink-0 bg-background">
+                  <span className="text-xs text-muted-foreground">
+                    {pickerArea.leaderCodes.length} usuario
+                    {pickerArea.leaderCodes.length !== 1 ? "s" : ""} con acceso
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => setAreaUserPicker(null)}
+                    className="h-7 text-xs"
+                  >
+                    Listo
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* ── Drawer: Detalle y evidencias del KR ──────────────────────── */}
+      {krDetail &&
+        (() => {
+          const da = state.areas.find((a) => a.id === krDetail.areaId);
+          const do_ = da?.okrs.find((o) => o.id === krDetail.okrId);
+          const dk = do_?.krs.find((k) => k.id === krDetail.krId);
+          if (!da || !do_ || !dk) return null;
+          const drawerCanEdit = isOwner || canLeadArea(da);
+          return (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+                onClick={() => setKrDetail(null)}
+              />
+              {/* Drawer */}
+              <div className="fixed inset-y-0 right-0 z-50 w-full max-w-xl bg-background shadow-2xl border-l flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PanelRight className="h-4 w-4 text-blue-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">
+                        {dk.title || "KR sin título"}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {da.name} · {do_.title || "OKR sin título"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setKrDetail(null)}
+                    className="text-muted-foreground hover:text-foreground transition-colors rounded-md p-1 hover:bg-muted shrink-0 ml-2"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                  {/* Progreso */}
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Progreso actual
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <KrProgressBar value={dk.progress} status={dk.status} />
+                      </div>
+                      <span className="text-2xl font-bold tabular-nums w-14 text-right">
+                        {dk.progress}%
+                      </span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium",
+                          STATUS_STYLES[dk.status].badgeClass,
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            STATUS_STYLES[dk.status].dot,
+                          )}
+                        />
+                        {STATUS_STYLES[dk.status].label}
+                      </span>
+                      <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
+                        {dk.periodQuarter}-{dk.periodYear}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Descripción */}
+                  {dk.description && (
+                    <div className="space-y-1.5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Descripción
+                      </h3>
+                      <p className="text-sm leading-relaxed text-foreground/80">
+                        {dk.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Medición */}
+                  <div className="space-y-1.5">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Medición
+                    </h3>
+                    <div className="rounded-lg border bg-muted/20 p-3 text-sm space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Tipo</span>
+                        <span className="font-medium capitalize">
+                          {dk.measurementType}
+                        </span>
+                      </div>
+                      {dk.targetValue !== null && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Meta</span>
+                          <span className="font-medium">
+                            {dk.targetValue} {dk.unit}
+                          </span>
+                        </div>
+                      )}
+                      {dk.currentValue !== null && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Actual</span>
+                          <span className="font-medium">
+                            {dk.currentValue} {dk.unit}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Evidencias */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Evidencias y notas
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Adjunta capturas, links, documentos o notas que demuestren
+                      el cumplimiento de este KR.
+                    </p>
+
+                    {/* Current evidence list */}
+                    {(dk.evidences ?? []).length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-6 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Sin evidencias aún.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {(dk.evidences ?? []).map((ev) => (
+                          <div
+                            key={ev.id}
+                            className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {ev.label}
+                              </p>
+                              {ev.url && (
+                                <a
+                                  href={ev.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-500 hover:underline break-all"
+                                >
+                                  {ev.url}
+                                </a>
+                              )}
+                              {ev.note && (
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {ev.note}
+                                </p>
+                              )}
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                {ev.addedAt?.slice(0, 10)}
+                              </p>
+                            </div>
+                            {drawerCanEdit && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = (dk.evidences ?? []).filter(
+                                    (e) => e.id !== ev.id,
+                                  );
+                                  updateKr(
+                                    krDetail.areaId,
+                                    krDetail.okrId,
+                                    krDetail.krId,
+                                    {
+                                      evidences: next,
+                                    },
+                                  );
+                                }}
+                                className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add evidence form */}
+                    {drawerCanEdit && (
+                      <AddEvidenceForm
+                        onAdd={(ev) => {
+                          const next = [...(dk.evidences ?? []), ev];
+                          updateKr(
+                            krDetail.areaId,
+                            krDetail.okrId,
+                            krDetail.krId,
+                            {
+                              evidences: next,
+                            },
+                          );
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
     </div>
   );
 }

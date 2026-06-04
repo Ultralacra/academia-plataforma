@@ -138,3 +138,37 @@ export function GET(req: Request) {
   // TS no reconoce 'webSocket' en ResponseInit, casteamos a any
   return new Response(null, { status: 101, webSocket: client } as any);
 }
+
+/**
+ * POST /api/socket
+ * Permite que rutas server-side (ej. create-ticket) emitan eventos a un room
+ * sin necesidad de abrir una conexión WebSocket.
+ * Body: { room: string; type: string; data?: object; [key: string]: unknown }
+ */
+export async function POST(req: Request) {
+  try {
+    const body = await (req as any).json();
+    const room = normalizeRoom(String(body.room || ""));
+    const type = String(body.type || "").trim();
+    if (!room || !type) {
+      return new Response("room and type are required", { status: 400 });
+    }
+
+    const ev = {
+      ...body,
+      id: String(body.id || Math.random().toString(36).slice(2)),
+      at: body.at || new Date().toISOString(),
+      room,
+    };
+
+    const arr = history.get(room) || [];
+    arr.push(ev as any);
+    if (arr.length > 200) arr.splice(0, arr.length - 200);
+    history.set(room, arr);
+    broadcast(room, JSON.stringify(ev));
+
+    return Response.json({ ok: true });
+  } catch {
+    return new Response("Bad Request", { status: 400 });
+  }
+}

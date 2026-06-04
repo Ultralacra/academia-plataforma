@@ -51,7 +51,7 @@ function AgentesAlumnoHome() {
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Soporte IA
+                  Emma · Asistente IA
                 </h3>
                 <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                   Asistente inteligente que te guía con membresías, contratos,
@@ -60,7 +60,7 @@ function AgentesAlumnoHome() {
                 </p>
               </div>
               <div className="flex items-center gap-1 text-xs font-medium text-teal-600 dark:text-teal-400">
-                Abrir soporte
+                Abrir Emma
                 <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </div>
             </div>

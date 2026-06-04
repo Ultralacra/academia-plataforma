@@ -607,7 +607,13 @@ function firstDayOfMonthYMDLocal() {
 /* ---------------------------------------
   TicketsContent (paginación local)
 --------------------------------------- */
-export default function TicketsContent() {
+export default function TicketsContent({
+  preFilter,
+  title = "Tickets",
+}: {
+  preFilter?: (t: Ticket) => boolean;
+  title?: string;
+} = {}) {
   // Datos
   const [teams, setTeams] = useState<Team[]>([]);
   const [allTickets, setAllTickets] = useState<Ticket[]>([]);
@@ -714,7 +720,9 @@ export default function TicketsContent() {
     (informanteFiltro.length === 1 && informanteFiltro[0] === "all");
 
   const filtered: Ticket[] = useMemo(() => {
-    const base = allTickets ?? [];
+    const base = preFilter
+      ? (allTickets ?? []).filter(preFilter)
+      : (allTickets ?? []);
     let items = base;
 
     if (estado !== "all") {
@@ -790,6 +798,7 @@ export default function TicketsContent() {
     return items;
   }, [
     allTickets,
+    preFilter,
     estado,
     tipo,
     isTipoAll,
@@ -802,25 +811,31 @@ export default function TicketsContent() {
   ]);
 
   // Opciones dinámicas
+  const ticketsForOpts = useMemo(
+    () =>
+      preFilter ? (allTickets ?? []).filter(preFilter) : (allTickets ?? []),
+    [allTickets, preFilter],
+  );
+
   const estadoOpts = useMemo(() => {
     const set = new Set<string>();
-    (allTickets ?? []).forEach((t) =>
+    ticketsForOpts.forEach((t) =>
       set.add((t.estado ?? "SIN ESTADO").toLowerCase()),
     );
     return ["all", ...Array.from(set)];
-  }, [allTickets]);
+  }, [ticketsForOpts]);
 
   const tipoOpts = useMemo(() => {
     const set = new Set<string>();
-    (allTickets ?? []).forEach((t) =>
+    ticketsForOpts.forEach((t) =>
       set.add((t.tipo ?? "SIN TIPO").toLowerCase()),
     );
     return ["all", ...Array.from(set)];
-  }, [allTickets]);
+  }, [ticketsForOpts]);
 
   const informanteOpts = useMemo(() => {
     const map = new Map<string, { value: string; label: string }>();
-    for (const t of allTickets ?? []) {
+    for (const t of ticketsForOpts) {
       const infCode = String(t.informante ?? "").trim();
       const infNameRaw = String(t.informante_nombre ?? "").trim();
       const infNameNorm = normText(infNameRaw);
@@ -849,7 +864,7 @@ export default function TicketsContent() {
         a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
       ),
     ];
-  }, [allTickets]);
+  }, [ticketsForOpts]);
 
   const selectedCoach = useMemo(
     () =>
@@ -1133,7 +1148,7 @@ export default function TicketsContent() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="text-sm text-muted-foreground">
             Hasta 10k resultados del backend · Paginación local (25 por página)
           </p>

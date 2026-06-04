@@ -384,11 +384,11 @@ function UsoSuperAtcContent() {
           </Link>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Bot className="h-6 w-6 text-indigo-500" />
-            Uso del Agente Super ATC
+            Uso de Emma IA
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Registro de consumo del agente Super ATC por usuario del equipo,
-            modos y alumnos consultados.
+            Registro de consumo de Emma IA por usuario del equipo, modos y
+            alumnos consultados.
           </p>
         </div>
         <div className="flex items-center gap-2">

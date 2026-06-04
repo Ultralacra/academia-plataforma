@@ -11,6 +11,7 @@ type TicketNotif = {
   current?: string;
   title?: string;
   at?: string;
+  type?: string;
 };
 
 export function useTicketNotifications(opts?: { room?: string }) {
@@ -31,6 +32,43 @@ export function useTicketNotifications(opts?: { room?: string }) {
     ws.onmessage = (ev) => {
       try {
         const payload = JSON.parse(String(ev.data));
+
+        // --- Ticket creado por Emma ---
+        if (payload?.type === "ticket:agent_created" && payload.data) {
+          try {
+            const st = authService.getAuthState();
+            if (st?.user?.role === "student") return; // no notificar al alumno
+          } catch {}
+
+          const d = payload.data as {
+            ticketId?: string;
+            alumnoCode?: string;
+            alumnoNombre?: string;
+            titulo?: string;
+            categoria?: string;
+            at?: string;
+          };
+          const alumnoLabel = d.alumnoNombre || d.alumnoCode || "";
+          const note: TicketNotif = {
+            id:
+              String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8),
+            ticketId: d.ticketId,
+            type: "ticket:agent_created",
+            title: `Emma creó un ticket${alumnoLabel ? ` · ${alumnoLabel}` : ""}`,
+            at: d.at ?? new Date().toISOString(),
+          };
+          setItems((s) => [note, ...s].slice(0, 50));
+          setUnread((u) => u + 1);
+          try {
+            toast({
+              title: "🤖 Ticket creado por Emma",
+              description: `${d.titulo || "Nuevo ticket"}${alumnoLabel ? ` · ${alumnoLabel}` : ""}`,
+              variant: "default",
+            });
+          } catch {}
+          return;
+        }
+
         if (payload?.type === "ticket:status_changed" && payload.data) {
           const d = payload.data as TicketNotif;
 

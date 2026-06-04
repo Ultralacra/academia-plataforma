@@ -135,7 +135,7 @@ function StudentSidebar({
           <div className="mb-2 flex items-center gap-2">
             <Bot className="h-4 w-4 text-teal-600 dark:text-teal-400" />
             <p className="text-sm font-semibold text-teal-800 dark:text-teal-200">
-              Tu Asistente ATC
+              Emma · Asistente IA
             </p>
           </div>
           <p className="text-xs leading-relaxed text-teal-700/80 dark:text-teal-300/70">
@@ -306,7 +306,7 @@ function FeedbackModal({
             <DialogTitle className="text-lg">¿Qué podemos mejorar?</DialogTitle>
           </div>
           <p className="text-sm text-muted-foreground">
-            Tu opinión ayuda a mejorar el Asistente ATC para todos los alumnos.
+            Tu opinión ayuda a mejorar a Emma para todos los alumnos.
           </p>
         </DialogHeader>
 
@@ -560,8 +560,8 @@ function AgentePageContent() {
   }, [refreshTickets]);
 
   const welcomeMessage = alumnoName
-    ? `¡Hola ${alumnoName.split(" ")[0]}! 👋 Soy tu Asistente ATC de Hotselling PRO. Estoy aquí para ayudarte con cualquier consulta sobre tu programa: membresías, contratos, pausas, extensiones, bonos, garantías y mucho más.\n\n¿En qué te puedo ayudar hoy?`
-    : "¡Hola! 👋 Soy tu Asistente ATC. ¿En qué te puedo ayudar hoy?";
+    ? `¡Hola ${alumnoName.split(" ")[0]}! 👋 Me llamo Emma, soy tu Asistente IA de Hotselling PRO. Estoy aquí para ayudarte con cualquier consulta sobre tu programa: membresías, contratos, pausas, extensiones, bonos, garantías y mucho más.\n\n¿En qué te puedo ayudar hoy?`
+    : "¡Hola! 👋 Soy Emma, tu Asistente IA. ¿En qué te puedo ayudar hoy?";
 
   if (
     isLoading ||

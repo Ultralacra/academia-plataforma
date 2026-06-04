@@ -10,6 +10,88 @@ function buildUrl(path: string) {
 }
 
 /**
+ * Dispara notificaciones (WebSocket room + Web Push) en background tras crear un ticket.
+ * No bloquea la respuesta al alumno.
+ */
+async function dispatchTicketCreatedNotifications(opts: {
+  origin: string;
+  ticketId: string;
+  alumnoCode: string;
+  alumnoNombre: string;
+  titulo: string;
+  categoria: string;
+  authHeader: string;
+}) {
+  const { origin, ticketId, alumnoCode, alumnoNombre, titulo, categoria, authHeader } = opts;
+
+  const eventData = {
+    ticketId,
+    alumnoCode,
+    alumnoNombre,
+    titulo,
+    categoria,
+    at: new Date().toISOString(),
+  };
+
+  // 1. Broadcast al room "tickets" via WebSocket (in-app, tiempo real)
+  const socketPromise = fetch(`${origin}/api/socket`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room: "tickets", type: "ticket:agent_created", data: eventData }),
+    cache: "no-store",
+  }).catch(() => {});
+
+  // 2. Web Push a topic "atc-coaches" (notificación nativa del SO)
+  const pushPromise = fetch(`${origin}/api/push/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      topic: "atc-coaches",
+      title: "Ticket creado por Emma",
+      body: `${alumnoNombre} · ${titulo}`,
+      url: `/admin/alumnos/${alumnoCode}/chat`,
+      tag: `emma-ticket-${ticketId}`,
+      data: eventData,
+    }),
+    cache: "no-store",
+  }).catch(() => {});
+
+  // 3. Intentar obtener coaches del alumno y enviarles push personalizado
+  const coachPushPromise = (async () => {
+    try {
+      const res = await fetch(buildUrl(`/client/get/clients-coaches?alumno=${encodeURIComponent(alumnoCode)}`), {
+        headers: { Authorization: authHeader },
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const json = await res.json().catch(() => null);
+      const rows: Array<{ id_coach?: string | number }> = Array.isArray(json?.data) ? json.data : [];
+      await Promise.allSettled(
+        rows.map((r) => {
+          const coachId = String(r.id_coach ?? "").trim();
+          if (!coachId) return Promise.resolve();
+          return fetch(`${origin}/api/push/send`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              topic: `atc-coach:${coachId}`,
+              title: "Ticket creado por Emma",
+              body: `${alumnoNombre} · ${titulo}`,
+              url: `/admin/alumnos/${alumnoCode}/chat`,
+              tag: `emma-ticket-${ticketId}`,
+              data: eventData,
+            }),
+            cache: "no-store",
+          }).catch(() => {});
+        })
+      );
+    } catch {}
+  })();
+
+  await Promise.allSettled([socketPromise, pushPromise, coachPushPromise]);
+}
+
+/**
  * POST /api/agentes/create-ticket
  *
  * Proxy que crea un ticket en el backend usando INTERNAL_API_TOKEN como JWT,
@@ -104,11 +186,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let ticketData: Record<string, any> | null = null;
     try {
-      return NextResponse.json(JSON.parse(text));
-    } catch {
-      return NextResponse.json({ ok: true, raw: text });
-    }
+      ticketData = JSON.parse(text);
+    } catch {}
+
+    // Disparar notificaciones en background (no bloquear la respuesta al alumno)
+    const origin = new URL(request.url).origin;
+    const ticketId = String(
+      ticketData?.id ?? ticketData?.data?.id ?? ticketData?.id_ticket ?? ""
+    );
+    const alumnoNombre = String(
+      ticketData?.alumno_nombre ?? ticketData?.data?.alumno_nombre ?? id_alumno
+    );
+    dispatchTicketCreatedNotifications({
+      origin,
+      ticketId,
+      alumnoCode: id_alumno,
+      alumnoNombre,
+      titulo: nombre,
+      categoria: tipoNorm,
+      authHeader,
+    }).catch(() => {});
+
+    return ticketData
+      ? NextResponse.json(ticketData)
+      : NextResponse.json({ ok: true, raw: text });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error interno";
     return NextResponse.json({ error: msg }, { status: 500 });

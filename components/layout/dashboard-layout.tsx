@@ -34,6 +34,7 @@ import { useTicketNotifications } from "@/components/hooks/useTicketNotification
 import { useSseNotifications } from "@/components/hooks/useSseNotifications";
 import { usePaymentDueNotifications } from "@/components/hooks/usePaymentDueNotifications";
 import { useAccessDueNotifications } from "@/components/hooks/useAccessDueNotifications";
+import { usePushSubscription } from "@/components/hooks/usePushSubscription";
 import { useCallback, useMemo, useState } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -986,6 +987,10 @@ export function DashboardLayout({
   contentClassName,
 }: DashboardLayoutProps) {
   const { user, logout, isLoading } = useAuth();
+
+  // Suscribir a push notifications para coaches/equipo (notificaciones de tickets creados por Emma)
+  const isStudent = (user?.role || "").toLowerCase() === "student";
+  usePushSubscription("atc-coaches", !isStudent);
 
   /* Helpers para mostrar rol y Ã¡rea formateados */
   const userRoleForLabel = (user?.role || "").toLowerCase();
