@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { getAuthToken } from "@/lib/auth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
@@ -238,10 +239,23 @@ export function AppSidebar() {
   const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
+  const [hasHotsellingAccess, setHasHotsellingAccess] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if ((user?.role || "").toLowerCase() !== "student") return;
+    const token = getAuthToken();
+    if (!token) return;
+    fetch("/api/agentes/copy-alumno/check-access", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((json) => setHasHotsellingAccess(json?.allowed === true))
+      .catch(() => {});
+  }, [user]);
 
   const menuItems: MenuItem[] = useMemo(() => {
     // Detectar si estamos en la ficha de un alumno para añadir acceso directo al chat del alumno
@@ -757,6 +771,15 @@ export function AppSidebar() {
               url: "/alumno/agente",
               icon: Sparkles,
             },
+            ...(hasHotsellingAccess
+              ? [
+                  {
+                    title: "Tu Asistente HotSelling",
+                    url: "/alumno/agentes/copy",
+                    icon: Sparkles,
+                  } as MenuItem,
+                ]
+              : []),
             {
               title: "Feedback",
               url: `/admin/alumnos/${code}/feedback`,
@@ -796,7 +819,7 @@ export function AppSidebar() {
     }
 
     return computedItems;
-  }, [user, pathname]);
+  }, [user, pathname, hasHotsellingAccess]);
 
   const userRoleForLabel = (user?.role || "").toLowerCase();
   const roleLabel =

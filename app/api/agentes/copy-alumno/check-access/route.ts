@@ -30,7 +30,7 @@ function normalizeTag(tag?: string | null): string {
     .replace(/\s+/g, " ");
 }
 
-const ALLOWED_TAG = "hotselling foundation";
+const ALLOWED_TAGS = ["hotselling foundation", "hotselling starter"];
 
 async function fetchMe(authorization: string) {
   const res = await fetch(buildUrl("/auth/me"), {
@@ -130,13 +130,14 @@ export async function GET(req: NextRequest) {
   }
 
   const rawTag = await fetchStudentTag(auth, codigo);
-  const allowed = normalizeTag(rawTag) === ALLOWED_TAG;
+  const normalizedTag = normalizeTag(rawTag);
+  const allowed = ALLOWED_TAGS.includes(normalizedTag);
 
   return NextResponse.json({
     allowed,
     tag: rawTag,
     reason: allowed
       ? undefined
-      : "Acceso exclusivo para alumnos HotSelling Foundation",
+      : "Acceso exclusivo para alumnos HotSelling Foundation o HotSelling Starter",
   });
 }
