@@ -90,6 +90,10 @@ function dbg(...args: any[]) {
 
 // Pistas de subida movidas a ./chat-recent-upload
 
+// IDs de mensajes ocultos manualmente (no se renderizan en el chat).
+// Útil para casos urgentes donde un mensaje específico no debe verse.
+const HIDDEN_MESSAGE_IDS = new Set<string>(["4MuzZgxwf-ZwqqIO"]);
+
 // Config movida a ./chat-types
 export default function CoachChatInline({
   room,
@@ -4598,277 +4602,353 @@ export default function CoachChatInline({
               </div>
             </div>
           ) : (
-            items.map((m, idx) => {
-              const isMine = mine(m); // Pasar mensaje completo para soportar coach↔coach
-              const prev = idx > 0 ? items[idx - 1] : null;
-              const next = idx + 1 < items.length ? items[idx + 1] : null;
-              // Para agrupación, en coach↔coach usamos srcParticipantId
-              const isCoachToCoach = !!isCoachToCoachChatRef.current;
-              const samePrev =
-                prev &&
-                (isCoachToCoach
-                  ? String(prev.srcParticipantId ?? "") ===
-                    String(m.srcParticipantId ?? "")
-                  : prev.sender === m.sender);
-              const newGroup = !samePrev;
+            items
+              .filter((m) => !HIDDEN_MESSAGE_IDS.has(String(m.id ?? "")))
+              .map((m, idx, arr) => {
+                const isMine = mine(m); // Pasar mensaje completo para soportar coach↔coach
+                const prev = idx > 0 ? arr[idx - 1] : null;
+                const next = idx + 1 < arr.length ? arr[idx + 1] : null;
+                // Para agrupación, en coach↔coach usamos srcParticipantId
+                const isCoachToCoach = !!isCoachToCoachChatRef.current;
+                const samePrev =
+                  prev &&
+                  (isCoachToCoach
+                    ? String(prev.srcParticipantId ?? "") ===
+                      String(m.srcParticipantId ?? "")
+                    : prev.sender === m.sender);
+                const newGroup = !samePrev;
 
-              const isSelected = selectionMode && selectedMessageIds.has(m.id);
+                const isSelected =
+                  selectionMode && selectedMessageIds.has(m.id);
 
-              let radius = "rounded-lg";
-              if (isMine) {
-                if (newGroup) radius = "rounded-lg rounded-tr-none";
-              } else {
-                if (newGroup) radius = "rounded-lg rounded-tl-none";
-              }
+                let radius = "rounded-lg";
+                if (isMine) {
+                  if (newGroup) radius = "rounded-lg rounded-tr-none";
+                } else {
+                  if (newGroup) radius = "rounded-lg rounded-tl-none";
+                }
 
-              const wrapperMt = newGroup ? "mt-1" : "mt-0.5";
+                const wrapperMt = newGroup ? "mt-1" : "mt-0.5";
 
-              const hasAudioOnly =
-                Array.isArray(m.attachments) &&
-                m.attachments.some((a) =>
-                  (a.mime || "").startsWith("audio/"),
-                ) &&
-                (!m.text || m.text.trim() === "");
+                const hasAudioOnly =
+                  Array.isArray(m.attachments) &&
+                  m.attachments.some((a) =>
+                    (a.mime || "").startsWith("audio/"),
+                  ) &&
+                  (!m.text || m.text.trim() === "");
 
-              const isAttachmentOnly =
-                Array.isArray(m.attachments) &&
-                m.attachments.length > 0 &&
-                (!m.text || m.text.trim() === "");
+                const isAttachmentOnly =
+                  Array.isArray(m.attachments) &&
+                  m.attachments.length > 0 &&
+                  (!m.text || m.text.trim() === "");
 
-              return (
-                <div
-                  key={m.uiKey || m.id}
-                  className={`flex ${
-                    isMine ? "justify-end" : "justify-start"
-                  } ${wrapperMt} group/msg`}
-                >
+                return (
                   <div
-                    onClick={() => {
-                      if (selectionMode && !isAttachmentOnly)
-                        toggleMessageSelection(m.id);
-                    }}
-                    className={`relative ${
-                      selectionMode && !isAttachmentOnly
-                        ? "cursor-pointer"
-                        : "cursor-default"
-                    } w-fit max-w-[90%] md:max-w-[85%] ${
-                      hasAudioOnly
-                        ? "p-0 bg-transparent shadow-none"
-                        : "px-2 py-1.5 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] " +
-                          (isMine ? "bg-[#d9fdd3]" : "bg-white")
-                    } ${radius} ${
-                      isSelected ? "ring-2 ring-[#00a884] bg-[#d9fdd3]/80" : ""
-                    }`}
+                    key={m.uiKey || m.id}
+                    className={`flex ${
+                      isMine ? "justify-end" : "justify-start"
+                    } ${wrapperMt} group/msg`}
                   >
-                    {!selectionMode &&
-                      isMine &&
-                      !hasAudioOnly &&
-                      !isAttachmentOnly &&
-                      !!m.text?.trim() && (
-                        <div className="absolute right-1 top-1 z-30 opacity-0 group-hover/msg:opacity-100 transition-opacity">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/5"
-                                title="Opciones"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MoreVertical className="h-4 w-4 text-gray-700" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              <DropdownMenuItem
-                                onSelect={() => {
-                                  openEditForMessage(m);
-                                }}
-                              >
-                                Editar
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                    <div
+                      onClick={() => {
+                        if (selectionMode && !isAttachmentOnly)
+                          toggleMessageSelection(m.id);
+                      }}
+                      className={`relative ${
+                        selectionMode && !isAttachmentOnly
+                          ? "cursor-pointer"
+                          : "cursor-default"
+                      } w-fit max-w-[90%] md:max-w-[85%] ${
+                        hasAudioOnly
+                          ? "p-0 bg-transparent shadow-none"
+                          : "px-2 py-1.5 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] " +
+                            (isMine ? "bg-[#d9fdd3]" : "bg-white")
+                      } ${radius} ${
+                        isSelected
+                          ? "ring-2 ring-[#00a884] bg-[#d9fdd3]/80"
+                          : ""
+                      }`}
+                    >
+                      {!selectionMode &&
+                        isMine &&
+                        !hasAudioOnly &&
+                        !isAttachmentOnly &&
+                        !!m.text?.trim() && (
+                          <div className="absolute right-1 top-1 z-30 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/5"
+                                  title="Opciones"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreVertical className="h-4 w-4 text-gray-700" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    openEditForMessage(m);
+                                  }}
+                                >
+                                  Editar
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        )}
+                      {!hasAudioOnly &&
+                        newGroup &&
+                        (isMine ? (
+                          <span className="absolute -right-2 top-0 text-[#d9fdd3]">
+                            <svg
+                              viewBox="0 0 8 13"
+                              height="13"
+                              width="8"
+                              preserveAspectRatio="xMidYMid slice"
+                              version="1.1"
+                              x="0px"
+                              y="0px"
+                              enableBackground="new 0 0 8 13"
+                            >
+                              <path
+                                fill="currentColor"
+                                d="M5.188,1H0v11.193l6.467-8.625 C7.526,2.156,6.958,1,5.188,1z"
+                              ></path>
+                            </svg>
+                          </span>
+                        ) : (
+                          <span className="absolute -left-2 top-0 text-white">
+                            <svg
+                              viewBox="0 0 8 13"
+                              height="13"
+                              width="8"
+                              preserveAspectRatio="xMidYMid slice"
+                              version="1.1"
+                              x="0px"
+                              y="0px"
+                              enableBackground="new 0 0 8 13"
+                            >
+                              <path
+                                fill="currentColor"
+                                d="M1.533,3.568L8,12.193V1H2.812 C1.042,1,0.474,2.156,1.533,3.568z"
+                              ></path>
+                            </svg>
+                          </span>
+                        ))}
+                      {selectionMode && !isAttachmentOnly && (
+                        <>
+                          <div className="absolute inset-0 z-10 bg-transparent" />
+                          <span
+                            className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                              isSelected
+                                ? "bg-violet-600 text-white"
+                                : "bg-gray-300 text-gray-700"
+                            }`}
+                          >
+                            {isSelected ? "✓" : "+"}
+                          </span>
+                        </>
                       )}
-                    {!hasAudioOnly &&
-                      newGroup &&
-                      (isMine ? (
-                        <span className="absolute -right-2 top-0 text-[#d9fdd3]">
-                          <svg
-                            viewBox="0 0 8 13"
-                            height="13"
-                            width="8"
-                            preserveAspectRatio="xMidYMid slice"
-                            version="1.1"
-                            x="0px"
-                            y="0px"
-                            enableBackground="new 0 0 8 13"
+                      {m.text?.trim() ? (
+                        <div className="text-[14.2px] leading-[19px] text-[#111b21] whitespace-pre-wrap break-words">
+                          {renderTextWithLinks(m.text)}
+                        </div>
+                      ) : null}
+                      {Array.isArray(m.attachments) &&
+                        m.attachments.length > 0 &&
+                        (hasAudioOnly ? (
+                          <div className="mt-0">
+                            {m.attachments
+                              .filter((a) =>
+                                (a.mime || "").startsWith("audio/"),
+                              )
+                              .map((a) => {
+                                const url = getAttachmentUrl(a);
+                                const timeLabel = formatTime(m.at);
+                                const attSelected =
+                                  selectionMode &&
+                                  selectedAttachmentIds.has(a.id);
+                                return (
+                                  <div
+                                    key={a.id}
+                                    className={`rounded-md relative ${
+                                      attSelected
+                                        ? "ring-2 ring-violet-500"
+                                        : ""
+                                    }`}
+                                    onClick={(e) => {
+                                      if (selectionMode) {
+                                        e.stopPropagation();
+                                        toggleAttachmentSelection(a.id);
+                                      }
+                                    }}
+                                  >
+                                    <AudioBubble
+                                      src={url}
+                                      isMine={isMine}
+                                      timeLabel={timeLabel}
+                                      delivered={m.delivered}
+                                      read={m.read}
+                                    />
+                                    {selectionMode && (
+                                      <span
+                                        className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                                          attSelected
+                                            ? "bg-violet-600 text-white"
+                                            : "bg-gray-300 text-gray-700"
+                                        }`}
+                                      >
+                                        {attSelected ? "✓" : "+"}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        ) : (
+                          <div
+                            className={`mt-2 grid ${
+                              (m.attachments?.length || 0) === 1
+                                ? "grid-cols-1"
+                                : "grid-cols-2"
+                            } gap-2 w-fit`}
                           >
-                            <path
-                              fill="currentColor"
-                              d="M5.188,1H0v11.193l6.467-8.625 C7.526,2.156,6.958,1,5.188,1z"
-                            ></path>
-                          </svg>
-                        </span>
-                      ) : (
-                        <span className="absolute -left-2 top-0 text-white">
-                          <svg
-                            viewBox="0 0 8 13"
-                            height="13"
-                            width="8"
-                            preserveAspectRatio="xMidYMid slice"
-                            version="1.1"
-                            x="0px"
-                            y="0px"
-                            enableBackground="new 0 0 8 13"
-                          >
-                            <path
-                              fill="currentColor"
-                              d="M1.533,3.568L8,12.193V1H2.812 C1.042,1,0.474,2.156,1.533,3.568z"
-                            ></path>
-                          </svg>
-                        </span>
-                      ))}
-                    {selectionMode && !isAttachmentOnly && (
-                      <>
-                        <div className="absolute inset-0 z-10 bg-transparent" />
-                        <span
-                          className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
-                            isSelected
-                              ? "bg-violet-600 text-white"
-                              : "bg-gray-300 text-gray-700"
-                          }`}
-                        >
-                          {isSelected ? "✓" : "+"}
-                        </span>
-                      </>
-                    )}
-                    {m.text?.trim() ? (
-                      <div className="text-[14.2px] leading-[19px] text-[#111b21] whitespace-pre-wrap break-words">
-                        {renderTextWithLinks(m.text)}
-                      </div>
-                    ) : null}
-                    {Array.isArray(m.attachments) &&
-                      m.attachments.length > 0 &&
-                      (hasAudioOnly ? (
-                        <div className="mt-0">
-                          {m.attachments
-                            .filter((a) => (a.mime || "").startsWith("audio/"))
-                            .map((a) => {
+                            {m.attachments.map((a) => {
                               const url = getAttachmentUrl(a);
-                              const timeLabel = formatTime(m.at);
+                              const isImg = (a.mime || "").startsWith("image/");
+                              const isVideo = (a.mime || "").startsWith(
+                                "video/",
+                              );
+                              const isAudio = (a.mime || "").startsWith(
+                                "audio/",
+                              );
                               const attSelected =
                                 selectionMode &&
                                 selectedAttachmentIds.has(a.id);
+                              if (isAudio) {
+                                const timeLabel = formatTime(m.at);
+                                return (
+                                  <div
+                                    key={a.id}
+                                    className={`rounded-md relative ${
+                                      attSelected
+                                        ? "ring-2 ring-violet-500"
+                                        : ""
+                                    }`}
+                                    onClick={(e) => {
+                                      if (selectionMode) {
+                                        e.stopPropagation();
+                                        toggleAttachmentSelection(a.id);
+                                      }
+                                    }}
+                                  >
+                                    <AudioBubble
+                                      src={url}
+                                      isMine={isMine}
+                                      timeLabel={timeLabel}
+                                      delivered={m.delivered}
+                                      read={m.read}
+                                    />
+                                    {selectionMode && (
+                                      <span
+                                        className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                                          attSelected
+                                            ? "bg-violet-600 text-white"
+                                            : "bg-gray-300 text-gray-700"
+                                        }`}
+                                      >
+                                        {attSelected ? "✓" : "+"}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              if (isVideo) {
+                                return (
+                                  <div
+                                    key={a.id}
+                                    onClick={(e) => {
+                                      if (selectionMode) {
+                                        e.stopPropagation();
+                                        toggleAttachmentSelection(a.id);
+                                      }
+                                    }}
+                                    className={`rounded-md overflow-hidden bg-white/60 relative ${
+                                      selectionMode ? "cursor-pointer" : ""
+                                    } ${
+                                      attSelected
+                                        ? "ring-2 ring-violet-500"
+                                        : ""
+                                    }`}
+                                  >
+                                    <VideoPlayer
+                                      src={url}
+                                      className="h-full w-full max-h-40"
+                                      selectMode={selectionMode}
+                                      onSelect={() =>
+                                        toggleAttachmentSelection(a.id)
+                                      }
+                                    />
+                                    {selectionMode && (
+                                      <span
+                                        className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
+                                          attSelected
+                                            ? "bg-violet-600 text-white"
+                                            : "bg-gray-300 text-gray-700"
+                                        }`}
+                                      >
+                                        {attSelected ? "✓" : "+"}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
                               return (
-                                <div
+                                <button
                                   key={a.id}
-                                  className={`rounded-md relative ${
-                                    attSelected ? "ring-2 ring-violet-500" : ""
-                                  }`}
+                                  type="button"
                                   onClick={(e) => {
                                     if (selectionMode) {
                                       e.stopPropagation();
                                       toggleAttachmentSelection(a.id);
+                                    } else if (isImg && url) {
+                                      setFullImageSrc(url);
+                                    } else {
+                                      openPreview(a);
                                     }
                                   }}
-                                >
-                                  <AudioBubble
-                                    src={url}
-                                    isMine={isMine}
-                                    timeLabel={timeLabel}
-                                    delivered={m.delivered}
-                                    read={m.read}
-                                  />
-                                  {selectionMode && (
-                                    <span
-                                      className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
-                                        attSelected
-                                          ? "bg-violet-600 text-white"
-                                          : "bg-gray-300 text-gray-700"
-                                      }`}
-                                    >
-                                      {attSelected ? "✓" : "+"}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                        </div>
-                      ) : (
-                        <div
-                          className={`mt-2 grid ${
-                            (m.attachments?.length || 0) === 1
-                              ? "grid-cols-1"
-                              : "grid-cols-2"
-                          } gap-2 w-fit`}
-                        >
-                          {m.attachments.map((a) => {
-                            const url = getAttachmentUrl(a);
-                            const isImg = (a.mime || "").startsWith("image/");
-                            const isVideo = (a.mime || "").startsWith("video/");
-                            const isAudio = (a.mime || "").startsWith("audio/");
-                            const attSelected =
-                              selectionMode && selectedAttachmentIds.has(a.id);
-                            if (isAudio) {
-                              const timeLabel = formatTime(m.at);
-                              return (
-                                <div
-                                  key={a.id}
-                                  className={`rounded-md relative ${
-                                    attSelected ? "ring-2 ring-violet-500" : ""
-                                  }`}
-                                  onClick={(e) => {
-                                    if (selectionMode) {
-                                      e.stopPropagation();
-                                      toggleAttachmentSelection(a.id);
-                                    }
-                                  }}
-                                >
-                                  <AudioBubble
-                                    src={url}
-                                    isMine={isMine}
-                                    timeLabel={timeLabel}
-                                    delivered={m.delivered}
-                                    read={m.read}
-                                  />
-                                  {selectionMode && (
-                                    <span
-                                      className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
-                                        attSelected
-                                          ? "bg-violet-600 text-white"
-                                          : "bg-gray-300 text-gray-700"
-                                      }`}
-                                    >
-                                      {attSelected ? "✓" : "+"}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            }
-                            if (isVideo) {
-                              return (
-                                <div
-                                  key={a.id}
-                                  onClick={(e) => {
-                                    if (selectionMode) {
-                                      e.stopPropagation();
-                                      toggleAttachmentSelection(a.id);
-                                    }
-                                  }}
-                                  className={`rounded-md overflow-hidden bg-white/60 relative ${
-                                    selectionMode ? "cursor-pointer" : ""
+                                  className={`relative rounded-md bg-white/60 text-left px-2 py-2 flex items-center gap-2 border border-gray-200 shadow-sm ${
+                                    selectionMode
+                                      ? "cursor-pointer"
+                                      : "cursor-default"
                                   } ${
                                     attSelected ? "ring-2 ring-violet-500" : ""
                                   }`}
+                                  title={a.name}
+                                  style={{ width: 220 }}
                                 >
-                                  <VideoPlayer
-                                    src={url}
-                                    className="h-full w-full max-h-40"
-                                    selectMode={selectionMode}
-                                    onSelect={() =>
-                                      toggleAttachmentSelection(a.id)
-                                    }
-                                  />
+                                  {isImg ? (
+                                    <img
+                                      src={url || "/placeholder.svg"}
+                                      alt={a.name}
+                                      className="h-9 w-9 rounded object-cover flex-shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="h-9 w-9 rounded bg-gray-200 grid place-items-center text-[10px] font-medium text-gray-700 flex-shrink-0">
+                                      DOC
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-[11px] font-medium text-gray-800 truncate">
+                                      {a.name}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 truncate">
+                                      {(a.mime || "").split("/")[1] ||
+                                        "archivo"}
+                                    </div>
+                                  </div>
                                   {selectionMode && (
                                     <span
                                       className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
@@ -4880,96 +4960,39 @@ export default function CoachChatInline({
                                       {attSelected ? "✓" : "+"}
                                     </span>
                                   )}
-                                </div>
+                                </button>
                               );
-                            }
-                            return (
-                              <button
-                                key={a.id}
-                                type="button"
-                                onClick={(e) => {
-                                  if (selectionMode) {
-                                    e.stopPropagation();
-                                    toggleAttachmentSelection(a.id);
-                                  } else if (isImg && url) {
-                                    setFullImageSrc(url);
-                                  } else {
-                                    openPreview(a);
-                                  }
-                                }}
-                                className={`relative rounded-md bg-white/60 text-left px-2 py-2 flex items-center gap-2 border border-gray-200 shadow-sm ${
-                                  selectionMode
-                                    ? "cursor-pointer"
-                                    : "cursor-default"
-                                } ${
-                                  attSelected ? "ring-2 ring-violet-500" : ""
-                                }`}
-                                title={a.name}
-                                style={{ width: 220 }}
-                              >
-                                {isImg ? (
-                                  <img
-                                    src={url || "/placeholder.svg"}
-                                    alt={a.name}
-                                    className="h-9 w-9 rounded object-cover flex-shrink-0"
-                                  />
-                                ) : (
-                                  <div className="h-9 w-9 rounded bg-gray-200 grid place-items-center text-[10px] font-medium text-gray-700 flex-shrink-0">
-                                    DOC
-                                  </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-[11px] font-medium text-gray-800 truncate">
-                                    {a.name}
-                                  </div>
-                                  <div className="text-[10px] text-gray-500 truncate">
-                                    {(a.mime || "").split("/")[1] || "archivo"}
-                                  </div>
-                                </div>
-                                {selectionMode && (
-                                  <span
-                                    className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
-                                      attSelected
-                                        ? "bg-violet-600 text-white"
-                                        : "bg-gray-300 text-gray-700"
-                                    }`}
-                                  >
-                                    {attSelected ? "✓" : "+"}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    {!hasAudioOnly && (
-                      <div
-                        className={`float-right ml-2 mt-1 flex items-center gap-1 select-none h-[15px]`}
-                      >
-                        <span className="text-[11px] text-[#667781]">
-                          {formatTime(m.at)}
-                        </span>
-                        {isMine && (
-                          <span
-                            className={`ml-0.5 ${
-                              m.read ? "text-[#53bdeb]" : "text-[#8696a0]"
-                            }`}
-                          >
-                            {!m.delivered ? (
-                              <Loader2 className="h-3 w-3 animate-spin text-[#8696a0]" />
-                            ) : m.read ? (
-                              <CheckCheck className="h-3.5 w-3.5" />
-                            ) : (
-                              <CheckCheck className="h-3.5 w-3.5" />
-                            )}
+                            })}
+                          </div>
+                        ))}
+                      {!hasAudioOnly && (
+                        <div
+                          className={`float-right ml-2 mt-1 flex items-center gap-1 select-none h-[15px]`}
+                        >
+                          <span className="text-[11px] text-[#667781]">
+                            {formatTime(m.at)}
                           </span>
-                        )}
-                      </div>
-                    )}
+                          {isMine && (
+                            <span
+                              className={`ml-0.5 ${
+                                m.read ? "text-[#53bdeb]" : "text-[#8696a0]"
+                              }`}
+                            >
+                              {!m.delivered ? (
+                                <Loader2 className="h-3 w-3 animate-spin text-[#8696a0]" />
+                              ) : m.read ? (
+                                <CheckCheck className="h-3.5 w-3.5" />
+                              ) : (
+                                <CheckCheck className="h-3.5 w-3.5" />
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })
           )}
           {loadingMessages && items.length > 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-4 bg-transparent">

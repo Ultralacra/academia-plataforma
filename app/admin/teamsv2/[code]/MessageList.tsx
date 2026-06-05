@@ -192,6 +192,10 @@ function MessageBubble({
   );
 }
 
+// IDs de mensajes ocultos manualmente (no se renderizan en el chat).
+// Útil para casos urgentes donde un mensaje específico no debe verse.
+const HIDDEN_MESSAGE_IDS = new Set<string>(["4MuzZgxwf-ZwqqIO"]);
+
 export function MessageList({
   messages,
   myRole,
@@ -212,6 +216,10 @@ export function MessageList({
   const mine = (sender: Sender) =>
     (sender || "").toLowerCase() === myRole.toLowerCase();
 
+  const visibleMessages = messages.filter(
+    (msg) => !HIDDEN_MESSAGE_IDS.has(String(msg.id ?? "")),
+  );
+
   return (
     <div
       ref={scrollRef}
@@ -219,7 +227,7 @@ export function MessageList({
       className="flex-1 p-4 overflow-y-auto"
     >
       <div className="flex flex-col gap-4">
-        {messages.map((msg) => (
+        {visibleMessages.map((msg) => (
           <MessageBubble
             key={msg.id}
             message={msg}
