@@ -597,7 +597,7 @@ function AgentePageContent() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground">
-                Asistente ATC
+                Emma · Asistente IA
               </h1>
               <p className="text-sm text-muted-foreground">
                 Tu asistente personal de atención al cliente

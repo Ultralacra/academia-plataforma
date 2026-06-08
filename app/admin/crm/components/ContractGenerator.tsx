@@ -1328,15 +1328,23 @@ export function ContractGenerator({
       if (overrides.fullName !== undefined) leadPatch.name = overrides.fullName;
       if (overrides.email !== undefined) leadPatch.email = overrides.email;
       if (overrides.phone !== undefined) leadPatch.phone = overrides.phone;
-      // Datos de contrato → metadata
-      if (overrides.dni !== undefined)
+      // Datos de contrato → metadata Y lead (para que la UI del booking los lea correctamente)
+      if (overrides.dni !== undefined) {
         metadataPatch.contract_party_document_id = overrides.dni;
-      if (overrides.address !== undefined)
+        leadPatch.contract_party_document_id = overrides.dni;
+      }
+      if (overrides.address !== undefined) {
         metadataPatch.contract_party_address = overrides.address;
-      if (overrides.city !== undefined)
+        leadPatch.contract_party_address = overrides.address;
+      }
+      if (overrides.city !== undefined) {
         metadataPatch.contract_party_city = overrides.city;
-      if (overrides.country !== undefined)
+        leadPatch.contract_party_city = overrides.city;
+      }
+      if (overrides.country !== undefined) {
         metadataPatch.contract_party_country = overrides.country;
+        leadPatch.contract_party_country = overrides.country;
+      }
       // Datos de pago → metadata (para persistir entre recargas)
       if (overrides.paymentMode !== undefined)
         metadataPatch.payment_mode = overrides.paymentMode;

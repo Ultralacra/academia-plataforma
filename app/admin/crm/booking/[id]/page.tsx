@@ -902,6 +902,9 @@ function Content({ id }: { id: string }) {
         contract_parties: Array.isArray((d as any).contractParties)
           ? (d as any).contractParties
           : undefined,
+        contract_party_name: (d as any).contractPartyName ?? undefined,
+        contract_party_email: (d as any).contractPartyEmail ?? undefined,
+        contract_party_phone: (d as any).contractPartyPhone ?? undefined,
         contract_party_address: (d as any).contractPartyAddress ?? undefined,
         contract_party_city: (d as any).contractPartyCity ?? undefined,
         contract_party_country: (d as any).contractPartyCountry ?? undefined,
@@ -1144,17 +1147,17 @@ function Content({ id }: { id: string }) {
       persistedRecord && typeof persistedRecord === "object"
         ? (persistedRecord as Record<string, any>)
         : {};
+    const draftPatch = draftToLeadPatch(draft) ?? {};
     const leadFieldsToPersist = {
-      name: (record as any)?.name ?? undefined,
-      email: (record as any)?.email ?? undefined,
-      phone: (record as any)?.phone ?? undefined,
+      name: draftPatch.name ?? (record as any)?.name ?? undefined,
+      email: draftPatch.email ?? (record as any)?.email ?? undefined,
+      phone: draftPatch.phone ?? (record as any)?.phone ?? undefined,
       source: (record as any)?.source ?? undefined,
       origen: (record as any)?.origen ?? undefined,
       created_at: (record as any)?.created_at ?? undefined,
       status: (record as any)?.status ?? undefined,
       pipeline_status: (record as any)?.pipeline_status ?? undefined,
     };
-    const draftPatch = draftToLeadPatch(draft) ?? {};
     const draftNotes = (draft as any)?.notes;
     const snapshotSaleBase =
       saleDraftPayload && typeof saleDraftPayload === "object"

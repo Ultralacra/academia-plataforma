@@ -322,6 +322,9 @@ function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
     contract_third_party: contract?.thirdParty ? 1 : 0,
     contract_is_company: contract?.isCompany ? 1 : 0,
     contract_parties: Array.isArray(contract?.parties) ? contract.parties : [],
+    contract_party_name: party?.name ?? null,
+    contract_party_email: party?.email ?? null,
+    contract_party_phone: party?.phone ?? null,
     contract_party_document_id: party?.documentId ?? null,
     contract_party_address: party?.address ?? null,
     contract_party_city: party?.city ?? null,
@@ -2178,9 +2181,15 @@ export function CloseSaleForm({
                             next: PaymentCustomInstallment[],
                           ) => {
                             const next2 = next?.[1]?.dueDate || "";
+                            // Recalcular el monto total cuando cambian las cuotas
+                            const total = next.reduce((sum, it) => {
+                              const n = parseFloat(String(it.amount || "0"));
+                              return sum + (Number.isFinite(n) ? n : 0);
+                            }, 0);
                             setForm({
                               ...form,
                               paymentInstallmentsSchedule: next,
+                              paymentAmount: total > 0 ? String(total) : form.paymentAmount,
                               paymentSecondInstallmentDate:
                                 next2 ||
                                 form.paymentSecondInstallmentDate ||
@@ -2372,9 +2381,15 @@ export function CloseSaleForm({
                           ) => {
                             const first = next[0];
                             const second = next[1];
+                            // Recalcular total de cuotas personalizadas
+                            const total = next.reduce((sum, it) => {
+                              const n = parseFloat(String(it.amount || "0"));
+                              return sum + (Number.isFinite(n) ? n : 0);
+                            }, 0);
                             setForm({
                               ...form,
                               paymentCustomInstallments: next,
+                              paymentAmount: total > 0 ? String(total) : form.paymentAmount,
                               paymentFirstInstallmentAmount:
                                 first?.amount || "",
                               paymentSecondInstallmentAmount:
@@ -2454,9 +2469,15 @@ export function CloseSaleForm({
                                           );
                                           // Mantener comportamiento previo: la primera cuota marca “pagado” por defecto
                                           if (idx === 0) {
+                                            // Recalcular total de cuotas personalizadas
+                                            const total = next.reduce((sum, it) => {
+                                              const n = parseFloat(String(it.amount || "0"));
+                                              return sum + (Number.isFinite(n) ? n : 0);
+                                            }, 0);
                                             setForm({
                                               ...form,
                                               paymentPaidAmount: e.target.value,
+                                              paymentAmount: total > 0 ? String(total) : form.paymentAmount,
                                               paymentCustomInstallments: next,
                                               paymentFirstInstallmentAmount:
                                                 next[0]?.amount || "",
@@ -2609,9 +2630,18 @@ export function CloseSaleForm({
                           const setSchedule = (
                             next: PaymentCustomInstallment[],
                           ) => {
+                            // Recalcular total (reserva + cuotas) y actualizar paymentAmount
+                            const nextSum = next.reduce((acc, it) => {
+                              const n = toNumberOrNull(it.amount);
+                              return acc + (n ?? 0);
+                            }, 0);
+                            const reserveNum =
+                              toNumberOrNull(form.paymentReserveAmount) ?? 0;
+                            const nextTotal = reserveNum + nextSum;
                             setForm({
                               ...form,
                               reserveInstallments: next,
+                              paymentAmount: nextTotal > 0 ? String(nextTotal) : form.paymentAmount,
                               nextChargeDate:
                                 next?.[0]?.dueDate ||
                                 form.reserveRemainingDueDate ||

@@ -25,6 +25,7 @@ import {
   createTicket,
   createTicketAsAgent,
   registerStudentPause,
+  updateClientLastTask,
 } from "@/app/admin/alumnos/api";
 import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
 import { AgentTicketPreviewModal } from "@/components/chat/AgentTicketPreviewModal";
@@ -69,7 +70,13 @@ interface PausaAction {
   motivo: string;
 }
 
-type AgentAction = TicketAction | EscalateAction | TransferAction | PausaAction;
+interface TareaAction {
+  tipo: "tarea";
+  fase: string;
+  campos: Record<string, string>;
+}
+
+type AgentAction = TicketAction | EscalateAction | TransferAction | PausaAction | TareaAction;
 
 interface AgentContextInfo {
   ticketCount: number;
@@ -90,6 +97,14 @@ interface PendingPause {
   messageId: string;
   status: "pending" | "creating" | "created" | "cancelled";
   errorMsg?: string;
+}
+
+interface PendingTarea {
+  action: TareaAction;
+  messageId: string;
+  status: "pending" | "creating" | "created" | "cancelled" | "error";
+  errorMsg?: string;
+  ticketId?: string;
 }
 
 // ─── Action parser ────────────────────────────────────────────────────────────
@@ -507,6 +522,143 @@ function PauseActionCard({
   );
 }
 
+// ─── Task action card ─────────────────────────────────────────────────────────
+
+function TaskActionCard({
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  pending: PendingTarea;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { action, status, errorMsg } = pending;
+  const { fase, campos } = action;
+
+  if (status === "created") {
+    return (
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+          <Bot className="h-4 w-4 text-white" />
+        </div>
+        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm shadow-sm dark:border-emerald-800/50 dark:bg-emerald-900/20">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span className="text-emerald-700 dark:text-emerald-400">
+            ✅ Tarea guardada correctamente. Tu coach fue notificado y revisará tu entrega de la Fase {fase} pronto.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+          <Bot className="h-4 w-4 text-white" />
+        </div>
+        <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-red-200 bg-red-50 px-4 py-3.5 shadow-sm dark:border-red-800/40 dark:bg-red-900/20">
+          <div className="mb-1.5 flex items-center gap-2">
+            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <span className="text-xs font-semibold tracking-wide text-red-700 dark:text-red-300">
+              Error al guardar la tarea
+            </span>
+          </div>
+          {errorMsg && (
+            <p className="mb-2 text-sm text-red-700 dark:text-red-300">
+              {errorMsg}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={onConfirm}
+              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Reintentar
+            </button>
+            <button
+              onClick={onCancel}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "cancelled") {
+    return null;
+  }
+
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+        <Bot className="h-4 w-4 text-white" />
+      </div>
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200/80 bg-teal-50/60 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+        <div className="mb-2.5 flex items-center gap-2">
+          <Paperclip className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+            Entrega de tarea — Fase {fase}
+          </span>
+        </div>
+        <div className="mb-3 space-y-1 text-sm text-foreground">
+          {Object.entries(campos).map(([key, value]) => (
+            <p key={key}>
+              <span className="font-medium capitalize">{key.replace(/_/g, " ")}:</span>{" "}
+              {key === "doc_link" && value ? (
+                <a
+                  href={value}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal-600 underline dark:text-teal-400"
+                >
+                  {value}
+                </a>
+              ) : (
+                value || "—"
+              )}
+            </p>
+          ))}
+        </div>
+        {errorMsg && (
+          <p className="mb-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-900/20 dark:text-red-400">
+            {errorMsg}
+          </p>
+        )}
+        {status === "creating" ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Guardando tarea y notificando a tu coach...
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={onConfirm}
+              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Guardar tarea
+            </button>
+            <button
+              onClick={onCancel}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancelar
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export interface AgenteAtcChatProps {
@@ -543,6 +695,7 @@ export function AgenteAtcChat({
     null,
   );
   const [pendingPause, setPendingPause] = useState<PendingPause | null>(null);
+  const [pendingTask, setPendingTask] = useState<PendingTarea | null>(null);
   const [escalations, setEscalations] = useState<
     Array<{ id: string; motivo: string }>
   >([]);
@@ -652,7 +805,7 @@ export function AgenteAtcChat({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, pendingTicket, escalations]);
+  }, [messages, pendingTicket, pendingTask, escalations]);
 
   // ── Auto-dismiss ticket created card ─────────────────────────────────────────
 
@@ -675,6 +828,17 @@ export function AgenteAtcChat({
       return () => clearTimeout(timer);
     }
   }, [pendingPause?.status]);
+
+  // ── Auto-dismiss task created card ───────────────────────────────────────────
+
+  useEffect(() => {
+    if (pendingTask?.status === "created" || pendingTask?.status === "error") {
+      const timer = setTimeout(() => {
+        setPendingTask(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingTask?.status]);
 
   // ── Audio recording ──────────────────────────────────────────────────────────
 
@@ -994,6 +1158,13 @@ export function AgenteAtcChat({
             messageId: assistantMsgId,
             status: "pending",
           });
+        } else if (action.tipo === "tarea") {
+          // Task proposal — show confirmation card
+          setPendingTask({
+            action,
+            messageId: assistantMsgId,
+            status: "pending",
+          });
         }
       }
     } catch (err: unknown) {
@@ -1068,6 +1239,168 @@ export function AgenteAtcChat({
     setPendingPause((prev) => (prev ? { ...prev, status: "cancelled" } : null));
   }
 
+  // ── Confirm / cancel task ────────────────────────────────────────────────────
+
+  async function handleConfirmTask() {
+    if (!pendingTask || pendingTask.action.tipo !== "tarea") return;
+    setPendingTask((prev) =>
+      prev ? { ...prev, status: "creating", errorMsg: undefined } : null,
+    );
+
+    try {
+      const token = getAuthToken();
+      const { fase, campos } = pendingTask.action;
+      const nowIso = new Date().toISOString();
+
+      // 1. Obtener metadata ADS existente
+      const metaRes = await fetch(
+        `/api/alumnos/${encodeURIComponent(alumnoCode)}/metadata?entity=${encodeURIComponent("ads_metrics")}`,
+        {
+          method: "GET",
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          cache: "no-store",
+        },
+      );
+
+      let metadata: any = null;
+      if (metaRes.ok) {
+        const metaJson = await metaRes.json().catch(() => null);
+        const items = Array.isArray(metaJson?.items) ? metaJson.items : [];
+        metadata =
+          items.find(
+            (m: any) =>
+              String(m?.entity_id ?? "").trim() === alumnoCode ||
+              String((m?.payload as any)?.alumno_codigo ?? "").trim() ===
+                alumnoCode,
+          ) || items[0];
+      }
+
+      // 2. Si no existe, crear metadata base
+      if (!metadata?.id) {
+        const createRes = await fetch(
+          `/api/alumnos/${encodeURIComponent(alumnoCode)}/metadata/ensure-ads`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              entity_id: alumnoCode,
+              payload: {
+                alumno_codigo: alumnoCode,
+                alumno_nombre: alumnoName || "",
+                auto_roas: true,
+                auto_eff: true,
+                pauta_activa: false,
+                requiere_interv: false,
+                roas: "",
+                tareas: [],
+                _tag: "admin_alumnos_ads_metrics",
+                _view: "/admin/alumnos/[code]/ads",
+                _saved_at: nowIso,
+              },
+            }),
+          },
+        );
+        if (createRes.ok) {
+          const createdJson = await createRes.json().catch(() => null);
+          metadata = {
+            id: createdJson?.id ?? null,
+            entity: "ads_metrics",
+            entity_id: alumnoCode,
+            payload: { tareas: [] },
+          };
+        }
+      }
+
+      if (!metadata?.id) {
+        throw new Error("No se pudo obtener ni crear metadata ADS");
+      }
+
+      // 3. Construir objeto tarea
+      const tareaObj = {
+        id: `tmp_tarea_${Date.now()}`,
+        alumno_codigo: alumnoCode,
+        alumno_nombre: alumnoName || null,
+        fase_formulario: fase || null,
+        estatus: "Nueva tarea creada",
+        ads_metadata_id: metadata.id,
+        fecha: campos.fecha ? `${campos.fecha}T12:00:00` : nowIso,
+        campos: { ...campos },
+        created_at: nowIso,
+      };
+
+      // 4. Actualizar metadata
+      const payloadActual = metadata.payload ?? {};
+      const tareasActuales = Array.isArray(payloadActual.tareas)
+        ? payloadActual.tareas
+        : [];
+      const payloadActualizado = {
+        ...payloadActual,
+        tareas: [...tareasActuales, tareaObj],
+        _preview_generated_at: nowIso,
+      };
+
+      const updateRes = await fetch(
+        `/api/alumnos/${encodeURIComponent(alumnoCode)}/metadata/update-ads`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            id: metadata.id,
+            entity: metadata.entity ?? "ads_metrics",
+            entity_id: alumnoCode,
+            payload: payloadActualizado,
+          }),
+        },
+      );
+
+      if (!updateRes.ok) {
+        const txt = await updateRes.text().catch(() => "");
+        throw new Error(txt || `Error ${updateRes.status} al guardar tarea`);
+      }
+
+      // 5. Actualizar ultima_tarea del cliente
+      await updateClientLastTask(alumnoCode, tareaObj.fecha);
+
+      // 6. Crear ticket automático para el coach
+      const createFn = createAsAgent ? createTicketAsAgent : createTicket;
+      const ticketRes = await createFn({
+        nombre: `Tarea entregada — Fase ${fase} — ${campos.nombre || "Sin título"}`,
+        id_alumno: alumnoCode,
+        tipo: "Copy",
+        descripcion: `El alumno ${alumnoName || alumnoCode} ha entregado una tarea de la Fase ${fase}.\n\n**Datos de la entrega:**\n${Object.entries(campos)
+          .map(([k, v]) => `- ${k}: ${v}`)
+          .join("\n")}\n\nRevisar y dar feedback.`,
+        estado: "NUEVO",
+      });
+
+      setPendingTask((prev) =>
+        prev
+          ? { ...prev, status: "created", ticketId: ticketRes?.id }
+          : null,
+      );
+
+      // Refrescar tickets si hay callback
+      onTicketCreated?.();
+    } catch (err: unknown) {
+      const msg =
+        (err as { message?: string }).message ??
+        "Error al guardar la tarea";
+      setPendingTask((prev) =>
+        prev ? { ...prev, status: "error", errorMsg: msg } : null,
+      );
+    }
+  }
+
+  function handleCancelTask() {
+    setPendingTask((prev) => (prev ? { ...prev, status: "cancelled" } : null));
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1101,7 +1434,7 @@ export function AgenteAtcChat({
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">
-              {mode === "alumno" ? "Asistente ATC" : "Super Agente ATC"}
+              {mode === "alumno" ? "Emma · Asistente IA" : "Super Agente ATC"}
             </p>
             <div className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -1188,6 +1521,15 @@ export function AgenteAtcChat({
             pending={pendingPause}
             onConfirm={() => void handleConfirmPause()}
             onCancel={handleCancelPause}
+          />
+        )}
+
+        {/* Task action card */}
+        {pendingTask && (
+          <TaskActionCard
+            pending={pendingTask}
+            onConfirm={() => void handleConfirmTask()}
+            onCancel={handleCancelTask}
           />
         )}
 
