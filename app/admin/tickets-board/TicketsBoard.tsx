@@ -783,8 +783,8 @@ function TicketsBoardContent({
   const [estadoFiltro, setEstadoFiltro] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("");
   const [areaFiltro, setAreaFiltro] = useState("");
+  const [informanteFiltro, setInformanteFiltro] = useState("");
   const [onlyMyTickets, setOnlyMyTickets] = useState(false);
-  const [onlyAgentTickets, setOnlyAgentTickets] = useState(false);
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">(
     studentCode ? "table" : "kanban",
@@ -934,6 +934,42 @@ function TicketsBoardContent({
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
   }, [tickets]);
 
+  // Informantes únicos derivados de los tickets cargados
+  const informanteOpts = useMemo(() => {
+    const map = new Map<string, { value: string; label: string }>();
+    let hasAgentTickets = false;
+    for (const t of tickets) {
+      const infCode = String(t.informante ?? "").trim();
+      const infName = String(t.informante_nombre ?? "").trim();
+      const idAlumno = String((t as any)?.id_alumno ?? "").trim();
+
+      if (infCode && idAlumno && infCode === idAlumno) {
+        hasAgentTickets = true;
+      }
+
+      if (infCode) {
+        const key = `code:${infCode}`;
+        map.set(key, { value: key, label: infName || "Informante" });
+        continue;
+      }
+
+      if (infName) {
+        const key = `name:${infName.toLowerCase()}`;
+        map.set(key, { value: key, label: infName });
+      }
+    }
+
+    const sorted = Array.from(map.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
+    );
+
+    if (hasAgentTickets) {
+      sorted.unshift({ value: "agent:true", label: "Agente IA" });
+    }
+
+    return sorted;
+  }, [tickets]);
+
   const filterTicketsForViewer = (
     list: TicketBoardItem[],
     viewer: { code: string; id: string; atc: boolean } | null,
@@ -1065,21 +1101,37 @@ function TicketsBoardContent({
       });
     }
 
-    if (onlyAgentTickets) {
-      result = result.filter((t) => isGeneratedByAgent(t));
+    if (informanteFiltro) {
+      const infVal = informanteFiltro;
+      if (infVal === "agent:true") {
+        result = result.filter((t) => isGeneratedByAgent(t));
+      } else if (infVal.startsWith("code:")) {
+        const code = infVal.slice(5);
+        result = result.filter(
+          (t) => String((t as any).informante ?? "").trim() === code,
+        );
+      } else if (infVal.startsWith("name:")) {
+        const name = infVal.slice(5);
+        result = result.filter(
+          (t) =>
+            String((t as any).informante_nombre ?? "")
+              .toLowerCase()
+              .trim() === name,
+        );
+      }
     }
 
     return result;
   }, [
     tickets,
     onlyMyTickets,
-    onlyAgentTickets,
     user,
     isUserAtc,
     coachFiltro,
     selectedCoachUser,
     etiquetaFiltro,
     areaFiltro,
+    informanteFiltro,
   ]);
 
   // Debug: imprimir en consola el coach seleccionado y los tickets "de ese coach"
@@ -2842,6 +2894,25 @@ function TicketsBoardContent({
             </select>
           )}
 
+          {!isStudent && informanteOpts.length > 0 && (
+            <select
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-auto sm:min-w-[160px]"
+              value={informanteFiltro}
+              onChange={(e) => {
+                setInformanteFiltro(e.target.value);
+                if (e.target.value && onlyMyTickets) setOnlyMyTickets(false);
+              }}
+              title="Filtrar por informante"
+            >
+              <option value="">Todos los informantes</option>
+              {informanteOpts.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          )}
+
           {!isStudent && (
             <>
               <Button
@@ -2864,16 +2935,6 @@ function TicketsBoardContent({
                 title={`Mostrar solo mis ${uiTicketsLower} creados`}
               >
                 <User className="h-4 w-4" />
-              </Button>
-
-              <Button
-                variant={onlyAgentTickets ? "default" : "outline"}
-                size="icon"
-                onClick={() => setOnlyAgentTickets((prev) => !prev)}
-                className={`h-8 w-8 ${onlyAgentTickets ? "bg-violet-600 hover:bg-violet-700 border-violet-600" : ""}`}
-                title="Mostrar solo tickets generados por el agente IA"
-              >
-                <Bot className="h-4 w-4" />
               </Button>
             </>
           )}

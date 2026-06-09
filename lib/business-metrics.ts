@@ -207,7 +207,7 @@ export function canAccessBusinessMetrics(user?: User | null): boolean {
  * permisos de acceso al resto del equipo desde la pantalla.
  */
 export const TEAM_PERFORMANCE_OWNER_IDS = new Set<string>([
-  "jW1djJJnTqKI6sfM",
+  "JW1djJJnTqKI6sfM",
   "hQycZczVb77e9eLwJpxPJ",
   "TIn8eFkuYkaOi998",
 ]);
