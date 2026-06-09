@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Database,
+  DollarSign,
   FileText,
   Loader2,
   MessageSquarePlus,
@@ -62,6 +63,8 @@ interface KbSecciones {
   faqs: string;
   casos_historicos: string;
   limitaciones: string;
+  bonos_compra: string;
+  bonos_activacion: string;
 }
 
 const KB_DEFAULTS: KbSecciones = {
@@ -443,6 +446,30 @@ El agente SIEMPRE debe:
 - Intentar resolver antes de escalar
 - Reconocer cuándo es necesario escalar y hacerlo sin demora
 - Ante cualquier duda sobre si escalar o no → ESCALAR`,
+
+  bonos_compra: `# Solicitud de Bonos Extra — Para Compra
+
+Cuando el usuario pregunte sobre bonos extra para adquirir o comprar, enviar directamente a los siguientes enlaces:
+
+## Módulo VSL
+https://www.skool.com/hotselling-pro/classroom/67d355ba?md=87ca23824fc04a5a968e8cc142a39da2
+
+## Implementación Técnica
+https://www.skool.com/hotselling-pro/classroom/8ea5e7c2?md=4f6566e6e6a544c38029a95f4a9a1358
+
+Responda con los enlaces directamente, sin explicaciones adicionales.`,
+
+  bonos_activacion: `# Solicitud de Bonos Extra — Activación
+
+Cuando el usuario solicite activar un bono que ya tiene adquirido, enviar directamente a los siguientes enlaces:
+
+## Trafficker
+https://www.skool.com/hotselling-pro/classroom/0a3e97b0?md=d470d4c0f83945d78672eef8aab22acf
+
+## Implementación Técnica
+https://www.skool.com/hotselling-pro/classroom/1a7d100a?md=16b061f263314000be67e02c9294bc7d
+
+Responda con los enlaces directamente, sin explicaciones adicionales.`,
 };
 
 const KB_SECTIONS: {
@@ -525,6 +552,22 @@ const KB_SECTIONS: {
     description: "Lo que el agente NO puede hacer — protección operativa",
     placeholder:
       "El agente NO puede:\n- Aprobar reembolsos\n- Aprobar garantías sin auditoría...",
+  },
+  {
+    key: "bonos_compra",
+    label: "Bonos Extra — Para Compra",
+    icon: DollarSign,
+    description: "Información para usuarios que quieren adquirir bonos extra",
+    placeholder:
+      "# Solicitud de Bonos Extra — Para Compra\nCuando el usuario pregunte sobre bonos extra...",
+  },
+  {
+    key: "bonos_activacion",
+    label: "Bonos Extra — Activación",
+    icon: Zap,
+    description: "Activación de bonos extra ya adquiridos por el usuario",
+    placeholder:
+      "# Solicitud de Bonos Extra — Activación\nCuando el usuario solicite activar un bono...",
   },
 ];
 
