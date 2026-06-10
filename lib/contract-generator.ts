@@ -356,13 +356,26 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
   
   if (data.startDate && !data.startDay) {
     try {
-      const d = new Date(data.startDate);
-      if (!Number.isNaN(d.getTime())) {
-        const months = ["enero", "febrero", "marzo", "abril", "mayo", "junio", 
-                       "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-        startDay = String(d.getDate());
-        startMonth = months[d.getMonth()];
-        startYear = String(d.getFullYear());
+      const months = ["enero", "febrero", "marzo", "abril", "mayo", "junio", 
+                     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+      const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(data.startDate);
+      if (ymd) {
+        const y = Number(ymd[1]);
+        const m = Number(ymd[2]);
+        const d = Number(ymd[3]);
+        const local = new Date(y, m - 1, d);
+        if (!Number.isNaN(local.getTime())) {
+          startDay = String(local.getDate());
+          startMonth = months[local.getMonth()];
+          startYear = String(local.getFullYear());
+        }
+      } else {
+        const d = new Date(data.startDate);
+        if (!Number.isNaN(d.getTime())) {
+          startDay = String(d.getDate());
+          startMonth = months[d.getMonth()];
+          startYear = String(d.getFullYear());
+        }
       }
     } catch {}
   }
@@ -1445,8 +1458,8 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
     reserveRemainingDueDate: d.reserveRemainingDueDate || lead?.reserve_remaining_due_date || paymentReserve?.remaining_due_date || "",
     nextChargeDate: d.nextChargeDate || lead?.next_charge_date || payment?.nextChargeDate || "",
 
-    contractDate: new Date().toISOString(),
-    startDate: d.startDate || lead?.start_date || lead?.program_start_date || "",
+    contractDate: d.contractDate || d.nextChargeDate || lead?.contract_date || lead?.next_charge_date || new Date().toISOString(),
+    startDate: d.startDate || (String(d.paymentMode || "").toLowerCase() === "pago_total" ? (d.nextChargeDate || d.contractDate || lead?.contract_date || lead?.next_charge_date || new Date().toISOString()) : lead?.start_date || lead?.program_start_date || ""),
     closerName: lead?.closer?.name || lead?.closer_name || "",
     closerEmail: lead?.closer?.email || "",
     notes: d.notes || sale?.notes || lead?.sale_notes || "",

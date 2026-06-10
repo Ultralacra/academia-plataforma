@@ -773,6 +773,7 @@ export function CloseSaleForm({
           type: "contado" as const,
           total: computedTotalCommitted || null,
           paid_amount: computedPaidAmount || null,
+          nextChargeDate: form.nextChargeDate || null,
         };
       }
       if (planType === "cuotas") {
