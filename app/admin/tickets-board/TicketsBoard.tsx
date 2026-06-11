@@ -41,6 +41,7 @@ import {
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
 import { toast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import VideoPlayer from "@/components/chat/VideoPlayer";
 
 import {
@@ -330,6 +331,9 @@ function TicketsBoardContent({
   const ticketsRef = useRef<TicketBoardItem[]>([]);
   // Ref para evitar recargar metadata ADS múltiples veces
   const adsMetadataLoadedRef = useRef<string | null>(null);
+  // Refs para alertas de tickets pendientes
+  const alertedTicketsRef = useRef<Set<string>>(new Set());
+  const lastAlertResetRef = useRef<number>(Date.now());
   const [loading, setLoading] = useState(true);
   const [refreshBump, setRefreshBump] = useState(0);
   const searchParams = useSearchParams();
@@ -904,6 +908,106 @@ function TicketsBoardContent({
     return false;
   }, [user, coaches]);
 
+  // Mapear tipo de ticket → puesto del coach responsable
+  const TIPO_TO_PUESTO: Record<string, string[]> = {
+    COPY: ["coach_copy"],
+    ADS: ["coach_pauta"],
+    TECNICO: ["coach_tecnico"],
+    TECNICA: ["coach_tecnico"],
+    MENTALIDAD: ["coach_psicologico"],
+  };
+
+  // Obtener el coach responsable del área según el tipo de ticket
+  const getCoachResponsableDelTicket = (
+    t: TicketBoardItem,
+  ): { nombre: string; codigo_equipo: string } | null => {
+    const tipo = String(t.tipo ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .trim();
+    const puestosBuscados = TIPO_TO_PUESTO[tipo] ?? [];
+    if (puestosBuscados.length === 0) return null; // ATC/OPERATIVO no tienen coach propio
+    const coachesArr: any[] = Array.isArray(t.coaches) ? t.coaches : [];
+    const found = coachesArr.find((c) => {
+      if (!c || typeof c !== "object") return false;
+      const puesto = String(c.puesto ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+      return puestosBuscados.some((pb) => puesto.includes(pb));
+    });
+    if (!found) return null;
+    return {
+      nombre: String(found.nombre ?? found.name ?? "Coach"),
+      codigo_equipo: String(
+        found.codigo_equipo ?? found.codigo ?? found.id ?? "",
+      ).trim(),
+    };
+  };
+
+  // Verificar si el usuario actual es responsable de atender este ticket
+  const isUserResponsableForTicket = (
+    t: TicketBoardItem,
+    userCodigo: string,
+  ): boolean => {
+    const myCode = userCodigo.trim();
+    if (!myCode) return false;
+
+    // Si el ticket es tipo ATC/OPERATIVO, solo el ATC asignado responde
+    const tipo = String(t.tipo ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .trim();
+    const isTipoAtc =
+      isAtcTicketTipo(t.tipo) ||
+      tipo === "ATC" ||
+      tipo === "OPERATIVO";
+
+    if (isTipoAtc) {
+      // El usuario es ATC si aparece en alumno_coaches como ATC
+      const alumnoCoachesArr: any[] = Array.isArray(
+        (t as any)?.alumno_coaches,
+      )
+        ? (t as any).alumno_coaches
+        : [];
+      return alumnoCoachesArr.some((co: any) => {
+        if (!co || typeof co !== "object") return false;
+        const code = String(
+          co?.codigo_equipo ?? co?.codigo ?? co?.id ?? "",
+        ).trim();
+        return code === myCode && isAtcCoach(co);
+      });
+    }
+
+    // Para tickets de área (COPY, ADS, etc.): verificar si es el coach responsable
+    const coachResponsable = getCoachResponsableDelTicket(t);
+    if (coachResponsable?.codigo_equipo === myCode) return true;
+
+    // También verificar si es el ATC asignado al alumno
+    const alumnoCoachesArr: any[] = Array.isArray((t as any)?.alumno_coaches)
+      ? (t as any).alumno_coaches
+      : [];
+    return alumnoCoachesArr.some((co: any) => {
+      if (!co || typeof co !== "object") return false;
+      const code = String(
+        co?.codigo_equipo ?? co?.codigo ?? co?.id ?? "",
+      ).trim();
+      return code === myCode && isAtcCoach(co);
+    });
+  };
+
+  // Reproducir sonido de alerta
+  const playAlertSound = () => {
+    try {
+      const audio = new Audio("/new-notification-022-370046.mp3");
+      audio.volume = 0.7;
+      audio.play().catch(() => {});
+    } catch {}
+  };
+
   const selectedCoachUser = useMemo(() => {
     if (!coachFiltro) return null;
     const coach = coaches.find(
@@ -1450,6 +1554,82 @@ function TicketsBoardContent({
       clearTimeout(t);
     };
   }, [search, fechaDesde, fechaHasta, coachFiltro, studentCode, refreshBump]);
+
+  // Efecto: alertas de tickets pendientes hace más de 1 hora (polling cada 1 minuto)
+  useEffect(() => {
+    const checkPendingAlerts = () => {
+      if (loading) return;
+      const now = Date.now();
+      const ONE_HOUR = 60 * 60 * 1000;
+      const ALERT_INTERVAL = 25 * 60 * 1000; // 25 minutos
+      const myCode = String((user as any)?.codigo ?? "").trim();
+      const openTicketCode = String(selectedTicket?.codigo ?? "").trim();
+
+      // Limpiar set de alertados cada 25 min para permitir nueva alerta
+      if (now - lastAlertResetRef.current > ALERT_INTERVAL) {
+        alertedTicketsRef.current.clear();
+        lastAlertResetRef.current = now;
+      }
+
+      tickets.forEach((t) => {
+        if (coerceStatus(t.estado) !== "PENDIENTE") return;
+        if (!t.created_at) return;
+        const createdTime = new Date(t.created_at).getTime();
+        if (isNaN(createdTime)) return;
+        const age = now - createdTime;
+        const ONE_HOUR = 60 * 60 * 1000;
+        const MIN_TICKET_AGE = ONE_HOUR;
+        if (age < MIN_TICKET_AGE) return;
+        if (age < 0) return;
+        const ticketCode = String(t.codigo ?? t.id ?? "").trim();
+        if (!ticketCode) return;
+        if (ticketCode === openTicketCode) return;
+        if (!isUserResponsableForTicket(t, myCode)) return;
+        if (alertedTicketsRef.current.has(ticketCode)) return;
+
+        alertedTicketsRef.current.add(ticketCode);
+        playAlertSound();
+        toast({
+          title: `Ticket pendiente requiere atención`,
+          description: `${t.nombre ?? ticketCode} — Pendiente hace más de 1 hora`,
+          action: (
+            <ToastAction
+              altText="Ver ticket"
+              onClick={() => {
+                try {
+                  if (typeof window === "undefined") return;
+                  const isTicketsContext =
+                    window.location.pathname.includes("/admin/tickets-board") ||
+                    window.location.pathname.includes("/admin/teamsv2");
+                  if (isTicketsContext) {
+                    window.dispatchEvent(
+                      new CustomEvent("tickets:open", {
+                        detail: { codigo: ticketCode },
+                      })
+                    );
+                  } else {
+                    window.location.assign(
+                      `/admin/tickets-board?openTicket=${encodeURIComponent(ticketCode)}`
+                    );
+                  }
+                } catch {}
+              }}
+            >
+              Ver ticket
+            </ToastAction>
+          ),
+        });
+      });
+    };
+
+    // Verificar inmediatamente al montar
+    checkPendingAlerts();
+
+    // Luego cada 1 minuto
+    const intervalId = setInterval(checkPendingAlerts, 60 * 1000);
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, tickets, user, selectedTicket]);
 
   // Snackbar inicial avisando sobre tickets en PAUSADO
   const didShowPausedToast = useRef(false);

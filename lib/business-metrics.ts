@@ -208,6 +208,7 @@ export function canAccessBusinessMetrics(user?: User | null): boolean {
  */
 export const TEAM_PERFORMANCE_OWNER_IDS = new Set<string>([
   "JW1djJJnTqKI6sfM",
+  "jW1djJJnTqKI6sfM",
   "hQycZczVb77e9eLwJpxPJ",
   "TIn8eFkuYkaOi998",
 ]);
