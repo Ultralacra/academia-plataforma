@@ -1330,9 +1330,7 @@ export function AppSidebar() {
             >
               {/* Avatar animado Emma */}
               <div className="relative shrink-0">
-                <div className="h-10 w-10 rounded-xl bg-linear-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-md">
-                  <Sparkles className="h-5 w-5 text-white" />
-                </div>
+                <img src="/emma-avatar.png" alt="Emma" className="h-10 w-10 rounded-xl object-cover shadow-md" />
                 {/* Ping verde “en línea” */}
                 <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70"></span>

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
-  Bot,
   Calendar,
   CheckCircle2,
   ChevronRight,
@@ -133,7 +132,7 @@ function StudentSidebar({
       <div className="overflow-hidden rounded-2xl border border-teal-200/60 bg-linear-to-br from-teal-50/60 to-emerald-50/40 shadow-sm dark:border-teal-800/40 dark:from-teal-900/20 dark:to-emerald-900/10">
         <div className="p-4">
           <div className="mb-2 flex items-center gap-2">
-            <Bot className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            <img src="/emma-avatar.png" alt="Emma" className="h-4 w-4 rounded-full object-cover" />
             <p className="text-sm font-semibold text-teal-800 dark:text-teal-200">
               Emma · Asistente IA
             </p>
@@ -592,9 +591,7 @@ function AgentePageContent() {
       <div className="mb-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
-              <Bot className="h-5 w-5 text-white" />
-            </div>
+            <img src="/emma-avatar.png" alt="Emma" className="h-10 w-10 rounded-xl object-cover shadow-sm" />
             <div>
               <h1 className="text-xl font-bold text-foreground">
                 Emma · Asistente IA

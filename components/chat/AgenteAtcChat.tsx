@@ -1429,9 +1429,7 @@ export function AgenteAtcChat({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-card/80 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
-            <Bot className="h-4 w-4 text-white" />
-          </div>
+          <img src="/emma-avatar.png" alt="Emma" className="h-8 w-8 rounded-full object-cover shadow-sm" />
           <div>
             <p className="text-sm font-semibold text-foreground">
               {mode === "alumno" ? "Emma · Asistente IA" : "Super Agente ATC"}
