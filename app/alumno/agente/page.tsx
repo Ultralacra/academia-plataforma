@@ -106,10 +106,10 @@ function StudentSidebar({
       {/* Student info card */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         {/* Gradient header */}
-        <div className="h-1.5 w-full bg-linear-to-r from-teal-400 to-emerald-500" />
+        <div className="h-1.5 w-full bg-linear-to-r from-[#2d9eea] to-[#7aaad7]" />
         <div className="p-5">
           <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
               <User2 className="h-5 w-5 text-white" />
             </div>
             <div>
@@ -119,9 +119,9 @@ function StudentSidebar({
           </div>
 
           {/* Status indicator */}
-          <div className="flex items-center gap-2 rounded-xl bg-emerald-50/60 px-3 py-2 dark:bg-emerald-900/20">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+          <div className="flex items-center gap-2 rounded-xl bg-[#83d79e]/10 px-3 py-2 dark:bg-[#83d79e]/10">
+            <span className="h-2 w-2 rounded-full bg-[#83d79e]" />
+            <span className="text-xs font-medium text-[#83d79e] dark:text-[#83d79e]">
               Programa activo
             </span>
           </div>
@@ -129,15 +129,15 @@ function StudentSidebar({
       </div>
 
       {/* Agent info card */}
-      <div className="overflow-hidden rounded-2xl border border-teal-200/60 bg-linear-to-br from-teal-50/60 to-emerald-50/40 shadow-sm dark:border-teal-800/40 dark:from-teal-900/20 dark:to-emerald-900/10">
+      <div className="overflow-hidden rounded-2xl border border-[#2d9eea]/30 bg-linear-to-br from-[#2d9eea]/5 to-[#7aaad7]/5 shadow-sm dark:border-[#2d9eea]/20 dark:from-[#2d9eea]/10 dark:to-[#7aaad7]/5">
         <div className="p-4">
           <div className="mb-2 flex items-center gap-2">
             <img src="/emma-avatar.png" alt="Emma" className="h-4 w-4 rounded-full object-cover" />
-            <p className="text-sm font-semibold text-teal-800 dark:text-teal-200">
+            <p className="text-sm font-semibold text-[#2d9eea] dark:text-[#7aaad7]">
               Emma · Asistente IA
             </p>
           </div>
-          <p className="text-xs leading-relaxed text-teal-700/80 dark:text-teal-300/70">
+          <p className="text-xs leading-relaxed text-[#2d9eea]/80 dark:text-[#7aaad7]/70">
             Puedo ayudarte con membresías, contratos, pausas, extensiones,
             bonos, garantías y más. Cuando sea necesario, crearé un ticket de
             soporte para tu coach.
@@ -153,7 +153,7 @@ function StudentSidebar({
             ].map((topic) => (
               <span
                 key={topic}
-                className="rounded-lg bg-teal-100/80 px-2 py-0.5 text-center text-teal-700 dark:bg-teal-800/40 dark:text-teal-300"
+                className="rounded-lg bg-[#2d9eea]/10 px-2 py-0.5 text-center text-[#2d9eea] dark:bg-[#2d9eea]/20 dark:text-[#7aaad7]"
               >
                 {topic}
               </span>
@@ -299,7 +299,7 @@ function FeedbackModal({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="mb-1 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-violet-400 to-purple-500 shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-[#dd4970] to-[#dd4970] shadow-sm">
               <MessageSquarePlus className="h-5 w-5 text-white" />
             </div>
             <DialogTitle className="text-lg">¿Qué podemos mejorar?</DialogTitle>
@@ -311,8 +311,8 @@ function FeedbackModal({
 
         {sent ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-              <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#83d79e]/20 dark:bg-[#83d79e]/20">
+              <CheckCircle2 className="h-7 w-7 text-[#83d79e]" />
             </div>
             <p className="font-semibold text-foreground">
               ¡Gracias por tu feedback!
@@ -353,7 +353,7 @@ function FeedbackModal({
               <button
                 onClick={handleSubmit}
                 disabled={!text.trim() || sending}
-                className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-violet-500 to-purple-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-[#dd4970] to-[#dd4970] px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
               >
                 {sending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -603,7 +603,7 @@ function AgentePageContent() {
           </div>
           <button
             onClick={() => setShowFeedback(true)}
-            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-linear-to-r from-violet-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-violet-500/30 transition hover:shadow-lg hover:shadow-violet-500/40 hover:brightness-110 active:scale-95"
+            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-linear-to-r from-[#dd4970] to-[#dd4970] px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-[#dd4970]/30 transition hover:shadow-lg hover:shadow-[#dd4970]/40 hover:brightness-110 active:scale-95"
           >
             <span className="absolute inset-0 bg-white/10 opacity-0 transition group-hover:opacity-100" />
             <MessageSquarePlus className="h-4 w-4" />

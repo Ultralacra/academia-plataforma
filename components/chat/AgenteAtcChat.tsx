@@ -141,7 +141,7 @@ function MessageBubble({
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded-2xl rounded-br-sm bg-[#d97757] px-4 py-3 text-sm text-white shadow-sm">
+        <div className="max-w-[78%] rounded-2xl rounded-br-sm bg-[#dd4970] px-4 py-3 text-sm text-white shadow-sm">
           <p className="whitespace-pre-wrap leading-relaxed">
             {message.content}
           </p>
@@ -153,7 +153,7 @@ function MessageBubble({
   if (isAssistant) {
     return (
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
           <Bot className="h-4 w-4 text-white" />
         </div>
         <div className="max-w-[78%] rounded-2xl rounded-tl-sm border border-border bg-card px-4 py-3 text-sm shadow-sm">
@@ -195,21 +195,21 @@ function TicketActionCard({
   const { action, status } = pending;
 
   const prioridadColors: Record<string, string> = {
-    ALTA: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    ALTA: "bg-[#dd4970]/20 text-[#dd4970] dark:bg-[#dd4970]/20 dark:text-[#dd4970]",
     MEDIA:
-      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    BAJA: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+      "bg-[#f5b460]/20 text-[#f5b460] dark:bg-[#f5b460]/20 dark:text-[#f5b460]",
+    BAJA: "bg-[#83d79e]/20 text-[#83d79e] dark:bg-[#83d79e]/20 dark:text-[#83d79e]",
   };
 
   if (status === "created") {
     return (
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
           <Bot className="h-4 w-4 text-white" />
         </div>
-        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm shadow-sm dark:border-emerald-800/50 dark:bg-emerald-900/20">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span className="text-emerald-700 dark:text-emerald-400">
+        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-[#83d79e]/30 bg-[#83d79e]/10 px-4 py-3 text-sm shadow-sm dark:border-[#83d79e]/30 dark:bg-[#83d79e]/10">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-[#83d79e]" />
+          <span className="text-[#83d79e] dark:text-[#83d79e]">
             {isAlumno
               ? "✅ Feedback enviado exitosamente. Tu coach lo revisará pronto."
               : "✅ Ticket creado exitosamente."}
@@ -225,13 +225,13 @@ function TicketActionCard({
 
   return (
     <div className="flex items-start gap-2.5">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
         <Bot className="h-4 w-4 text-white" />
       </div>
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200/80 bg-teal-50/60 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-[#2d9eea]/30 bg-[#2d9eea]/5 px-4 py-3.5 shadow-sm dark:border-[#2d9eea]/20 dark:bg-[#2d9eea]/10">
         <div className="mb-2.5 flex items-center gap-2">
-          <Ticket className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+          <Ticket className="h-4 w-4 text-[#2d9eea] dark:text-[#7aaad7]" />
+          <span className="text-xs font-semibold tracking-wide text-[#2d9eea] dark:text-[#7aaad7]">
             {isAlumno ? "Propuesta de feedback" : "Propuesta de ticket"}
           </span>
         </div>
@@ -242,7 +242,7 @@ function TicketActionCard({
           {action.descripcion}
         </p>
         <div className="mb-3 flex flex-wrap gap-1.5">
-          <span className="rounded-full border border-teal-200 bg-teal-100 px-2 py-0.5 text-[11px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-900/40 dark:text-teal-300">
+          <span className="rounded-full border border-[#2d9eea]/30 bg-[#2d9eea]/10 px-2 py-0.5 text-[11px] font-medium text-[#2d9eea] dark:border-[#2d9eea]/30 dark:bg-[#2d9eea]/20 dark:text-[#7aaad7]">
             {action.categoria}
           </span>
           <span
@@ -260,7 +260,7 @@ function TicketActionCard({
           <div className="flex gap-2">
             <button
               onClick={onConfirm}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+              className="flex items-center gap-1.5 rounded-lg bg-[#2d9eea] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2589d1]"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               {isAlumno ? "Enviar feedback" : "Crear ticket"}
@@ -330,21 +330,21 @@ function TransferCard({
     // En modo ATC team: tarjeta informativa simple (sin confirmación)
     return (
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-500 shadow-sm">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#2d9eea] shadow-sm">
           <Bot className="h-4 w-4 text-white" />
         </div>
-        <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200 bg-teal-50 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+        <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-[#2d9eea]/30 bg-[#2d9eea]/5 px-4 py-3.5 shadow-sm dark:border-[#2d9eea]/20 dark:bg-[#2d9eea]/10">
           <div className="mb-1.5 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-            <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+            <CheckCircle2 className="h-4 w-4 text-[#2d9eea] dark:text-[#7aaad7]" />
+            <span className="text-xs font-semibold tracking-wide text-[#2d9eea] dark:text-[#7aaad7]">
               Transferencia a ATC sugerida
             </span>
           </div>
-          <p className="text-sm text-teal-700 dark:text-teal-300">
+          <p className="text-sm text-[#2d9eea] dark:text-[#7aaad7]">
             El alumno solicitó ser atendido por un agente humano.
           </p>
           {motivo && (
-            <p className="mt-1.5 text-xs text-teal-500 dark:text-teal-400">
+            <p className="mt-1.5 text-xs text-[#2d9eea]/70 dark:text-[#7aaad7]/70">
               Motivo: {motivo}
             </p>
           )}
@@ -355,31 +355,31 @@ function TransferCard({
 
   return (
     <div className="flex items-start gap-2.5">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-500 shadow-sm">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#2d9eea] shadow-sm">
         <Bot className="h-4 w-4 text-white" />
       </div>
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200 bg-teal-50 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-[#2d9eea]/30 bg-[#2d9eea]/5 px-4 py-3.5 shadow-sm dark:border-[#2d9eea]/20 dark:bg-[#2d9eea]/10">
         {!confirmed ? (
           <>
             <div className="mb-1.5 flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-              <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+              <MessageSquare className="h-4 w-4 text-[#2d9eea] dark:text-[#7aaad7]" />
+              <span className="text-xs font-semibold tracking-wide text-[#2d9eea] dark:text-[#7aaad7]">
                 Conectar con tu Agente ATC
               </span>
             </div>
-            <p className="mb-3 text-sm text-teal-700 dark:text-teal-300">
+            <p className="mb-3 text-sm text-[#2d9eea] dark:text-[#7aaad7]">
               ¿Quieres que te conecte con tu Agente de Atención al Cliente?
               Podrás continuar la conversación directamente en tu chat.
             </p>
             {motivo && (
-              <p className="mb-3 text-xs text-teal-500 dark:text-teal-400">
+              <p className="mb-3 text-xs text-[#2d9eea]/70 dark:text-[#7aaad7]/70">
                 Motivo: {motivo}
               </p>
             )}
             <div className="flex gap-2">
               <button
                 onClick={() => setConfirmed(true)}
-                className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+                className="flex items-center gap-1.5 rounded-lg bg-[#2d9eea] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2589d1]"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Sí, conectarme
@@ -398,17 +398,17 @@ function TransferCard({
         ) : (
           <>
             <div className="mb-1.5 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-              <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+              <CheckCircle2 className="h-4 w-4 text-[#2d9eea] dark:text-[#7aaad7]" />
+              <span className="text-xs font-semibold tracking-wide text-[#2d9eea] dark:text-[#7aaad7]">
                 ¡Listo! Tu ATC te espera en el chat
               </span>
             </div>
-            <p className="mb-3 text-sm text-teal-700 dark:text-teal-300">
+            <p className="mb-3 text-sm text-[#2d9eea] dark:text-[#7aaad7]">
               Haz clic en el botón para abrir tu chat y continuar con tu agente.
             </p>
             <button
               onClick={() => router.push(chatUrl)}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-teal-700"
+              className="flex items-center gap-1.5 rounded-lg bg-[#2d9eea] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#2589d1]"
             >
               <MessageSquare className="h-3.5 w-3.5" />
               Ir a mi chat con ATC
@@ -435,18 +435,18 @@ function PauseActionCard({
 
   const tipoBadge =
     action.tipo_pausa === "CONTRACTUAL"
-      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-      : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+      ? "bg-[#2d9eea]/20 text-[#2d9eea] dark:bg-[#2d9eea]/20 dark:text-[#2d9eea] border-[#2d9eea]/30 dark:border-[#2d9eea]/30"
+      : "bg-[#f5b460]/20 text-[#f5b460] dark:bg-[#f5b460]/20 dark:text-[#f5b460] border-[#f5b460]/30 dark:border-[#f5b460]/30";
 
   if (status === "created") {
     return (
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
           <Bot className="h-4 w-4 text-white" />
         </div>
-        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm shadow-sm dark:border-emerald-800/50 dark:bg-emerald-900/20">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span className="text-emerald-700 dark:text-emerald-400">
+        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-[#83d79e]/30 bg-[#83d79e]/10 px-4 py-3 text-sm shadow-sm dark:border-[#83d79e]/30 dark:bg-[#83d79e]/10">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-[#83d79e]" />
+          <span className="text-[#83d79e] dark:text-[#83d79e]">
             ✅ Pausa registrada correctamente. Tu programa queda suspendido del{" "}
             <strong>{action.start}</strong> al <strong>{action.end}</strong>.
           </span>
@@ -461,13 +461,13 @@ function PauseActionCard({
 
   return (
     <div className="flex items-start gap-2.5">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
         <Bot className="h-4 w-4 text-white" />
       </div>
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200/80 bg-teal-50/60 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-[#2d9eea]/30 bg-[#2d9eea]/5 px-4 py-3.5 shadow-sm dark:border-[#2d9eea]/20 dark:bg-[#2d9eea]/10">
         <div className="mb-2.5 flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+          <Calendar className="h-4 w-4 text-[#2d9eea] dark:text-[#7aaad7]" />
+          <span className="text-xs font-semibold tracking-wide text-[#2d9eea] dark:text-[#7aaad7]">
             Propuesta de pausa
           </span>
         </div>
@@ -503,7 +503,7 @@ function PauseActionCard({
           <div className="flex gap-2">
             <button
               onClick={onConfirm}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+              className="flex items-center gap-1.5 rounded-lg bg-[#2d9eea] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2589d1]"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               Registrar pausa
@@ -539,12 +539,12 @@ function TaskActionCard({
   if (status === "created") {
     return (
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
           <Bot className="h-4 w-4 text-white" />
         </div>
-        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm shadow-sm dark:border-emerald-800/50 dark:bg-emerald-900/20">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span className="text-emerald-700 dark:text-emerald-400">
+        <div className="flex max-w-[78%] items-center gap-2 rounded-2xl rounded-tl-sm border border-[#83d79e]/30 bg-[#83d79e]/10 px-4 py-3 text-sm shadow-sm dark:border-[#83d79e]/30 dark:bg-[#83d79e]/10">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-[#83d79e]" />
+          <span className="text-[#83d79e] dark:text-[#83d79e]">
             ✅ Tarea guardada correctamente. Tu coach fue notificado y revisará tu entrega de la Fase {fase} pronto.
           </span>
         </div>
@@ -555,7 +555,7 @@ function TaskActionCard({
   if (status === "error") {
     return (
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
           <Bot className="h-4 w-4 text-white" />
         </div>
         <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-red-200 bg-red-50 px-4 py-3.5 shadow-sm dark:border-red-800/40 dark:bg-red-900/20">
@@ -573,7 +573,7 @@ function TaskActionCard({
           <div className="flex gap-2">
             <button
               onClick={onConfirm}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+              className="flex items-center gap-1.5 rounded-lg bg-[#2d9eea] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2589d1]"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Reintentar
@@ -597,13 +597,13 @@ function TaskActionCard({
 
   return (
     <div className="flex items-start gap-2.5">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
         <Bot className="h-4 w-4 text-white" />
       </div>
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-teal-200/80 bg-teal-50/60 px-4 py-3.5 shadow-sm dark:border-teal-800/40 dark:bg-teal-900/20">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-[#2d9eea]/30 bg-[#2d9eea]/5 px-4 py-3.5 shadow-sm dark:border-[#2d9eea]/20 dark:bg-[#2d9eea]/10">
         <div className="mb-2.5 flex items-center gap-2">
-          <Paperclip className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-          <span className="text-xs font-semibold tracking-wide text-teal-700 dark:text-teal-300">
+          <Paperclip className="h-4 w-4 text-[#2d9eea] dark:text-[#7aaad7]" />
+          <span className="text-xs font-semibold tracking-wide text-[#2d9eea] dark:text-[#7aaad7]">
             Entrega de tarea — Fase {fase}
           </span>
         </div>
@@ -616,7 +616,7 @@ function TaskActionCard({
                   href={value}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-teal-600 underline dark:text-teal-400"
+                  className="text-[#2d9eea] underline dark:text-[#7aaad7]"
                 >
                   {value}
                 </a>
@@ -640,7 +640,7 @@ function TaskActionCard({
           <div className="flex gap-2">
             <button
               onClick={onConfirm}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700"
+              className="flex items-center gap-1.5 rounded-lg bg-[#2d9eea] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2589d1]"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               Guardar tarea
@@ -1418,7 +1418,7 @@ export function AgenteAtcChat({
       ? "bg-red-400"
       : (contextInfo?.weeklyTickets ?? 0) >= 5
         ? "bg-amber-400"
-        : "bg-teal-400";
+        : "bg-[#83d79e]";
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -1435,7 +1435,7 @@ export function AgenteAtcChat({
               {mode === "alumno" ? "Emma · Asistente IA" : "Super Agente ATC"}
             </p>
             <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#83d79e]" />
               <span className="text-[11px] text-muted-foreground">
                 {isStreaming ? "Escribiendo..." : "En línea"}
               </span>
@@ -1477,7 +1477,7 @@ export function AgenteAtcChat({
           messages.at(-1)?.role === "assistant" &&
           messages.at(-1)?.content === "" && (
             <div className="flex items-start gap-2.5">
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-400 to-emerald-500 shadow-sm">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
                 <Bot className="h-4 w-4 text-white" />
               </div>
               <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm border border-border bg-card px-4 py-3">
@@ -1560,7 +1560,7 @@ export function AgenteAtcChat({
                   key={i}
                   className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs ${
                     isAudio
-                      ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800/40 dark:bg-violet-900/20 dark:text-violet-300"
+                      ? "border-[#dd4970]/30 bg-[#dd4970]/10 text-[#dd4970] dark:border-[#dd4970]/30 dark:bg-[#dd4970]/10 dark:text-[#dd4970]"
                       : "border-border bg-muted/60 text-muted-foreground"
                   }`}
                 >
@@ -1701,7 +1701,7 @@ export function AgenteAtcChat({
           }}
         /> */}
 
-        <div className="flex items-end gap-2 rounded-xl border border-border bg-background px-3 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/20 transition-all">
+        <div className="flex items-end gap-2 rounded-xl border border-border bg-background px-3 py-2 focus-within:border-[#2d9eea]/60 focus-within:ring-2 focus-within:ring-[#2d9eea]/20 transition-all">
           {/* Attachment button — documentos */}
           <button
             type="button"
@@ -1760,7 +1760,7 @@ export function AgenteAtcChat({
             <button
               onClick={() => void handleSend()}
               disabled={!input.trim()}
-              className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white transition hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#2d9eea] text-white transition hover:bg-[#2589d1] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <SendHorizonal className="h-4 w-4" />
             </button>
