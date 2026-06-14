@@ -35,6 +35,7 @@ import {
   ChevronDown,
   Lock,
   PanelRight,
+  Pencil,
   Plus,
   RefreshCw,
   Settings2,
@@ -65,6 +66,14 @@ type KrStatus = "on_track" | "at_risk" | "off_track" | "paused";
 type KrMeasurementType = "numeric" | "percentage" | "boolean" | "manual";
 type KrQuarter = "Q1" | "Q2" | "Q3" | "Q4";
 
+type KrIndicator = {
+  id: string;
+  name: string;
+  target: number | null;
+  value: number | null;
+  unit: string;
+};
+
 type KrItem = {
   id: string;
   title: string;
@@ -74,7 +83,6 @@ type KrItem = {
   periodYear: number;
   status: KrStatus;
   progress: number;
-  // measurement fields
   measurementType: KrMeasurementType;
   targetValue: number | null;
   currentValue: number | null;
@@ -83,6 +91,7 @@ type KrItem = {
   aiReasoning: string;
   updatedAt: string;
   evidences: EvidenceItem[];
+  indicators: KrIndicator[];
 };
 
 type EvidenceItem = {
@@ -229,6 +238,15 @@ function normalizeKr(raw: any): KrItem {
           url: e.url ? String(e.url) : undefined,
           note: e.note ? String(e.note) : undefined,
           addedAt: String(e.addedAt ?? nowIso()),
+        }))
+      : [],
+    indicators: Array.isArray(raw?.indicators)
+      ? raw.indicators.map((i: any) => ({
+          id: String(i.id ?? uid()),
+          name: String(i.name ?? ""),
+          target: typeof i.target === "number" ? i.target : null,
+          value: typeof i.value === "number" ? i.value : null,
+          unit: String(i.unit ?? ""),
         }))
       : [],
   };
@@ -653,12 +671,15 @@ function KrCard({
         {/* Nombre del KR */}
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-2">
-            <Label
-              htmlFor={`kr-title-${kr.id}`}
-              className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium"
-            >
-              Nombre del KR
-            </Label>
+            <div className="flex items-center gap-1.5">
+              <Pencil className="h-3 w-3 text-muted-foreground/50" />
+              <Label
+                htmlFor={`kr-title-${kr.id}`}
+                className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium"
+              >
+                Nombre del KR
+              </Label>
+            </div>
             {canEdit && (
               <button
                 type="button"
@@ -1065,6 +1086,150 @@ function KrCard({
           </div>
         )}
 
+        {/* Indicators */}
+        <div className="border-t pt-2 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <Target className="h-3 w-3 text-muted-foreground/50" />
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                Indicadores
+              </span>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdate({
+                    indicators: [
+                      ...kr.indicators,
+                      { id: uid(), name: "", target: null, value: null, unit: "" },
+                    ],
+                  })
+                }
+                className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-700 transition-colors"
+              >
+                <Plus className="h-3 w-3" /> Agregar
+              </button>
+            )}
+          </div>
+          {kr.indicators.length === 0 ? (
+            <div className="rounded-md border border-dashed border-muted-foreground/20 bg-muted/20 p-3 text-center">
+              <p className="text-[11px] text-muted-foreground">
+                Agrega tu primer indicador para medir el KR
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {kr.indicators.map((ind) => {
+                const progress = ind.target && ind.target > 0 && ind.value !== null
+                  ? Math.min(100, Math.round((ind.value / ind.target) * 100))
+                  : null;
+                return (
+                  <div key={ind.id} className="rounded border bg-background/80 p-2 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <Input
+                        value={ind.name}
+                        disabled={!canEdit}
+                        onChange={(e) => {
+                          const updated = kr.indicators.map((i) =>
+                            i.id === ind.id ? { ...i, name: e.target.value } : i,
+                          );
+                          onUpdate({ indicators: updated });
+                        }}
+                        placeholder="Nombre"
+                        className="h-5 text-[10px] flex-1"
+                      />
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = kr.indicators.filter(
+                              (i) => i.id !== ind.id,
+                            );
+                            onUpdate({ indicators: updated });
+                          }}
+                          className="text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <label className="text-[9px] text-muted-foreground">Act:</label>
+                        <Input
+                          type="number"
+                          value={ind.value ?? ""}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const updated = kr.indicators.map((i) =>
+                              i.id === ind.id
+                                ? { ...i, value: e.target.value ? Number(e.target.value) : null }
+                                : i,
+                            );
+                            onUpdate({ indicators: updated });
+                          }}
+                          placeholder="0"
+                          className="h-5 text-[10px] w-14"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <label className="text-[9px] text-muted-foreground">Meta:</label>
+                        <Input
+                          type="number"
+                          value={ind.target ?? ""}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const updated = kr.indicators.map((i) =>
+                              i.id === ind.id
+                                ? { ...i, target: e.target.value ? Number(e.target.value) : null }
+                                : i,
+                            );
+                            onUpdate({ indicators: updated });
+                          }}
+                          placeholder="0"
+                          className="h-5 text-[10px] w-14"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <label className="text-[9px] text-muted-foreground">Und:</label>
+                        <Input
+                          value={ind.unit}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const updated = kr.indicators.map((i) =>
+                              i.id === ind.id ? { ...i, unit: e.target.value } : i,
+                            );
+                            onUpdate({ indicators: updated });
+                          }}
+                          placeholder="--"
+                          className="h-5 text-[10px] w-12"
+                        />
+                      </div>
+                      {progress !== null && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-14 h-1 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                progress >= 100 ? "bg-green-500" : progress >= 50 ? "bg-yellow-500" : "bg-blue-500",
+                              )}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <span className="text-[9px] font-bold tabular-nums w-7">
+                            {progress}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Footer timestamp */}
         <p className="text-[10px] text-muted-foreground/40">
           {new Date(kr.updatedAt).toLocaleString("es-ES", {
@@ -1179,6 +1344,27 @@ function KrExpandedPanel({
 
   return (
     <div className="px-4 py-3 bg-muted/5 border-t space-y-3">
+      {/* Nombre del KR */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <Pencil className="h-3 w-3 text-muted-foreground/50" />
+          <Label
+            htmlFor={`kr-title-exp-${kr.id}`}
+            className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium"
+          >
+            Nombre del KR
+          </Label>
+        </div>
+        <Input
+          id={`kr-title-exp-${kr.id}`}
+          value={kr.title}
+          disabled={!canEdit}
+          onChange={(e) => onUpdate({ title: e.target.value })}
+          className="h-8 text-sm font-semibold disabled:opacity-100 disabled:cursor-default"
+          placeholder="Ej: Aumentar ventas mensuales high ticket"
+        />
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         {/* Left: Descripción + Periodo + Asignados */}
         <div className="space-y-2">
@@ -1406,65 +1592,104 @@ function KrExpandedPanel({
           )}
         </div>
 
-        {/* Right: Measurement */}
-        <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-              Medición
-            </span>
-            {canEdit && (
-              <select
-                value={kr.measurementType}
-                onChange={(e) =>
-                  onUpdate({
-                    measurementType: e.target.value as KrMeasurementType,
-                  })
-                }
-                className="h-6 rounded border bg-background px-1.5 text-xs cursor-pointer max-w-40"
-              >
-                {(Object.keys(MEASUREMENT_LABELS) as KrMeasurementType[]).map(
-                  (mt) => (
-                    <option key={mt} value={mt}>
-                      {MEASUREMENT_LABELS[mt]}
-                    </option>
-                  ),
-                )}
-              </select>
-            )}
-            {!canEdit && (
-              <span className="text-xs text-muted-foreground">
-                {MEASUREMENT_LABELS[kr.measurementType]}
+        {/* Right: Measurement + Indicators */}
+        <div className="space-y-2">
+          {/* Measurement Card */}
+          <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                Medición
               </span>
-            )}
-          </div>
-
-          {kr.measurementType === "numeric" && (
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-0.5">
-                <label className="text-[10px] text-muted-foreground">
-                  Meta
-                </label>
-                <Input
-                  type="number"
-                  value={kr.targetValue ?? ""}
-                  disabled={!canEdit}
+              {canEdit && (
+                <select
+                  value={kr.measurementType}
                   onChange={(e) =>
                     onUpdate({
-                      targetValue: e.target.value
-                        ? Number(e.target.value)
-                        : null,
+                      measurementType: e.target.value as KrMeasurementType,
                     })
                   }
-                  className="h-7 text-xs"
-                  placeholder="1000"
-                />
+                  className="h-6 rounded border bg-background px-1.5 text-xs cursor-pointer max-w-40"
+                >
+                  {(Object.keys(MEASUREMENT_LABELS) as KrMeasurementType[]).map(
+                    (mt) => (
+                      <option key={mt} value={mt}>
+                        {MEASUREMENT_LABELS[mt]}
+                      </option>
+                    ),
+                  )}
+                </select>
+              )}
+              {!canEdit && (
+                <span className="text-xs text-muted-foreground">
+                  {MEASUREMENT_LABELS[kr.measurementType]}
+                </span>
+              )}
+            </div>
+
+            {kr.measurementType === "numeric" && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-0.5">
+                  <label className="text-[10px] text-muted-foreground">
+                    Meta
+                  </label>
+                  <Input
+                    type="number"
+                    value={kr.targetValue ?? ""}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      onUpdate({
+                        targetValue: e.target.value
+                          ? Number(e.target.value)
+                          : null,
+                      })
+                    }
+                    className="h-7 text-xs"
+                    placeholder="1000"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[10px] text-muted-foreground">
+                    Actual
+                  </label>
+                  <Input
+                    type="number"
+                    value={kr.currentValue ?? ""}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      onUpdate({
+                        currentValue: e.target.value
+                          ? Number(e.target.value)
+                          : null,
+                      })
+                    }
+                    className="h-7 text-xs"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[10px] text-muted-foreground">
+                    Unidad
+                  </label>
+                  <Input
+                    value={kr.unit}
+                    disabled={!canEdit}
+                    onChange={(e) => onUpdate({ unit: e.target.value })}
+                    className="h-7 text-xs"
+                    placeholder="$"
+                  />
+                </div>
               </div>
-              <div className="space-y-0.5">
-                <label className="text-[10px] text-muted-foreground">
-                  Actual
+            )}
+
+            {kr.measurementType === "percentage" && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">
+                  Valor actual
                 </label>
                 <Input
                   type="number"
+                  min={0}
+                  max={100}
                   value={kr.currentValue ?? ""}
                   disabled={!canEdit}
                   onChange={(e) =>
@@ -1474,90 +1699,181 @@ function KrExpandedPanel({
                         : null,
                     })
                   }
-                  className="h-7 text-xs"
+                  className="h-7 w-20 text-xs"
                   placeholder="0"
                 />
+                <span className="text-xs text-muted-foreground">%</span>
               </div>
-              <div className="space-y-0.5">
-                <label className="text-[10px] text-muted-foreground">
-                  Unidad
-                </label>
-                <Input
-                  value={kr.unit}
-                  disabled={!canEdit}
-                  onChange={(e) => onUpdate({ unit: e.target.value })}
-                  className="h-7 text-xs"
-                  placeholder="$"
-                />
-              </div>
-            </div>
-          )}
+            )}
 
-          {kr.measurementType === "percentage" && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">
-                Valor actual
-              </label>
-              <Input
-                type="number"
+            {kr.measurementType === "boolean" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id={`bool-exp-${kr.id}`}
+                  checked={!!kr.currentValue}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    onUpdate({ currentValue: e.target.checked ? 1 : 0 })
+                  }
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                <label
+                  htmlFor={`bool-exp-${kr.id}`}
+                  className="text-xs text-muted-foreground cursor-pointer"
+                >
+                  {kr.currentValue ? "Completado ✓" : "Pendiente"}
+                </label>
+              </div>
+            )}
+
+            {kr.measurementType === "manual" && canEdit && (
+              <input
+                type="range"
                 min={0}
                 max={100}
-                value={kr.currentValue ?? ""}
-                disabled={!canEdit}
-                onChange={(e) =>
-                  onUpdate({
-                    currentValue: e.target.value
-                      ? Number(e.target.value)
-                      : null,
-                  })
-                }
-                className="h-7 w-20 text-xs"
-                placeholder="0"
+                value={kr.progress}
+                onChange={(e) => onUpdate({ progress: Number(e.target.value) })}
+                className="w-full h-1.5 accent-blue-600 cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
               />
-              <span className="text-xs text-muted-foreground">%</span>
+            )}
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">Avance</span>
+                <span className="text-xs font-bold tabular-nums">
+                  {kr.progress}%
+                </span>
+              </div>
+              <KrProgressBar value={kr.progress} status={kr.status} />
             </div>
-          )}
+          </div>
 
-          {kr.measurementType === "boolean" && (
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id={`bool-exp-${kr.id}`}
-                checked={!!kr.currentValue}
-                disabled={!canEdit}
-                onChange={(e) =>
-                  onUpdate({ currentValue: e.target.checked ? 1 : 0 })
-                }
-                className="h-4 w-4 rounded accent-blue-600"
-              />
-              <label
-                htmlFor={`bool-exp-${kr.id}`}
-                className="text-xs text-muted-foreground cursor-pointer"
-              >
-                {kr.currentValue ? "Completado ✓" : "Pendiente"}
-              </label>
-            </div>
-          )}
-
-          {kr.measurementType === "manual" && canEdit && (
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={kr.progress}
-              onChange={(e) => onUpdate({ progress: Number(e.target.value) })}
-              className="w-full h-1.5 accent-blue-600 cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
-            />
-          )}
-
-          <div className="space-y-1">
+          {/* Indicators Card */}
+          <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">Avance</span>
-              <span className="text-xs font-bold tabular-nums">
-                {kr.progress}%
-              </span>
+              <div className="flex items-center gap-1">
+                <Target className="h-3 w-3 text-muted-foreground/50" />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Indicadores
+                </span>
+              </div>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdate({
+                      indicators: [
+                        ...kr.indicators,
+                        { id: uid(), name: "", target: null, value: null, unit: "" },
+                      ],
+                    })
+                  }
+                  className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  <Plus className="h-3 w-3" /> Agregar
+                </button>
+              )}
             </div>
-            <KrProgressBar value={kr.progress} status={kr.status} />
+            {kr.indicators.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground italic text-center py-2">
+                Agrega indicadores para medir el KR
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {kr.indicators.map((ind) => {
+                  const progress = ind.target && ind.target > 0 && ind.value !== null
+                    ? Math.min(100, Math.round((ind.value / ind.target) * 100))
+                    : null;
+                  return (
+                    <div key={ind.id} className="rounded-md border bg-background p-2.5 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Input
+                          value={ind.name}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const updated = kr.indicators.map((i) =>
+                              i.id === ind.id ? { ...i, name: e.target.value } : i,
+                            );
+                            onUpdate({ indicators: updated });
+                          }}
+                          placeholder="Nombre del indicador"
+                          className="h-7 text-xs flex-1"
+                        />
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = kr.indicators.filter(
+                                (i) => i.id !== ind.id,
+                              );
+                              onUpdate({ indicators: updated });
+                            }}
+                            className="text-muted-foreground/40 hover:text-destructive transition-colors shrink-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[10px] text-muted-foreground whitespace-nowrap">Actual:</label>
+                          <Input
+                            type="number"
+                            value={ind.value ?? ""}
+                            disabled={!canEdit}
+                            onChange={(e) => {
+                              const updated = kr.indicators.map((i) =>
+                                i.id === ind.id
+                                  ? { ...i, value: e.target.value ? Number(e.target.value) : null }
+                                  : i,
+                              );
+                              onUpdate({ indicators: updated });
+                            }}
+                            placeholder="0"
+                            className="h-7 text-xs w-24"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[10px] text-muted-foreground whitespace-nowrap">Meta:</label>
+                          <Input
+                            type="number"
+                            value={ind.target ?? ""}
+                            disabled={!canEdit}
+                            onChange={(e) => {
+                              const updated = kr.indicators.map((i) =>
+                                i.id === ind.id
+                                  ? { ...i, target: e.target.value ? Number(e.target.value) : null }
+                                  : i,
+                              );
+                              onUpdate({ indicators: updated });
+                            }}
+                            placeholder="0"
+                            className="h-7 text-xs w-24"
+                          />
+                        </div>
+                        {progress !== null && (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all",
+                                  progress >= 100 ? "bg-green-500" : progress >= 50 ? "bg-yellow-500" : "bg-blue-500",
+                                )}
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold tabular-nums w-9">
+                              {progress}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2285,6 +2601,7 @@ function TeamPerformancePageContent() {
               formula: "",
               aiReasoning: "",
               updatedAt: nowIso(),
+              indicators: [],
             },
           ],
         };

@@ -26,6 +26,7 @@ import {
   Lock,
   Database,
   Bot,
+  HardDrive,
 } from "lucide-react";
 import {
   Sidebar,
@@ -190,6 +191,11 @@ const adminItems: MenuItem[] = [
     title: "Monitor Metadata",
     url: "/admin/metadata-analytics",
     icon: Database,
+  },
+  {
+    title: "Storage Test",
+    url: "/admin/storage-test",
+    icon: HardDrive,
   },
 ];
 
