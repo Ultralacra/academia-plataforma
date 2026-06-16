@@ -2,13 +2,14 @@
 
 import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
 import StudentChatDisclaimer from "@/components/chat/StudentChatDisclaimer";
+import { EmmaChatViewer } from "@/components/chat/EmmaChatViewer";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RotateCw, Search, X, MessageCircle, Loader2 } from "lucide-react";
+import { Bot, RotateCw, Search, X, MessageCircle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   dataService,
@@ -106,7 +107,7 @@ export default function AdminChatPage() {
   const [readsBump, setReadsBump] = useState<number>(0);
 
   const [contactTab, setContactTab] = useState<
-    "coaches" | "students" | "conversations"
+    "coaches" | "students" | "conversations" | "emma"
   >("coaches");
   const [filterTab, setFilterTab] = useState<"general" | "advanced">("general");
   const chatViewerRef = useRef<HTMLDivElement | null>(null);
@@ -118,6 +119,21 @@ export default function AdminChatPage() {
   const [chatListLoading, setChatListLoading] = useState(false);
   const [isContextSwitching, setIsContextSwitching] = useState(false);
   const [switchingToLabel, setSwitchingToLabel] = useState<string>("");
+
+  const [emmaStudents, setEmmaStudents] = useState<
+    Array<{
+      code: string;
+      name: string;
+      messageCount: number;
+      lastMessage: string;
+      lastTimestamp: string;
+    }>
+  >([]);
+  const [emmaLoading, setEmmaLoading] = useState(false);
+  const [selectedEmmaStudent, setSelectedEmmaStudent] = useState<string | null>(
+    null,
+  );
+  const [emmaViewActive, setEmmaViewActive] = useState(false);
 
   // Cargar catálogos
   useEffect(() => {
@@ -140,6 +156,74 @@ export default function AdminChatPage() {
       alive = false;
     };
   }, []);
+
+  const loadEmmaHistories = useCallback(async () => {
+    setEmmaLoading(true);
+    try {
+      const token = getAuthToken();
+      const url = `/api/metadata?entity=super_atc_chat_history&pageSize=500`;
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        setEmmaLoading(false);
+        return;
+      }
+
+      const json = await res.json().catch(() => null);
+      const items: any[] = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json?.items)
+            ? json.items
+            : json
+              ? [json]
+              : [];
+
+      const histories = items.filter(
+        (m: any) => m?.entity === "super_atc_chat_history",
+      );
+
+      const parsed = histories
+        .map((item: any) => {
+          const payload = item.payload ?? {};
+          const code = String(payload.alumnoCode ?? item.entity_id ?? "");
+          const name = String(payload.alumnoName ?? code);
+          const messages = Array.isArray(payload.messages)
+            ? payload.messages
+            : [];
+          const lastMsg = messages[messages.length - 1];
+          return {
+            code,
+            name,
+            messageCount: messages.length,
+            lastMessage: lastMsg?.content?.slice(0, 80) ?? "",
+            lastTimestamp: lastMsg?.timestamp ?? item.updated_at ?? "",
+          };
+        })
+        .filter((h: any) => h.code && h.messageCount > 0)
+        .sort((a: any, b: any) => {
+          const ta = Date.parse(a.lastTimestamp) || 0;
+          const tb = Date.parse(b.lastTimestamp) || 0;
+          return tb - ta;
+        });
+
+      setEmmaStudents(parsed);
+    } catch (err) {
+      console.error("[chat-beta] loadEmmaHistories failed", err);
+    } finally {
+      setEmmaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (contactTab === "emma") {
+      loadEmmaHistories();
+    }
+  }, [contactTab, loadEmmaHistories]);
 
   // Opciones derivadas para filtros
   const areaOptions = useMemo(() => {
@@ -1335,10 +1419,16 @@ export default function AdminChatPage() {
               <div className="flex-1 min-h-0 flex flex-col px-4 py-3">
                 <Tabs
                   value={contactTab}
-                  onValueChange={(v) => setContactTab(v as any)}
+                  onValueChange={(v) => {
+                    setContactTab(v as any);
+                    if (v !== "emma") {
+                      setEmmaViewActive(false);
+                      setSelectedEmmaStudent(null);
+                    }
+                  }}
                   className="flex flex-col h-full"
                 >
-                  <TabsList className="grid w-full grid-cols-2 bg-[#f0f2f5] mb-3 flex-shrink-0">
+                  <TabsList className="grid w-full grid-cols-3 bg-[#f0f2f5] mb-3 flex-shrink-0">
                     <TabsTrigger value="coaches" className="text-xs">
                       Coaches
                     </TabsTrigger>
@@ -1348,6 +1438,10 @@ export default function AdminChatPage() {
                       disabled
                     >
                       Alumnos
+                    </TabsTrigger>
+                    <TabsTrigger value="emma" className="text-xs gap-1.5">
+                      <Bot className="h-3.5 w-3.5" />
+                      Emma
                     </TabsTrigger>
                   </TabsList>
 
@@ -1584,6 +1678,93 @@ export default function AdminChatPage() {
                         );
                       })}
                     </ul>
+                  </TabsContent>
+
+                  <TabsContent value="emma" className="flex-1 min-h-0 mt-0">
+                    {emmaLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-5 w-5 animate-spin text-[#2d9eea]" />
+                      </div>
+                    ) : emmaStudents.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                        <Bot className="h-8 w-8 text-gray-300 mb-2" />
+                        <p className="text-xs">
+                          No hay conversaciones con Emma aún
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="space-y-0 text-sm h-full overflow-auto">
+                        {emmaStudents.map((emma) => {
+                          const selected =
+                            selectedEmmaStudent === emma.code;
+                          const studentInfo = students.find(
+                            (s) =>
+                              String(s.code ?? s.id).toLowerCase() ===
+                              emma.code.toLowerCase(),
+                          );
+                          return (
+                            <li key={emma.code}>
+                              <button
+                                className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
+                                  selected ? "bg-[#e7f3ff]" : ""
+                                }`}
+                                onClick={() => {
+                                  setSelectedEmmaStudent(emma.code);
+                                  setEmmaViewActive(true);
+                                  setTargetKind(null);
+                                  setTargetId(null);
+                                  setSelectedChatId(null);
+                                  setCurrentOpenChatId(null);
+                                  setTargetTitle(
+                                    `Emma · ${studentInfo?.name || emma.name}`,
+                                  );
+                                  setTargetSubtitle("Conversación IA");
+                                }}
+                              >
+                                <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
+                                  <div className="relative">
+                                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#2d9eea] to-[#7aaad7] text-white grid place-items-center font-semibold text-sm shrink-0">
+                                      {emma.name
+                                        .slice(0, 1)
+                                        .toUpperCase()}
+                                    </div>
+                                    <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white grid place-items-center">
+                                      <Bot className="h-3 w-3 text-[#2d9eea]" />
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate font-medium text-[15px] text-gray-900">
+                                      {studentInfo?.name || emma.name}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-[11px] text-gray-500 truncate">
+                                        {emma.lastMessage || "Sin mensajes"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-[10px] text-gray-400">
+                                        {emma.messageCount} msgs
+                                      </span>
+                                      {emma.lastTimestamp && (
+                                        <span className="text-[10px] text-gray-400">
+                                          ·{" "}
+                                          {new Date(
+                                            emma.lastTimestamp,
+                                          ).toLocaleDateString("es-ES", {
+                                            day: "2-digit",
+                                            month: "short",
+                                          })}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </TabsContent>
 
                   <TabsContent
@@ -1961,65 +2142,99 @@ export default function AdminChatPage() {
                   </div>
                 </div>
               )}
-              <div className="absolute top-2 right-3 z-30 rounded-full bg-black/55 px-3 py-1 text-[11px] text-white">
-                Solo lectura
-              </div>
-              {/* Disclaimer de contrato del alumno */}
-              {targetKind === "alumno" && targetId && (
-                <StudentChatDisclaimer
-                  alumnoId={selectedStudentItem?.id ?? targetId}
-                  alumnoCode={selectedStudentItem?.code ?? targetId}
-                  studentInfo={
-                    selectedStudentItem
-                      ? {
-                          name: selectedStudentItem.name,
-                          state: selectedStudentItem.state ?? null,
-                          stage: selectedStudentItem.stage ?? null,
-                          tag: selectedStudentItem.tag ?? null,
-                          joinDate: selectedStudentItem.joinDate ?? null,
-                          inactivityDays:
-                            selectedStudentItem.inactivityDays ?? null,
-                          lastActivity:
-                            selectedStudentItem.lastActivity ?? null,
-                        }
-                      : null
-                  }
-                />
-              )}
-              {/* Vista global: listar TODAS las conversaciones sin filtrar por equipo del admin */}
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <CoachChatInline
-                  room={room}
-                  role="coach"
-                  title={targetTitle}
-                  subtitle={targetSubtitle}
-                  variant="card"
-                  className="h-full shadow-none border-0"
-                  socketio={{
-                    url: SOCKET_URL || undefined,
-                    idEquipo: selectedCoachCode ?? undefined,
-                    idCliente: selectedStudentCode ?? undefined,
-                    // Modo solo lectura: no crear chats nuevos desde beta.
-                    autoCreate: false,
-                    autoJoin: !!selectedChatId,
-                    chatId: selectedChatId ?? undefined,
-                  }}
-                  onConnectionChange={setConnected}
-                  requestListSignal={listSignal}
-                  // Igual al flujo de coach: filtrar por participante seleccionado.
-                  listParams={chatListParams}
-                  onChatInfo={(info) => {
-                    setCurrentOpenChatId(info?.chatId ?? null);
-                    if (info?.chatId != null) {
-                      try {
-                        const k = `chatUnreadById:coach:${String(info.chatId)}`;
-                        localStorage.setItem(k, "0");
-                      } catch {}
-                      setReadsBump((n) => n + 1);
+              {emmaViewActive && selectedEmmaStudent ? (
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <EmmaChatViewer
+                    alumnoCode={selectedEmmaStudent}
+                    alumnoName={
+                      students.find(
+                        (s) =>
+                          String(s.code ?? s.id).toLowerCase() ===
+                          selectedEmmaStudent.toLowerCase(),
+                      )?.name ||
+                      emmaStudents.find((e) => e.code === selectedEmmaStudent)
+                        ?.name ||
+                      selectedEmmaStudent
                     }
-                  }}
-                />
-              </div>
+                    alumnoStage={
+                      students.find(
+                        (s) =>
+                          String(s.code ?? s.id).toLowerCase() ===
+                          selectedEmmaStudent.toLowerCase(),
+                      )?.stage
+                    }
+                    alumnoState={
+                      students.find(
+                        (s) =>
+                          String(s.code ?? s.id).toLowerCase() ===
+                          selectedEmmaStudent.toLowerCase(),
+                      )?.state
+                    }
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="absolute top-2 right-3 z-30 rounded-full bg-black/55 px-3 py-1 text-[11px] text-white">
+                    Solo lectura
+                  </div>
+                  {/* Disclaimer de contrato del alumno */}
+                  {targetKind === "alumno" && targetId && (
+                    <StudentChatDisclaimer
+                      alumnoId={selectedStudentItem?.id ?? targetId}
+                      alumnoCode={selectedStudentItem?.code ?? targetId}
+                      studentInfo={
+                        selectedStudentItem
+                          ? {
+                              name: selectedStudentItem.name,
+                              state: selectedStudentItem.state ?? null,
+                              stage: selectedStudentItem.stage ?? null,
+                              tag: selectedStudentItem.tag ?? null,
+                              joinDate: selectedStudentItem.joinDate ?? null,
+                              inactivityDays:
+                                selectedStudentItem.inactivityDays ?? null,
+                              lastActivity:
+                                selectedStudentItem.lastActivity ?? null,
+                            }
+                          : null
+                      }
+                    />
+                  )}
+                  {/* Vista global: listar TODAS las conversaciones sin filtrar por equipo del admin */}
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <CoachChatInline
+                      room={room}
+                      role="coach"
+                      title={targetTitle}
+                      subtitle={targetSubtitle}
+                      variant="card"
+                      className="h-full shadow-none border-0"
+                      socketio={{
+                        url: SOCKET_URL || undefined,
+                        idEquipo: selectedCoachCode ?? undefined,
+                        idCliente: selectedStudentCode ?? undefined,
+                        // Modo solo lectura: no crear chats nuevos desde beta.
+                        autoCreate: false,
+                        autoJoin: !!selectedChatId,
+                        chatId: selectedChatId ?? undefined,
+                      }}
+                      onConnectionChange={setConnected}
+                      requestListSignal={listSignal}
+                      // Igual al flujo de coach: filtrar por participante seleccionado.
+                      listParams={chatListParams}
+                      onChatInfo={(info) => {
+                        setCurrentOpenChatId(info?.chatId ?? null);
+                        if (info?.chatId != null) {
+                          try {
+                            const k = `chatUnreadById:coach:${String(info.chatId)}`;
+                            localStorage.setItem(k, "0");
+                          } catch {}
+                          setReadsBump((n) => n + 1);
+                        }
+                      }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
