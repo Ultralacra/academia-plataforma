@@ -286,6 +286,24 @@ export default function EmmaMetricsPage() {
         })
         .filter((h: HistoryEntry) => h.code && h.messages.length > 0);
 
+      console.log("[emma-metrics][loadHistories]", {
+        totalItems: items.length,
+        historiesLoaded: parsed.length,
+        totalMessages: parsed.reduce((acc, h) => acc + h.messages.length, 0),
+        sampleHistory: parsed[0]
+          ? {
+              code: parsed[0].code,
+              name: parsed[0].name,
+              msgCount: parsed[0].messages.length,
+              sampleMessages: parsed[0].messages.slice(0, 3).map((m) => ({
+                role: m.role,
+                contentPreview: m.content.slice(0, 100),
+                hasAccion: m.content.includes("[ACCION:"),
+              })),
+            }
+          : null,
+      });
+
       setHistories(parsed);
     } catch (err) {
       console.error("[emma-metrics] load failed", err);
@@ -383,6 +401,110 @@ export default function EmmaMetricsPage() {
     return Object.values(map)
       .sort((a, b) => b.messageCount - a.messageCount)
       .slice(0, 20);
+  }, [allMessages]);
+
+  const pauseStats = useMemo(() => {
+    const pauses: Array<{
+      alumnoCode: string;
+      alumnoName: string;
+      tipo: string;
+      motivo: string;
+      start: string;
+      end: string;
+      timestamp: string;
+    }> = [];
+
+    const debugData: any[] = [];
+
+    function extractActions(text: string): any[] {
+      const results: any[] = [];
+      let searchFrom = 0;
+      while (true) {
+        const startIdx = text.indexOf('[ACCION:', searchFrom);
+        if (startIdx === -1) break;
+        const jsonStart = startIdx + '[ACCION:'.length;
+
+        let depth = 0;
+        let endIdx = -1;
+        for (let i = jsonStart; i < text.length; i++) {
+          if (text[i] === '{') depth++;
+          else if (text[i] === '}') {
+            depth--;
+            if (depth === 0) {
+              endIdx = i + 1;
+              break;
+            }
+          }
+        }
+
+        if (endIdx > jsonStart) {
+          const jsonStr = text.substring(jsonStart, endIdx);
+          try {
+            results.push(JSON.parse(jsonStr));
+          } catch {}
+        }
+
+        searchFrom = endIdx > 0 ? endIdx : jsonStart + 1;
+      }
+      return results;
+    }
+
+    for (const msg of allMessages) {
+      if (msg.role !== "assistant") continue;
+      if (!msg.content.includes("[ACCION:")) continue;
+
+      const actions = extractActions(msg.content);
+
+      for (const action of actions) {
+        debugData.push({
+          alumno: msg.studentName,
+          code: msg.studentCode,
+          contentPreview: msg.content.slice(0, 200),
+          parsed: action,
+        });
+
+        if (action.tipo === "pausa") {
+          pauses.push({
+            alumnoCode: msg.studentCode,
+            alumnoName: msg.studentName,
+            tipo: action.tipo_pausa || "CONTRACTUAL",
+            motivo: action.motivo || "",
+            start: action.start || "",
+            end: action.end || "",
+            timestamp: msg.timestamp,
+          });
+        }
+      }
+    }
+
+    console.log("[emma-metrics][pauseStats]", {
+      totalAssistantWithActions: debugData.length,
+      pausesFound: pauses.length,
+      allActions: debugData,
+    });
+
+    const byType: Record<string, number> = {};
+    const byStudent: Record<string, { name: string; count: number }> = {};
+    for (const p of pauses) {
+      byType[p.tipo] = (byType[p.tipo] || 0) + 1;
+      if (!byStudent[p.alumnoCode]) {
+        byStudent[p.alumnoCode] = { name: p.alumnoName, count: 0 };
+      }
+      byStudent[p.alumnoCode].count += 1;
+    }
+
+    return {
+      total: pauses.length,
+      byType,
+      byStudent: Object.entries(byStudent)
+        .map(([code, data]) => ({ code, ...data }))
+        .sort((a, b) => b.count - a.count),
+      pauses: pauses.sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      ),
+      debugData,
+    };
   }, [allMessages]);
 
   const barChartData = useMemo(() => {
@@ -843,6 +965,237 @@ export default function EmmaMetricsPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-blue-500" />
+                Pausas Propuestas por Emma
+              </h2>
+              <button
+                onClick={() => {
+                  console.log("[emma-metrics][DEBUG] === PAUSAS ===");
+                  console.log("[emma-metrics][DEBUG] Pausas:", pauseStats.pauses);
+                  console.log("[emma-metrics][DEBUG] Todas las acciones:", pauseStats.debugData);
+                  console.log("[emma-metrics][DEBUG] Stats:", {
+                    total: pauseStats.total,
+                    byType: pauseStats.byType,
+                    byStudent: pauseStats.byStudent,
+                  });
+                  console.log("[emma-metrics][DEBUG] === ALL MESSAGES ===");
+                  console.log("[emma-metrics][DEBUG] Total mensajes:", allMessages.length);
+                  console.log("[emma-metrics][DEBUG] Mensajes assistant:", allMessages.filter(m => m.role === "assistant").length);
+                  const assistantWithAccion = allMessages.filter(m => m.role === "assistant" && m.content.includes("[ACCION:"));
+                  console.log("[emma-metrics][DEBUG] Assistant con [ACCION:]:", assistantWithAccion.length);
+                  assistantWithAccion.forEach((m, i) => {
+                    console.log(`[emma-metrics][DEBUG] Accion ${i}:`, {
+                      alumno: m.studentName,
+                      content: m.content.slice(0, 300),
+                    });
+                  });
+                  alert(
+                    `DEBUG: Revisa la consola del navegador (F12)\n\n` +
+                    `Acciones encontradas: ${pauseStats.debugData.length}\n` +
+                    `Pausas encontradas: ${pauseStats.total}\n` +
+                    `Mensajes totales: ${allMessages.length}\n` +
+                    `Assistant con [ACCION:]: ${assistantWithAccion.length}\n\n` +
+                    `Busca en consola: [emma-metrics][DEBUG]`,
+                  );
+                }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors"
+              >
+                Debug: Imprimir acciones en consola
+              </button>
+            </div>
+            {pauseStats.total === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-sm text-slate-500 mb-3">
+                  No se han propuesto pausas aún
+                </p>
+                {pauseStats.debugData.length > 0 && (
+                  <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 inline-block">
+                    Se encontraron {pauseStats.debugData.length} acciones, pero ninguna es de tipo "pausa".
+                    Haz clic en "Debug" arriba para ver qué acciones existen.
+                  </p>
+                )}
+                {pauseStats.debugData.length === 0 && (
+                  <p className="text-xs text-slate-400">
+                    No se encontraron bloques [ACCION:...] en los mensajes de Emma.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-3 mb-5">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">
+                      Total propuestas
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-blue-900">
+                      {pauseStats.total}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+                    <p className="text-xs font-medium text-purple-600 uppercase tracking-wide">
+                      Contractuales
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-purple-900">
+                      {pauseStats.byType["CONTRACTUAL"] || 0}
+                    </p>
+                    <p className="text-[11px] text-purple-500 mt-0.5">
+                      {(pauseStats.byType["CONTRACTUAL"] || 0) + (pauseStats.byType["EXTRAORDINARIA"] || 0) > 0
+                        ? Math.round(
+                            ((pauseStats.byType["CONTRACTUAL"] || 0) /
+                              ((pauseStats.byType["CONTRACTUAL"] || 0) + (pauseStats.byType["EXTRAORDINARIA"] || 0))) *
+                              100,
+                          )
+                        : 0}
+                      % del total
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs font-medium text-amber-600 uppercase tracking-wide">
+                      Extraordinarias
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-amber-900">
+                      {pauseStats.byType["EXTRAORDINARIA"] || 0}
+                    </p>
+                    <p className="text-[11px] text-amber-500 mt-0.5">
+                      {(pauseStats.byType["CONTRACTUAL"] || 0) + (pauseStats.byType["EXTRAORDINARIA"] || 0) > 0
+                        ? Math.round(
+                            ((pauseStats.byType["EXTRAORDINARIA"] || 0) /
+                              ((pauseStats.byType["CONTRACTUAL"] || 0) + (pauseStats.byType["EXTRAORDINARIA"] || 0))) *
+                              100,
+                          )
+                        : 0}
+                      % del total
+                    </p>
+                  </div>
+                </div>
+
+                {pauseStats.byStudent.length > 0 && (
+                  <div className="mb-5">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">
+                      Pausas por Alumno
+                    </h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-600">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left font-medium">
+                              Alumno
+                            </th>
+                            <th className="px-4 py-2.5 text-left font-medium">
+                              Código
+                            </th>
+                            <th className="px-4 py-2.5 text-right font-medium">
+                              Pausas
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {pauseStats.byStudent.map((s) => (
+                            <tr key={s.code} className="hover:bg-slate-50">
+                              <td className="px-4 py-2.5 font-medium text-slate-800">
+                                {s.name}
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">
+                                {s.code}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-slate-800">
+                                <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                                  {s.count}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-700 mb-2">
+                    Historial de Pausas Propuestas
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-600">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Alumno
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Tipo
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Desde
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Hasta
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Motivo
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
+                            Fecha propuesta
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {pauseStats.pauses.map((p, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 font-medium text-slate-800">
+                              {p.alumnoName}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <Badge
+                                className={`text-[10px] px-2 py-0.5 ${
+                                  p.tipo === "CONTRACTUAL"
+                                    ? "bg-purple-100 text-purple-700 border-purple-200"
+                                    : "bg-amber-100 text-amber-700 border-amber-200"
+                                }`}
+                              >
+                                {p.tipo}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-600 text-xs">
+                              {p.start}
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-600 text-xs">
+                              {p.end}
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-600 max-w-[250px] truncate text-xs">
+                              {p.motivo}
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-500 text-xs whitespace-nowrap">
+                              {(() => {
+                                try {
+                                  return new Date(p.timestamp).toLocaleDateString(
+                                    "es-ES",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    },
+                                  );
+                                } catch {
+                                  return p.timestamp;
+                                }
+                              })()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 

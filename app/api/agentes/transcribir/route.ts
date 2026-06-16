@@ -33,10 +33,18 @@ export async function POST(request: NextRequest) {
   try {
     const openai = new OpenAI({ apiKey: oaiKey });
 
-    // Whisper necesita una extensión de audio reconocible en el nombre del archivo
-    const ext = audioFile.type.includes("ogg") ? "ogg" : "webm";
+    // Whisper soporta: mp3, mp4, mpeg, mpga, m4a, wav, webm
+    const type = audioFile.type || "";
+    let ext = "mp4";
+    if (type.includes("ogg")) ext = "ogg";
+    else if (type.includes("webm")) ext = "webm";
+    else if (type.includes("mp3") || type.includes("mpeg")) ext = "mp3";
+    else if (type.includes("m4a")) ext = "m4a";
+    else if (type.includes("wav")) ext = "wav";
+    else if (type.includes("mp4")) ext = "mp4";
+
     const namedFile = new File([audioFile], `audio.${ext}`, {
-      type: audioFile.type || "audio/webm",
+      type: audioFile.type || "audio/mp4",
     });
 
     const transcription = await openai.audio.transcriptions.create({
