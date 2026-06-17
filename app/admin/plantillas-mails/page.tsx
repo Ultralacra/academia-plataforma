@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthToken } from "@/lib/auth";
+import { apiFetch, buildUrl } from "@/lib/api-config";
 import { getPublicAppOrigin } from "@/lib/public-app-origin";
 import { useToast } from "@/components/ui/use-toast";
 import { createMetadata, listMetadata, updateMetadata } from "@/lib/metadata";
@@ -220,6 +221,9 @@ type TemplateVariable = {
 type PilotoAlumno = {
   email: string;
   nombre: string;
+  status?: string;
+  stage?: string;
+  tag?: string;
 };
 
 type PilotoInvitado = {
@@ -245,6 +249,52 @@ const ALL_TEMPLATES_ENTITY_ID = "all_templates";
 const TEST_TEMPLATE_EMAIL = "cesaramuroc@gmail.com";
 const PILOTO_ENTITY = "piloto_ia_v1";
 const PILOTO_ENTITY_ID = "datos";
+
+const NO_TAG_FILTER = "Sin tag";
+const NO_STATE = "Sin estado";
+const NO_STAGE = "Sin fase";
+
+function matchesSelectedValue(
+  selected: string[],
+  actualValue: string,
+  emptyToken?: string,
+) {
+  if (selected.length === 0) return true;
+  return selected.some((item) => {
+    if (emptyToken && item === emptyToken) return !actualValue;
+    return item === actualValue;
+  });
+}
+
+function normalizeTagKey(tag?: string | null) {
+  return String(tag ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function canonicalTagLabel(tag?: string | null) {
+  const normalized = normalizeTagKey(tag);
+  if (!normalized) return "";
+  if (normalized === "hotselling foundation") return "Hotselling Foundation";
+  return String(tag ?? "").trim();
+}
+
+function getUniqueTags(students: PilotoAlumno[]) {
+  const byKey = new Map<string, string>();
+  for (const student of students) {
+    const normalized = normalizeTagKey(student.tag);
+    if (!normalized) continue;
+    if (!byKey.has(normalized)) {
+      byKey.set(normalized, canonicalTagLabel(student.tag));
+    }
+  }
+  return Array.from(byKey.values()).sort((a, b) =>
+    a.localeCompare(b, "es", { sensitivity: "base" }),
+  );
+}
 
 const COMMON_TEMPLATE_VARIABLES: TemplateVariable[] = [
   {
@@ -850,6 +900,13 @@ export default function PlantillasMailsPage() {
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [sendingPilotInvites, setSendingPilotInvites] = useState(false);
   const [pilotMetaLoading, setPilotMetaLoading] = useState(false);
+  const [filterState, setFilterState] = useState("");
+  const [filterStage, setFilterStage] = useState("");
+  const [filterTag, setFilterTag] = useState("");
+  const [filterAcceptedStatus, setFilterAcceptedStatus] = useState("");
+  const [testEmail, setTestEmail] = useState(TEST_TEMPLATE_EMAIL);
+  const [pilotTestEmail, setPilotTestEmail] = useState(TEST_TEMPLATE_EMAIL);
+  const [sendingPilotTest, setSendingPilotTest] = useState(false);
   const [pilotMeta, setPilotMeta] = useState<PilotoMetadataPayload>({
     version: 1,
     invitados: [],
@@ -876,6 +933,104 @@ export default function PlantillasMailsPage() {
     const selectedSet = new Set(selectedEmails);
     return students.filter((s) => selectedSet.has(s.email));
   }, [students, selectedEmails]);
+
+  const uniqueStates = useMemo(
+    () =>
+      Array.from(
+        new Set(students.map((s) => s.status).filter(Boolean)),
+      ).sort() as string[],
+    [students],
+  );
+
+  const uniqueStages = useMemo(
+    () =>
+      Array.from(
+        new Set(students.map((s) => s.stage).filter(Boolean)),
+      ).sort() as string[],
+    [students],
+  );
+
+  const uniqueTags = useMemo(
+    () =>
+      Array.from(
+        new Set(students.map((s) => s.tag).filter(Boolean)),
+      ).sort() as string[],
+    [students],
+  );
+
+  const filteredStudents = useMemo(() => {
+    let result = students;
+
+    // 1. Search filter
+    const q = studentsSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter((s) => {
+        const nombre = String(s.nombre || "").toLowerCase();
+        const email = String(s.email || "").toLowerCase();
+        const status = String(s.status || "").toLowerCase();
+        const stage = String(s.stage || "").toLowerCase();
+        return (
+          nombre.includes(q) ||
+          email.includes(q) ||
+          status.includes(q) ||
+          stage.includes(q)
+        );
+      });
+    }
+
+    // 2. State filter
+    if (filterState) {
+      result = result.filter((s) => s.status === filterState);
+    }
+
+    // 3. Stage filter
+    if (filterStage) {
+      result = result.filter((s) => s.stage === filterStage);
+    }
+
+    // 4. Tag filter
+    if (filterTag) {
+      result = result.filter((s) => s.tag === filterTag);
+    }
+
+    return result;
+  }, [students, studentsSearch, filterState, filterStage, filterTag]);
+
+  // Enrich accepted students with status/stage/tag from students list
+  const enrichedAccepted = useMemo(() => {
+    const studentMap = new Map(students.map((s) => [s.email, s]));
+    return pilotMeta.aceptados.map((a) => {
+      const student = studentMap.get(a.email);
+      return {
+        ...a,
+        status: student?.status || undefined,
+        stage: student?.stage || undefined,
+        tag: student?.tag || undefined,
+      };
+    });
+  }, [pilotMeta.aceptados, students]);
+
+  const acceptedByStatus = useMemo(() => {
+    const map = new Map<string, typeof enrichedAccepted>();
+    for (const item of enrichedAccepted) {
+      const key = item.status || "Sin estado";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(item);
+    }
+    return map;
+  }, [enrichedAccepted]);
+
+  const acceptedStatuses = useMemo(
+    () => Array.from(acceptedByStatus.keys()).sort(),
+    [acceptedByStatus],
+  );
+
+  const filteredAccepted = useMemo(() => {
+    if (!filterAcceptedStatus) return enrichedAccepted;
+    return enrichedAccepted.filter(
+      (a) => (a.status || "Sin estado") === filterAcceptedStatus,
+    );
+  }, [enrichedAccepted, filterAcceptedStatus]);
 
   const activeTemplates = useMemo(
     () => templates.filter((item) => item.activo),
@@ -1000,78 +1155,120 @@ export default function PlantillasMailsPage() {
     }
   }, [toast]);
 
-  const loadStudents = useCallback(
-    async (search = "") => {
-      setStudentsLoading(true);
+  const loadStudents = useCallback(async () => {
+    setStudentsLoading(true);
+    try {
+      // 1. Fetch auth users (source of truth for email)
+      const qs = new URLSearchParams({
+        page: "1",
+        pageSize: "1000",
+      });
+
+      const res = await fetch(`/api/users?${qs.toString()}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAuthToken()
+            ? { Authorization: `Bearer ${getAuthToken()}` }
+            : {}),
+        },
+        credentials: "include",
+      });
+
+      const raw = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(raw?.message || "No se pudo listar usuarios"));
+      }
+
+      const source: any[] = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.items)
+          ? raw.items
+          : Array.isArray(raw?.data?.items)
+            ? raw.data.items
+            : Array.isArray(raw?.data)
+              ? raw.data
+              : [];
+
+      const normalized = source
+        .map((u) => {
+          const email = String(u?.email || "")
+            .trim()
+            .toLowerCase();
+          const nombre = String(u?.name || u?.nombre || "").trim();
+          const role = String(u?.role || u?.tipo || "").toLowerCase();
+          return { email, nombre, role };
+        })
+        .filter(
+          (u) =>
+            u.email &&
+            ["student", "alumno", "cliente", "user"].includes(u.role),
+        )
+        .map((u) => ({ email: u.email, nombre: u.nombre || u.email }));
+
+      const map = new Map<string, PilotoAlumno>();
+      for (const item of normalized) map.set(item.email, item);
+
+      // 2. Fetch client data to enrich with status/stage/tag
       try {
-        const qs = new URLSearchParams({
-          page: "1",
-          pageSize: "120",
-          search,
-        });
+        const raw = await apiFetch<any>(
+          `/client/get/clients?page=1&pageSize=1000`,
+        );
 
-        const res = await fetch(`/api/users?${qs.toString()}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            ...(getAuthToken()
-              ? { Authorization: `Bearer ${getAuthToken()}` }
-              : {}),
-          },
-          credentials: "include",
-        });
-
-        const raw = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(String(raw?.message || "No se pudo listar usuarios"));
-        }
-
-        const source: any[] = Array.isArray(raw)
-          ? raw
-          : Array.isArray(raw?.items)
-            ? raw.items
-            : Array.isArray(raw?.data?.items)
-              ? raw.data.items
-              : Array.isArray(raw?.data)
-                ? raw.data
+        const rows: any[] = Array.isArray(raw?.data)
+          ? raw.data
+          : Array.isArray(raw?.clients?.data)
+            ? raw.clients.data
+            : Array.isArray(raw?.getClients?.data)
+              ? raw.getClients.data
+              : Array.isArray(raw)
+                ? raw
                 : [];
 
-        const normalized = source
-          .map((u) => {
-            const email = String(u?.email || "")
-              .trim()
-              .toLowerCase();
-            const nombre = String(u?.name || u?.nombre || "").trim();
-            const role = String(u?.role || u?.tipo || "").toLowerCase();
-            return { email, nombre, role };
-          })
-          .filter(
-            (u) =>
-              u.email &&
-              ["student", "alumno", "cliente", "user"].includes(u.role),
-          )
-          .map((u) => ({ email: u.email, nombre: u.nombre || u.email }));
+        // Build name -> client map for matching
+        const nameMap = new Map<string, any>();
+        for (const r of rows) {
+          const name = String(r?.nombre || r?.name || "")
+            .trim()
+            .toLowerCase();
+          if (name) nameMap.set(name, r);
+        }
 
-        const map = new Map<string, PilotoAlumno>();
-        for (const item of normalized) map.set(item.email, item);
-        setStudents(Array.from(map.values()));
-      } catch (error: any) {
-        toast({
-          title: "No se pudo cargar alumnos",
-          description: String(error?.message || "Intenta nuevamente."),
-          variant: "destructive",
-        });
-      } finally {
-        setStudentsLoading(false);
-      }
-    },
-    [toast],
-  );
+        for (const student of normalized) {
+          const match = nameMap.get(student.nombre.toLowerCase());
+          if (match) {
+            const existing = map.get(student.email);
+            if (existing) {
+              existing.status = String(
+                match?.estado ?? match?.state ?? match?.estatus ?? "",
+              ).trim();
+              existing.stage = String(
+                match?.etapa ?? match?.stage ?? "",
+              ).trim();
+              existing.tag = String(
+                match?.tag ?? match?.tags ?? match?.etiqueta ?? "",
+              ).trim();
+            }
+          }
+        }
+      } catch {}
+
+      setStudents(Array.from(map.values()));
+    } catch (error: any) {
+      toast({
+        title: "No se pudo cargar alumnos",
+        description: String(error?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setStudentsLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (selectedCategory !== "piloto_ia") return;
-    loadStudents(studentsSearch.trim());
-  }, [selectedCategory, studentsSearch, loadStudents]);
+    loadStudents();
+  }, [selectedCategory, loadStudents]);
 
   useEffect(() => {
     if (selectedCategory !== "piloto_ia") return;
@@ -1090,11 +1287,11 @@ export default function PlantillasMailsPage() {
   function toggleAllVisible(checked: boolean) {
     setSelectedEmails((prev) => {
       if (!checked) {
-        const visible = new Set(students.map((s) => s.email));
+        const visible = new Set(filteredStudents.map((s) => s.email));
         return prev.filter((email) => !visible.has(email));
       }
       const set = new Set(prev);
-      students.forEach((s) => set.add(s.email));
+      filteredStudents.forEach((s) => set.add(s.email));
       return Array.from(set);
     });
   }
@@ -1145,6 +1342,57 @@ export default function PlantillasMailsPage() {
       });
     } finally {
       setSendingPilotInvites(false);
+    }
+  }
+
+  async function sendPilotTest() {
+    const targetEmail = String(pilotTestEmail || TEST_TEMPLATE_EMAIL).trim();
+    if (!targetEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+      toast({
+        title: "Email inválido",
+        description: "Ingresa un email válido para enviar la prueba.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendingPilotTest(true);
+    try {
+      const res = await fetch("/api/brevo/send-piloto-ia-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getAuthToken()
+            ? { Authorization: `Bearer ${getAuthToken()}` }
+            : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          to: targetEmail,
+          nombre: "Prueba",
+          origin: getPublicAppOrigin(),
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || String(data?.status || "") !== "success") {
+        throw new Error(
+          String(data?.message || "No se pudo enviar la prueba"),
+        );
+      }
+
+      toast({
+        title: "Prueba enviada",
+        description: `Invitación de piloto enviada a ${targetEmail}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error enviando prueba",
+        description: String(error?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setSendingPilotTest(false);
     }
   }
 
@@ -1349,7 +1597,17 @@ export default function PlantillasMailsPage() {
     }
   }
 
-  async function sendTemplateTest(template: MailTemplateItem) {
+  async function sendTemplateTest(template: MailTemplateItem, emailTo?: string) {
+    const targetEmail = String(emailTo || testEmail || TEST_TEMPLATE_EMAIL).trim();
+    if (!targetEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+      toast({
+        title: "Email inválido",
+        description: "Ingresa un email válido para enviar la prueba.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSendingTestKey(template.key);
     try {
       const isRescate =
@@ -1361,7 +1619,7 @@ export default function PlantillasMailsPage() {
             credentials: "include",
             body: JSON.stringify({
               templateKey: template.key,
-              to: TEST_TEMPLATE_EMAIL,
+              to: targetEmail,
               first_name: "César",
               recipientName: "César",
             }),
@@ -1373,7 +1631,7 @@ export default function PlantillasMailsPage() {
             },
             credentials: "include",
             body: JSON.stringify({
-              to: TEST_TEMPLATE_EMAIL,
+              to: targetEmail,
               subject: renderSubjectPreview(template),
               html: renderTemplatePreview(template),
               text: renderTextPreview(template),
@@ -1387,7 +1645,7 @@ export default function PlantillasMailsPage() {
 
       toast({
         title: "Prueba enviada",
-        description: `Se envió ${template.name} a ${TEST_TEMPLATE_EMAIL}.`,
+        description: `Se envió ${template.name} a ${targetEmail}.`,
       });
     } catch (error: any) {
       toast({
@@ -1470,28 +1728,37 @@ export default function PlantillasMailsPage() {
                   <Pencil className="h-4 w-4" />
                   Editar seleccionada
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={
-                    !selectedTemplate ||
-                    loading ||
-                    sendingTestKey !== null ||
-                    isPilotCategory
-                  }
-                  onClick={() =>
-                    selectedTemplate && sendTemplateTest(selectedTemplate)
-                  }
-                >
-                  {selectedTemplate &&
-                  sendingTestKey === selectedTemplate.key ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                  Enviar prueba a {TEST_TEMPLATE_EMAIL}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="email"
+                    placeholder="Email de prueba..."
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    className="h-9 w-56 text-sm"
+                    disabled={!selectedTemplate}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2 h-9"
+                    disabled={
+                      !selectedTemplate ||
+                      loading ||
+                      sendingTestKey !== null
+                    }
+                    onClick={() =>
+                      selectedTemplate && sendTemplateTest(selectedTemplate)
+                    }
+                  >
+                    {selectedTemplate &&
+                    sendingTestKey === selectedTemplate.key ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                    Enviar prueba
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -1678,6 +1945,46 @@ export default function PlantillasMailsPage() {
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-5">
+                    {/* Prueba de invitación piloto */}
+                    <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-violet-900 flex items-center gap-2">
+                          <Send className="h-4 w-4" />
+                          Probar invitación de piloto
+                        </p>
+                        <Badge variant="secondary" className="text-[10px]">
+                          Preview
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-violet-700">
+                        Envía una prueba de la invitación del piloto a un email antes de enviar a todos los alumnos.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="email"
+                          placeholder="Email de prueba..."
+                          value={pilotTestEmail}
+                          onChange={(e) => setPilotTestEmail(e.target.value)}
+                          className="h-9 flex-1 text-sm"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-2 border-violet-300 hover:bg-violet-100"
+                          disabled={sendingPilotTest}
+                          onClick={sendPilotTest}
+                        >
+                          {sendingPilotTest ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          Enviar prueba
+                        </Button>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <div className="rounded-lg border p-4 space-y-4">
                         <div className="flex items-center justify-between gap-2">
@@ -1697,13 +2004,79 @@ export default function PlantillasMailsPage() {
                           className="h-9"
                         />
 
+                        <div className="flex flex-wrap gap-2">
+                          <select
+                            value={filterState}
+                            onChange={(e) => setFilterState(e.target.value)}
+                            className="h-9 flex-1 rounded-md border bg-background px-2 text-sm"
+                          >
+                            <option value="">Todos los estados</option>
+                            {uniqueStates.map((s) => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={filterStage}
+                            onChange={(e) => setFilterStage(e.target.value)}
+                            className="h-9 flex-1 rounded-md border bg-background px-2 text-sm"
+                          >
+                            <option value="">Todas las fases</option>
+                            {uniqueStages.map((s) => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={filterTag}
+                            onChange={(e) => setFilterTag(e.target.value)}
+                            className="h-9 flex-1 rounded-md border bg-background px-2 text-sm"
+                          >
+                            <option value="">Todas las tags</option>
+                            {uniqueTags.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Active filters summary */}
+                        {(filterState || filterStage || filterTag) && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-muted-foreground">Filtros:</span>
+                            {filterState && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Estado: {filterState}
+                              </Badge>
+                            )}
+                            {filterStage && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Fase: {filterStage}
+                              </Badge>
+                            )}
+                            {filterTag && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Tag: {filterTag}
+                              </Badge>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilterState("");
+                                setFilterStage("");
+                                setFilterTag("");
+                              }}
+                              className="text-muted-foreground hover:text-foreground underline"
+                            >
+                              Limpiar
+                            </button>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between text-xs">
                           <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                             <input
                               type="checkbox"
                               checked={
-                                students.length > 0 &&
-                                students.every((s) =>
+                                filteredStudents.length > 0 &&
+                                filteredStudents.every((s) =>
                                   selectedEmails.includes(s.email),
                                 )
                               }
@@ -1714,8 +2087,8 @@ export default function PlantillasMailsPage() {
                             Seleccionar todos visibles
                           </label>
                           <span className="text-muted-foreground">
-                            {students.length} alumno
-                            {students.length !== 1 ? "s" : ""}
+                            {filteredStudents.length} alumno
+                            {filteredStudents.length !== 1 ? "s" : ""}
                           </span>
                         </div>
 
@@ -1725,12 +2098,12 @@ export default function PlantillasMailsPage() {
                               <Loader2 className="h-4 w-4 animate-spin" />
                               Cargando alumnos...
                             </div>
-                          ) : students.length === 0 ? (
+                          ) : filteredStudents.length === 0 ? (
                             <div className="py-8 text-center text-sm text-muted-foreground">
                               No se encontraron alumnos.
                             </div>
                           ) : (
-                            students.map((student) => {
+                            filteredStudents.map((student) => {
                               const checked = selectedEmails.includes(
                                 student.email,
                               );
@@ -1750,13 +2123,25 @@ export default function PlantillasMailsPage() {
                                     }
                                     className="mt-1"
                                   />
-                                  <div className="min-w-0">
+                                  <div className="min-w-0 flex-1">
                                     <p className="text-sm font-medium truncate">
                                       {student.nombre}
                                     </p>
                                     <p className="text-xs text-muted-foreground truncate">
                                       {student.email}
                                     </p>
+                                  </div>
+                                  <div className="flex shrink-0 gap-1">
+                                    {student.status ? (
+                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        {student.status}
+                                      </Badge>
+                                    ) : null}
+                                    {student.tag ? (
+                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                        {student.tag}
+                                      </Badge>
+                                    ) : null}
                                   </div>
                                 </label>
                               );
@@ -1851,40 +2236,113 @@ export default function PlantillasMailsPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <p className="text-xs font-medium">
-                            Aceptados recientes
-                          </p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium">
+                              Aceptados recientes
+                            </p>
+                            {acceptedStatuses.length > 0 && (
+                              <select
+                                value={filterAcceptedStatus}
+                                onChange={(e) =>
+                                  setFilterAcceptedStatus(e.target.value)
+                                }
+                                className="h-7 rounded-md border bg-background px-2 text-xs"
+                              >
+                                <option value="">Todos los estados</option>
+                                {acceptedStatuses.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s} ({acceptedByStatus.get(s)?.length})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
                           <div className="max-h-[260px] overflow-y-auto space-y-2 pr-1">
                             {pilotMeta.aceptados.length === 0 ? (
                               <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
                                 Aún no hay aceptaciones registradas.
                               </div>
+                            ) : filteredAccepted.length === 0 ? (
+                              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                                No hay aceptados con este filtro.
+                              </div>
                             ) : (
-                              [...pilotMeta.aceptados]
-                                .sort((a, b) =>
-                                  String(b.aceptado_en).localeCompare(
-                                    String(a.aceptado_en),
-                                  ),
-                                )
-                                .slice(0, 50)
-                                .map((item) => (
-                                  <div
-                                    key={`${item.email}-${item.aceptado_en}`}
-                                    className="rounded-md border p-2.5"
-                                  >
-                                    <p className="text-sm font-medium truncate">
-                                      {item.nombre || item.email}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground truncate">
-                                      {item.email}
-                                    </p>
-                                    <p className="text-[11px] text-muted-foreground mt-1">
-                                      {new Date(
-                                        item.aceptado_en,
-                                      ).toLocaleString()}
-                                    </p>
+                              <div className="space-y-3">
+                                {Array.from(
+                                  (() => {
+                                    const groups = new Map<
+                                      string,
+                                      typeof filteredAccepted
+                                    >();
+                                    for (const item of filteredAccepted) {
+                                      const key =
+                                        item.status || "Sin estado";
+                                      if (!groups.has(key))
+                                        groups.set(key, []);
+                                      groups.get(key)!.push(item);
+                                    }
+                                    return groups;
+                                  })(),
+                                ).map(([status, items]) => (
+                                  <div key={status} className="space-y-1.5">
+                                    <div className="flex items-center gap-2 px-1">
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[10px]"
+                                      >
+                                        {status}
+                                      </Badge>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {items.length} alumno
+                                        {items.length !== 1 ? "s" : ""}
+                                      </span>
+                                    </div>
+                                    {items
+                                      .sort(
+                                        (a, b) =>
+                                          String(b.aceptado_en).localeCompare(
+                                            String(a.aceptado_en),
+                                          ),
+                                      )
+                                      .map((item) => (
+                                        <div
+                                          key={`${item.email}-${item.aceptado_en}`}
+                                          className="rounded-md border p-2.5"
+                                        >
+                                          <p className="text-sm font-medium truncate">
+                                            {item.nombre || item.email}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground truncate">
+                                            {item.email}
+                                          </p>
+                                          <div className="flex items-center gap-1.5 mt-1">
+                                            {item.stage && (
+                                              <Badge
+                                                variant="outline"
+                                                className="text-[10px] px-1 py-0"
+                                              >
+                                                {item.stage}
+                                              </Badge>
+                                            )}
+                                            {item.tag && (
+                                              <Badge
+                                                variant="outline"
+                                                className="text-[10px] px-1 py-0"
+                                              >
+                                                {item.tag}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-[11px] text-muted-foreground mt-1">
+                                            {new Date(
+                                              item.aceptado_en,
+                                            ).toLocaleString()}
+                                          </p>
+                                        </div>
+                                      ))}
                                   </div>
-                                ))
+                                ))}
+                              </div>
                             )}
                           </div>
                         </div>

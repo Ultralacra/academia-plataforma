@@ -27,6 +27,7 @@ import {
   Database,
   Bot,
   HardDrive,
+  BookOpen,
 } from "lucide-react";
 import {
   Sidebar,
@@ -196,6 +197,11 @@ const adminItems: MenuItem[] = [
     title: "Storage Test",
     url: "/admin/storage-test",
     icon: HardDrive,
+  },
+  {
+    title: "Documentación",
+    url: "/admin/docs",
+    icon: BookOpen,
   },
 ];
 
