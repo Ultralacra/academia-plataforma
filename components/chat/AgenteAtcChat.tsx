@@ -109,21 +109,25 @@ interface PendingTarea {
 
 // ─── Action parser ────────────────────────────────────────────────────────────
 
-const ACTION_REGEX = /\[ACCION:(\{[^[\]]*\})\]\s*$/;
+const ACTION_REGEX = /\[ACCION:(\{[^[\]]*\})\]/g;
 
-function parseActionBlock(text: string): {
+function parseActionBlocks(text: string): {
   cleanText: string;
-  action: AgentAction | null;
+  actions: AgentAction[];
 } {
-  const match = ACTION_REGEX.exec(text);
-  if (!match) return { cleanText: text.trimEnd(), action: null };
-  try {
-    const action = JSON.parse(match[1]) as AgentAction;
-    const cleanText = text.slice(0, match.index).trimEnd();
-    return { cleanText, action };
-  } catch {
-    return { cleanText: text.trimEnd(), action: null };
+  const actions: AgentAction[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = ACTION_REGEX.exec(text)) !== null) {
+    try {
+      actions.push(JSON.parse(match[1]) as AgentAction);
+    } catch {}
+    lastIndex = match.index + match[0].length;
   }
+
+  const cleanText = text.slice(0, lastIndex > 0 ? text.lastIndexOf("[ACCION:", lastIndex - 1) : undefined).trimEnd();
+  return { cleanText: actions.length > 0 ? cleanText : text.trimEnd(), actions };
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
@@ -691,9 +695,7 @@ export function AgenteAtcChat({
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contextInfo, setContextInfo] = useState<AgentContextInfo | null>(null);
-  const [pendingTicket, setPendingTicket] = useState<PendingTicket | null>(
-    null,
-  );
+  const [pendingTickets, setPendingTickets] = useState<PendingTicket[]>([]);
   const [pendingPause, setPendingPause] = useState<PendingPause | null>(null);
   const [pendingTask, setPendingTask] = useState<PendingTarea | null>(null);
   const [escalations, setEscalations] = useState<
@@ -805,18 +807,19 @@ export function AgenteAtcChat({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, pendingTicket, pendingTask, escalations]);
+  }, [messages, pendingTickets, pendingTask, escalations]);
 
-  // ── Auto-dismiss ticket created card ─────────────────────────────────────────
+  // ── Auto-dismiss ticket created cards ────────────────────────────────────────
 
   useEffect(() => {
-    if (pendingTicket?.status === "created") {
+    const createdTickets = pendingTickets.filter((t) => t.status === "created");
+    if (createdTickets.length > 0) {
       const timer = setTimeout(() => {
-        setPendingTicket(null);
+        setPendingTickets((prev) => prev.filter((t) => t.status !== "created"));
       }, 4000);
       return () => clearTimeout(timer);
     }
-  }, [pendingTicket?.status]);
+  }, [pendingTickets]);
 
   // ── Auto-dismiss pause created card ──────────────────────────────────────────
 
@@ -1108,63 +1111,68 @@ export function AgenteAtcChat({
         }
       }
 
-      // Parse action block from accumulated text
-      const { cleanText, action } = parseActionBlock(fullText);
+      // Parse action blocks from accumulated text
+      const { cleanText, actions } = parseActionBlocks(fullText);
 
-      // Update message with clean text (without action block)
-      if (action) {
+      // Update message with clean text (without action blocks)
+      if (actions.length > 0) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId ? { ...m, content: cleanText } : m,
           ),
         );
 
-        if (action.tipo === "ticket") {
-          // Si hay audio pendiente, auto-adjuntarlo al ticket
-          if (pendingAudioFile) {
-            setAttachedFiles((prev) => [...prev, pendingAudioFile]);
-            setPendingAudioFile(null);
+        for (const action of actions) {
+          if (action.tipo === "ticket") {
+            // Si hay audio pendiente, auto-adjuntarlo al ticket
+            if (pendingAudioFile) {
+              setAttachedFiles((prev) => [...prev, pendingAudioFile]);
+              setPendingAudioFile(null);
+            }
+            setPendingTickets((prev) => [
+              ...prev,
+              {
+                action,
+                messageId: assistantMsgId,
+                status: "pending",
+              },
+            ]);
+          } else if (action.tipo === "escalar") {
+            // Auto-escalate: create urgent ticket and show card
+            const escalateId = crypto.randomUUID();
+            setEscalations((prev) => [
+              ...prev,
+              { id: escalateId, motivo: action.motivo },
+            ]);
+            // Auto-create escalation ticket
+            void autoCreateEscalationTicket(
+              action.motivo,
+              alumnoCode,
+              alumnoName,
+              token,
+            );
+          } else if (action.tipo === "transferir") {
+            // Transfer to human ATC — no ticket, show transfer card
+            const transferId = crypto.randomUUID();
+            setTransfers((prev) => [
+              ...prev,
+              { id: transferId, motivo: action.motivo },
+            ]);
+          } else if (action.tipo === "pausa") {
+            // Pause proposal — show confirmation card
+            setPendingPause({
+              action,
+              messageId: assistantMsgId,
+              status: "pending",
+            });
+          } else if (action.tipo === "tarea") {
+            // Task proposal — show confirmation card
+            setPendingTask({
+              action,
+              messageId: assistantMsgId,
+              status: "pending",
+            });
           }
-          setPendingTicket({
-            action,
-            messageId: assistantMsgId,
-            status: "pending",
-          });
-        } else if (action.tipo === "escalar") {
-          // Auto-escalate: create urgent ticket and show card
-          const escalateId = crypto.randomUUID();
-          setEscalations((prev) => [
-            ...prev,
-            { id: escalateId, motivo: action.motivo },
-          ]);
-          // Auto-create escalation ticket
-          void autoCreateEscalationTicket(
-            action.motivo,
-            alumnoCode,
-            alumnoName,
-            token,
-          );
-        } else if (action.tipo === "transferir") {
-          // Transfer to human ATC — no ticket, show transfer card
-          const transferId = crypto.randomUUID();
-          setTransfers((prev) => [
-            ...prev,
-            { id: transferId, motivo: action.motivo },
-          ]);
-        } else if (action.tipo === "pausa") {
-          // Pause proposal — show confirmation card
-          setPendingPause({
-            action,
-            messageId: assistantMsgId,
-            status: "pending",
-          });
-        } else if (action.tipo === "tarea") {
-          // Task proposal — show confirmation card
-          setPendingTask({
-            action,
-            messageId: assistantMsgId,
-            status: "pending",
-          });
         }
       }
     } catch (err: unknown) {
@@ -1200,15 +1208,17 @@ export function AgenteAtcChat({
 
   // ── Confirm ticket (abre CreateTicketModal con datos pre-rellenos) ──────────
 
-  function handleConfirmTicket() {
-    if (!pendingTicket || pendingTicket.action.tipo !== "ticket") return;
+  const [ticketModalIndex, setTicketModalIndex] = useState<number | null>(null);
+
+  function handleConfirmTicket(index: number) {
+    const ticket = pendingTickets[index];
+    if (!ticket || ticket.action.tipo !== "ticket") return;
+    setTicketModalIndex(index);
     setTicketModalOpen(true);
   }
 
-  function handleCancelTicket() {
-    setPendingTicket((prev) =>
-      prev ? { ...prev, status: "cancelled" } : null,
-    );
+  function handleCancelTicket(index: number) {
+    setPendingTickets((prev) => prev.filter((_, i) => i !== index));
   }
 
   // ── Pause outcome logging ────────────────────────────────────────────────────
@@ -1532,15 +1542,16 @@ export function AgenteAtcChat({
             </div>
           )}
 
-        {/* Ticket action card */}
-        {pendingTicket && (
+        {/* Ticket action cards */}
+        {pendingTickets.map((pt, idx) => (
           <TicketActionCard
-            pending={pendingTicket}
-            onConfirm={handleConfirmTicket}
-            onCancel={handleCancelTicket}
+            key={`${pt.messageId}-${idx}`}
+            pending={pt}
+            onConfirm={() => handleConfirmTicket(idx)}
+            onCancel={() => handleCancelTicket(idx)}
             isAlumno={mode === "alumno"}
           />
-        )}
+        ))}
 
         {/* Escalation cards */}
         {escalations.map((esc) => (
@@ -1816,46 +1827,47 @@ export function AgenteAtcChat({
       </div>
 
       {/* Modal de ticket/feedback — preview read-only para modo alumno, completo para atc_team */}
-      {pendingTicket?.action.tipo === "ticket" && mode === "alumno" && (
+      {ticketModalIndex !== null && pendingTickets[ticketModalIndex]?.action.tipo === "ticket" && mode === "alumno" && (
         <AgentTicketPreviewModal
           open={ticketModalOpen}
           onOpenChange={setTicketModalOpen}
           alumnoCode={alumnoCode}
           alumnoName={alumnoName}
-          title={pendingTicket.action.titulo}
-          description={pendingTicket.action.descripcion}
-          category={pendingTicket.action.categoria}
-          priority={pendingTicket.action.prioridad}
+          title={pendingTickets[ticketModalIndex].action.titulo}
+          description={pendingTickets[ticketModalIndex].action.descripcion}
+          category={pendingTickets[ticketModalIndex].action.categoria}
+          priority={pendingTickets[ticketModalIndex].action.prioridad}
           files={attachedFiles}
           createFn={createAsAgent ? createTicketAsAgent : undefined}
           onSuccess={() => {
             setTicketModalOpen(false);
-            setPendingTicket((prev) =>
-              prev ? { ...prev, status: "created" } : null,
-            );
+            const idx = ticketModalIndex;
+            setTicketModalIndex(null);
+            setPendingTickets((prev) => prev.filter((_, i) => i !== idx));
             setAttachedFiles([]);
             setPendingAudioFile(null);
             onTicketCreated?.();
           }}
         />
       )}
-      {pendingTicket?.action.tipo === "ticket" && mode !== "alumno" && (
+      {ticketModalIndex !== null && pendingTickets[ticketModalIndex]?.action.tipo === "ticket" && mode !== "alumno" && (
         <CreateTicketModal
           open={ticketModalOpen}
           onOpenChange={(v) => {
             setTicketModalOpen(v);
+            if (!v) setTicketModalIndex(null);
           }}
           defaultStudentCode={alumnoCode}
-          defaultTitle={pendingTicket.action.titulo}
-          defaultDescription={pendingTicket.action.descripcion}
-          defaultType={pendingTicket.action.categoria}
+          defaultTitle={pendingTickets[ticketModalIndex].action.titulo}
+          defaultDescription={pendingTickets[ticketModalIndex].action.descripcion}
+          defaultType={pendingTickets[ticketModalIndex].action.categoria}
           createFn={createAsAgent ? createTicketAsAgent : undefined}
           defaultFiles={attachedFiles}
           onSuccess={() => {
             setTicketModalOpen(false);
-            setPendingTicket((prev) =>
-              prev ? { ...prev, status: "created" } : null,
-            );
+            const idx = ticketModalIndex;
+            setTicketModalIndex(null);
+            setPendingTickets((prev) => prev.filter((_, i) => i !== idx));
             setAttachedFiles([]);
             setPendingAudioFile(null);
           }}
