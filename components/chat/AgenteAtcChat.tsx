@@ -1211,10 +1211,49 @@ export function AgenteAtcChat({
     );
   }
 
+  // ── Pause outcome logging ────────────────────────────────────────────────────
+
+  async function logPauseOutcome(
+    outcome: "confirmed" | "cancelled" | "failed",
+    action: PausaAction,
+    proposedAt: string,
+    errorMsg?: string,
+  ) {
+    try {
+      const token = getAuthToken();
+      await fetch("/api/metadata", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          entity: "emma_pause_outcomes",
+          entity_id: alumnoCode,
+          payload: {
+            alumnoCode,
+            alumnoName,
+            tipo: action.tipo_pausa,
+            motivo: action.motivo,
+            start: action.start,
+            end: action.end,
+            proposedAt,
+            decidedAt: new Date().toISOString(),
+            outcome,
+            errorMsg: errorMsg || null,
+          },
+        }),
+      });
+    } catch (err) {
+      console.error("[AgenteAtc] logPauseOutcome failed", err);
+    }
+  }
+
   // ── Confirm / cancel pause ────────────────────────────────────────────────────
 
   async function handleConfirmPause() {
     if (!pendingPause || pendingPause.action.tipo !== "pausa") return;
+    const proposedAt = messages.find((m) => m.id === pendingPause.messageId)?.timestamp?.toISOString() ?? new Date().toISOString();
     setPendingPause((prev) =>
       prev ? { ...prev, status: "creating", errorMsg: undefined } : null,
     );
@@ -1226,16 +1265,21 @@ export function AgenteAtcChat({
         motivo: pendingPause.action.motivo,
       });
       setPendingPause((prev) => (prev ? { ...prev, status: "created" } : null));
+      logPauseOutcome("confirmed", pendingPause.action, proposedAt);
     } catch (err: unknown) {
       const msg =
         (err as { message?: string }).message ?? "Error al registrar la pausa";
       setPendingPause((prev) =>
         prev ? { ...prev, status: "pending", errorMsg: msg } : null,
       );
+      logPauseOutcome("failed", pendingPause.action, proposedAt, msg);
     }
   }
 
   function handleCancelPause() {
+    if (!pendingPause || pendingPause.action.tipo !== "pausa") return;
+    const proposedAt = messages.find((m) => m.id === pendingPause.messageId)?.timestamp?.toISOString() ?? new Date().toISOString();
+    logPauseOutcome("cancelled", pendingPause.action, proposedAt);
     setPendingPause((prev) => (prev ? { ...prev, status: "cancelled" } : null));
   }
 

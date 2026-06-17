@@ -246,6 +246,7 @@ export function AppSidebar() {
   const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
   const [hasHotsellingAccess, setHasHotsellingAccess] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -253,13 +254,31 @@ export function AppSidebar() {
 
   useEffect(() => {
     if ((user?.role || "").toLowerCase() !== "student") return;
+    const code = (user as any)?.codigo;
+    if (!code) return;
     const token = getAuthToken();
     if (!token) return;
-    fetch("/api/agentes/copy-alumno/check-access", {
+
+    // Check if student is COMPLETADO (stage F5)
+    fetch(`/api/agentes/copy-alumno/check-access`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then((json) => setHasHotsellingAccess(json?.allowed === true))
+      .catch(() => {});
+
+    // Fetch student stage to check COMPLETADO
+    fetch(`/client/get/clients?pageSize=5&search=${encodeURIComponent(code)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        const items = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+        const student = items.find((s: any) => String(s.code || s.codigo || "").toLowerCase() === code.toLowerCase());
+        const stage = String(student?.stage || "").toUpperCase();
+        if (stage === "F5") setIsCompleted(true);
+      })
       .catch(() => {});
   }, [user]);
 
@@ -771,6 +790,7 @@ export function AppSidebar() {
               title: "Chat soporte",
               url: `/admin/alumnos/${code}/chat`,
               icon: MessageSquare,
+              disabled: isCompleted,
             },
             {
               title: "Emma · Asistente IA",

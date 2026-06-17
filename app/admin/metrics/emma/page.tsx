@@ -48,6 +48,19 @@ interface TopicCount {
   keywords: string[];
 }
 
+interface PauseOutcome {
+  alumnoCode: string;
+  alumnoName: string;
+  tipo: string;
+  motivo: string;
+  start: string;
+  end: string;
+  proposedAt: string;
+  decidedAt: string;
+  outcome: "confirmed" | "cancelled" | "failed";
+  errorMsg?: string | null;
+}
+
 interface DailyCount {
   date: string;
   count: number;
@@ -242,6 +255,7 @@ function formatNumber(n: number): string {
 
 export default function EmmaMetricsPage() {
   const [histories, setHistories] = useState<HistoryEntry[]>([]);
+  const [pauseOutcomes, setPauseOutcomes] = useState<PauseOutcome[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
@@ -305,6 +319,47 @@ export default function EmmaMetricsPage() {
       });
 
       setHistories(parsed);
+
+      // Load pause outcomes
+      try {
+        const outcomesRes = await fetch(`/api/metadata?entity=emma_pause_outcomes&pageSize=500`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          cache: "no-store",
+        });
+        if (outcomesRes.ok) {
+          const outcomesJson = await outcomesRes.json().catch(() => null);
+          const outcomesItems: any[] = Array.isArray(outcomesJson)
+            ? outcomesJson
+            : Array.isArray(outcomesJson?.data)
+              ? outcomesJson.data
+              : Array.isArray(outcomesJson?.items)
+                ? outcomesJson.items
+                : outcomesJson
+                  ? [outcomesJson]
+                  : [];
+          const parsedOutcomes: PauseOutcome[] = outcomesItems
+            .filter((item: any) => item?.entity === "emma_pause_outcomes")
+            .map((item: any) => {
+              const p = item.payload ?? {};
+              return {
+                alumnoCode: p.alumnoCode ?? "",
+                alumnoName: p.alumnoName ?? "",
+                tipo: p.tipo ?? "CONTRACTUAL",
+                motivo: p.motivo ?? "",
+                start: p.start ?? "",
+                end: p.end ?? "",
+                proposedAt: p.proposedAt ?? "",
+                decidedAt: p.decidedAt ?? "",
+                outcome: p.outcome ?? "confirmed",
+                errorMsg: p.errorMsg ?? null,
+              };
+            });
+          setPauseOutcomes(parsedOutcomes);
+          console.log("[emma-metrics][pauseOutcomes]", { total: parsedOutcomes.length });
+        }
+      } catch (err) {
+        console.error("[emma-metrics] load pause outcomes failed", err);
+      }
     } catch (err) {
       console.error("[emma-metrics] load failed", err);
       setError("Error al cargar los historiales");
@@ -412,6 +467,9 @@ export default function EmmaMetricsPage() {
       start: string;
       end: string;
       timestamp: string;
+      outcome: "confirmed" | "cancelled" | "failed" | "pending";
+      decidedAt: string | null;
+      errorMsg: string | null;
     }> = [];
 
     const debugData: any[] = [];
@@ -449,6 +507,17 @@ export default function EmmaMetricsPage() {
       return results;
     }
 
+    // Build outcome lookup: match by (alumnoCode + start + end + tipo)
+    const outcomeMap = new Map<string, PauseOutcome>();
+    for (const o of pauseOutcomes) {
+      const key = `${o.alumnoCode}|${o.start}|${o.end}|${o.tipo}`;
+      // Keep the latest outcome if duplicates exist
+      const existing = outcomeMap.get(key);
+      if (!existing || new Date(o.decidedAt).getTime() > new Date(existing.decidedAt).getTime()) {
+        outcomeMap.set(key, o);
+      }
+    }
+
     for (const msg of allMessages) {
       if (msg.role !== "assistant") continue;
       if (!msg.content.includes("[ACCION:")) continue;
@@ -464,14 +533,23 @@ export default function EmmaMetricsPage() {
         });
 
         if (action.tipo === "pausa") {
+          const tipo = action.tipo_pausa || "CONTRACTUAL";
+          const start = action.start || "";
+          const end = action.end || "";
+          const key = `${msg.studentCode}|${start}|${end}|${tipo}`;
+          const outcome = outcomeMap.get(key);
+
           pauses.push({
             alumnoCode: msg.studentCode,
             alumnoName: msg.studentName,
-            tipo: action.tipo_pausa || "CONTRACTUAL",
+            tipo,
             motivo: action.motivo || "",
-            start: action.start || "",
-            end: action.end || "",
+            start,
+            end,
             timestamp: msg.timestamp,
+            outcome: outcome?.outcome ?? "pending",
+            decidedAt: outcome?.decidedAt ?? null,
+            errorMsg: outcome?.errorMsg ?? null,
           });
         }
       }
@@ -503,6 +581,12 @@ export default function EmmaMetricsPage() {
         (a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       ),
+      outcomes: {
+        confirmed: pauses.filter((p) => p.outcome === "confirmed").length,
+        cancelled: pauses.filter((p) => p.outcome === "cancelled").length,
+        failed: pauses.filter((p) => p.outcome === "failed").length,
+        pending: pauses.filter((p) => p.outcome === "pending").length,
+      },
       debugData,
     };
   }, [allMessages]);
@@ -1075,6 +1159,46 @@ export default function EmmaMetricsPage() {
                   </div>
                 </div>
 
+                <div className="grid gap-4 sm:grid-cols-4 mb-5">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="text-xs font-medium text-emerald-600 uppercase tracking-wide">
+                      Confirmadas
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-emerald-900">
+                      {pauseStats.outcomes.confirmed}
+                    </p>
+                    <p className="text-[11px] text-emerald-500 mt-0.5">
+                      {pauseStats.total > 0
+                        ? Math.round((pauseStats.outcomes.confirmed / pauseStats.total) * 100)
+                        : 0}% tasa de confirmación
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                    <p className="text-xs font-medium text-red-600 uppercase tracking-wide">
+                      Canceladas
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-red-900">
+                      {pauseStats.outcomes.cancelled}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs font-medium text-amber-600 uppercase tracking-wide">
+                      Fallidas
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-amber-900">
+                      {pauseStats.outcomes.failed}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+                      Sin decidir
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">
+                      {pauseStats.outcomes.pending}
+                    </p>
+                  </div>
+                </div>
+
                 {pauseStats.byStudent.length > 0 && (
                   <div className="mb-5">
                     <h3 className="text-sm font-semibold text-slate-700 mb-2">
@@ -1141,6 +1265,9 @@ export default function EmmaMetricsPage() {
                             Motivo
                           </th>
                           <th className="px-4 py-2.5 text-left font-medium">
+                            Estado
+                          </th>
+                          <th className="px-4 py-2.5 text-left font-medium">
                             Fecha propuesta
                           </th>
                         </tr>
@@ -1170,6 +1297,32 @@ export default function EmmaMetricsPage() {
                             </td>
                             <td className="px-4 py-2.5 text-slate-600 max-w-[250px] truncate text-xs">
                               {p.motivo}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <Badge
+                                className={`text-[10px] px-2 py-0.5 ${
+                                  p.outcome === "confirmed"
+                                    ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                                    : p.outcome === "cancelled"
+                                      ? "bg-red-100 text-red-700 border-red-200"
+                                      : p.outcome === "failed"
+                                        ? "bg-amber-100 text-amber-700 border-amber-200"
+                                        : "bg-slate-100 text-slate-600 border-slate-200"
+                                }`}
+                              >
+                                {p.outcome === "confirmed"
+                                  ? "Confirmada"
+                                  : p.outcome === "cancelled"
+                                    ? "Cancelada"
+                                    : p.outcome === "failed"
+                                      ? "Fallida"
+                                      : "Pendiente"}
+                              </Badge>
+                              {p.errorMsg && (
+                                <p className="text-[10px] text-red-500 mt-0.5 max-w-[150px] truncate" title={p.errorMsg}>
+                                  {p.errorMsg}
+                                </p>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-slate-500 text-xs whitespace-nowrap">
                               {(() => {

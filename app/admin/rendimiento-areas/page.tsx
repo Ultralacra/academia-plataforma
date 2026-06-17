@@ -3124,6 +3124,7 @@ function TeamPerformancePageContent() {
                                 )}
                               </div>
 
+                              {/* Descripción del OKR (oculto)
                               {canEditArea ? (
                                 <Textarea
                                   value={okr.description}
@@ -3140,6 +3141,7 @@ function TeamPerformancePageContent() {
                                   {okr.description}
                                 </p>
                               ) : null}
+                              */}
 
                               {/* Assigned users */}
                               <div className="flex items-center gap-1.5 flex-wrap">
