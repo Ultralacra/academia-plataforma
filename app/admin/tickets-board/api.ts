@@ -385,6 +385,16 @@ export async function getDeletedTickets(opts: {
   } as const;
 }
 
+  // Restaurar ticket eliminado (papelera)
+  // PUT /v1/ticket/restore/ticket/:codigo
+  export async function restoreTicket(ticketCodigo: string): Promise<any> {
+    if (!ticketCodigo) throw new Error("ticketCodigo requerido");
+    return apiFetch<any>(
+      `/ticket/restore/ticket/${encodeURIComponent(ticketCodigo)}`,
+      { method: "PUT" },
+    );
+  }
+
   // Reasignar ticket a un coach/equipo
   // PUT /v1/ticket/reassign/ticket/:idticket
   // Body: { "codigo_equipo": "equipo" }

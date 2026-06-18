@@ -20,8 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Spinner from "@/components/ui/spinner";
-import { Search, Trash2, RefreshCw } from "lucide-react";
-import { getDeletedTickets, type DeletedTicketItem } from "./api";
+import { Search, Trash2, RefreshCw, RotateCcw } from "lucide-react";
+import { getDeletedTickets, restoreTicket, type DeletedTicketItem } from "./api";
+import { toast } from "@/components/ui/use-toast";
 
 type Props = {
   open: boolean;
@@ -49,7 +50,27 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [restoringId, setRestoringId] = useState<number | null>(null);
   const pageSize = 25;
+
+  const handleRestore = async (ticket: DeletedTicketItem) => {
+    if (!ticket.codigo) {
+      toast({ title: "Ticket sin código, no se puede restaurar" });
+      return;
+    }
+    setRestoringId(ticket.id);
+    try {
+      await restoreTicket(ticket.codigo);
+      setItems((prev) => prev.filter((i) => i.id !== ticket.id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      toast({ title: `Ticket "${ticket.nombre ?? ticket.codigo}" restaurado` });
+    } catch (e) {
+      console.error("[DeletedTicketsModal] restore error", e);
+      toast({ title: "Error al restaurar ticket" });
+    } finally {
+      setRestoringId(null);
+    }
+  };
 
   // Debounce búsqueda
   useEffect(() => {
@@ -113,6 +134,7 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
               <TableHead>Informante</TableHead>
               <TableHead>Creado</TableHead>
               <TableHead>Eliminado</TableHead>
+              <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -151,6 +173,22 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                   {formatDate(t.deleted_at ?? t.ultimo_estado?.fecha ?? null)}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    title="Restaurar ticket"
+                    disabled={restoringId === t.id}
+                    onClick={() => handleRestore(t)}
+                  >
+                    {restoringId === t.id ? (
+                      <Spinner className="h-4 w-4" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
