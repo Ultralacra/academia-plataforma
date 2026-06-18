@@ -3,6 +3,40 @@ import { getAccessToken } from "@/lib/zoom";
 
 export const runtime = "nodejs";
 
+function isTranscriptFile(file: { recording_type?: string; file_type?: string }): boolean {
+  const rt = (file.recording_type || "").toLowerCase();
+  const ft = (file.file_type || "").toUpperCase();
+  return (
+    rt.includes("transcript") ||
+    rt === "audio_transcript" ||
+    ft === "TRANSCRIPT" ||
+    ft === "CC" ||
+    ft === "VTT"
+  );
+}
+
+async function fetchAllPages(
+  url: string,
+  accessToken: string,
+): Promise<any[]> {
+  const allItems: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const sep = url.includes("?") ? "&" : "?";
+    const pageUrl = pageToken
+      ? `${url}${sep}page_size=100&next_page_token=${pageToken}`
+      : `${url}${sep}page_size=100`;
+    const res = await fetch(pageUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) break;
+    const data = await res.json();
+    allItems.push(...(data.users || data.meetings || []));
+    pageToken = data.next_page_token || undefined;
+  } while (pageToken);
+  return allItems;
+}
+
 export async function GET(req: NextRequest) {
   try {
     let accessToken: string;
@@ -23,35 +57,25 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from") || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
     const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
 
-    // 1. Obtener todos los usuarios
-    const usersRes = await fetch("https://api.zoom.us/v2/users?page_size=100", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!usersRes.ok) throw new Error("Error listing users");
-    const usersData = await usersRes.json();
-    const users = usersData.users || [];
+    // 1. Obtener todos los usuarios (con paginación)
+    const users = await fetchAllPages("https://api.zoom.us/v2/users", accessToken);
 
-    // 2. Para cada usuario, obtener sus grabaciones
+    // 2. Para cada usuario, obtener sus grabaciones (con paginación)
     const usersWithRecordings = [];
 
     for (const user of users) {
       try {
-        const recRes = await fetch(
-          `https://api.zoom.us/v2/users/${user.id}/recordings?from=${from}&to=${to}&page_size=100`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+        const meetings = await fetchAllPages(
+          `https://api.zoom.us/v2/users/${user.id}/recordings?from=${from}&to=${to}`,
+          accessToken,
         );
-        if (!recRes.ok) continue;
-        const recData = await recRes.json();
-        const meetings = recData.meetings || [];
 
         if (meetings.length > 0) {
           // Extraer transcripciones
           const transcripts: any[] = [];
           for (const meeting of meetings) {
             for (const file of meeting.recording_files || []) {
-              const rt = (file.recording_type || "").toLowerCase();
-              const ft = (file.file_type || "").toUpperCase();
-              if (rt.includes("transcript") || rt === "audio_transcript" || ft === "TRANSCRIPT" || ft === "CC" || ft === "VTT") {
+              if (isTranscriptFile(file)) {
                 transcripts.push({
                   id: file.id,
                   meeting_id: meeting.meeting_id,

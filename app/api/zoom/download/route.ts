@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const fileUrl = searchParams.get("url");
-    const filename = searchParams.get("filename") || "transcript.txt";
+    const filename = searchParams.get("filename") || "download";
 
     if (!fileUrl) {
       return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
@@ -40,14 +40,21 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const content = await res.text();
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    const contentLength = res.headers.get("content-length");
 
-    const response = new NextResponse(content, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
-    });
+    // Stream binary content (works for text, audio, video, etc.)
+    const body = await res.arrayBuffer();
+
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    };
+    if (contentLength) {
+      headers["Content-Length"] = contentLength;
+    }
+
+    const response = new NextResponse(body, { headers });
 
     if (setCookieHeader) {
       response.headers.set("Set-Cookie", setCookieHeader);

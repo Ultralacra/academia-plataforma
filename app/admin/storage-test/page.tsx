@@ -313,7 +313,7 @@ function ZoomSection() {
                   <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {rec.recording_files.map((file) => {
                       const Icon = getFileIcon(file.recording_type);
-                      const isTranscript = (file.recording_type || '').toLowerCase().includes('transcript') || (file.file_type || '').toUpperCase() === 'TRANSCRIPT';
+                      const isTranscript = isTranscriptFile(file);
                       return (
                         <div key={file.id} className={`rounded-xl border p-3 ${isTranscript ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200'}`}>
                           <div className="flex items-center gap-2 mb-2">
@@ -321,7 +321,7 @@ function ZoomSection() {
                             <div className="text-xs font-medium text-slate-800 truncate">{file.recording_type?.replace(/_/g, ' ')}</div>
                           </div>
                           <div className="text-[10px] text-slate-400 mb-2">{file.file_type} · {formatFileSize(file.file_size)}</div>
-                          <a href={file.download_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                              <a href={zoomDownloadProxy(file.download_url, `${file.recording_type || 'file'}.${file.file_type?.toLowerCase() || 'bin'}`)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
                             className={`flex items-center justify-center gap-1.5 w-full px-3 py-1.5 rounded-lg text-xs font-medium ${isTranscript ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
                             {isTranscript ? <FileText className="h-3 w-3" /> : <Download className="h-3 w-3" />}
                             {isTranscript ? 'Ver' : 'Descargar'}
@@ -467,6 +467,23 @@ interface TranscriptFile {
   user_name?: string;
 }
 
+function isTranscriptFile(file: { recording_type?: string; file_type?: string }): boolean {
+  const rt = (file.recording_type || '').toLowerCase();
+  const ft = (file.file_type || '').toUpperCase();
+  return (
+    rt.includes('transcript') ||
+    rt === 'audio_transcript' ||
+    ft === 'TRANSCRIPT' ||
+    ft === 'CC' ||
+    ft === 'VTT'
+  );
+}
+
+function zoomDownloadProxy(downloadUrl: string, filename: string): string {
+  const params = new URLSearchParams({ url: downloadUrl, filename });
+  return `/api/zoom/download?${params}`;
+}
+
 function ZoomTranscriptsSection() {
   const [connected, setConnected] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptFile[]>([]);
@@ -495,25 +512,30 @@ function ZoomTranscriptsSection() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ from: dateFrom, to: dateTo, type: 'transcripts' });
+      const params = new URLSearchParams({ from: dateFrom, to: dateTo });
       const res = await fetch(`/api/zoom/global-recordings?${params}`);
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || 'Error loading transcripts');
       }
       const data = await res.json();
-      const allTranscripts: TranscriptFile[] = (data.transcripts || []).map((t: any) => ({
-        id: t.id,
-        meetingId: t.meeting_id,
-        meetingTopic: t.meeting_topic,
-        recordingType: t.recording_type,
-        fileType: t.file_type,
-        fileSize: t.file_size,
-        downloadUrl: t.download_url,
-        recordingStart: t.meeting_start,
-        user_email: t.user_email,
-        user_name: t.user_name,
-      }));
+      const allTranscripts: TranscriptFile[] = [];
+      for (const user of (data.users || [])) {
+        for (const t of (user.transcripts || [])) {
+          allTranscripts.push({
+            id: t.id,
+            meetingId: t.meeting_id,
+            meetingTopic: t.meeting_topic,
+            recordingType: t.recording_type,
+            fileType: t.file_type,
+            fileSize: t.file_size,
+            downloadUrl: t.download_url,
+            recordingStart: t.meeting_start,
+            user_email: user.user_email,
+            user_name: user.user_name,
+          });
+        }
+      }
       setTranscripts(allTranscripts);
       setConnected(true);
     } catch (err: any) {
@@ -940,9 +962,7 @@ function ZoomUsersSection() {
     for (const meeting of userRecordings) {
       let hasTranscript = false;
       for (const file of meeting.recording_files || []) {
-        const rt = (file.recording_type || '').toLowerCase();
-        const ft = (file.file_type || '').toUpperCase();
-        if (rt.includes('transcript') || rt === 'audio_transcript' || ft === 'TRANSCRIPT' || ft === 'CC' || ft === 'VTT') {
+        if (isTranscriptFile(file)) {
           allTranscripts.push({
             id: file.id,
             meetingId: meeting.meeting_id,
@@ -1061,8 +1081,7 @@ function ZoomUsersSection() {
                       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {rec.recording_files.map((file) => {
                           const Icon = getFileIcon(file.recording_type);
-                          const isTranscript = (file.recording_type || '').toLowerCase().includes('transcript') || 
-                            (file.file_type || '').toUpperCase() === 'TRANSCRIPT';
+                          const isTranscript = isTranscriptFile(file);
                           return (
                             <div key={file.id} className={`rounded-xl border p-4 transition-colors ${isTranscript ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}>
                               <div className="flex items-center gap-3 mb-3">
@@ -1076,7 +1095,7 @@ function ZoomUsersSection() {
                                   <div className="text-xs text-slate-400">{file.file_type} · {formatFileSize(file.file_size)}</div>
                                 </div>
                               </div>
-                              <a href={file.download_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                          <a href={zoomDownloadProxy(file.download_url, `${file.recording_type || 'file'}.${file.file_type?.toLowerCase() || 'bin'}`)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
                                 className={`flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${isTranscript ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
                                 {isTranscript ? <FileText className="h-4 w-4" /> : <Download className="h-4 w-4" />}
                                 {isTranscript ? 'Ver transcripción' : 'Descargar'}
