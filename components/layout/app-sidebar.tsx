@@ -803,15 +803,15 @@ export function AppSidebar() {
               url: "/alumno/agente",
               icon: Sparkles,
             },
-            ...(hasHotsellingAccess
-              ? [
-                  {
-                    title: "Tu Coach Virtual",
-                    url: "/alumno/agentes/copy",
-                    icon: Sparkles,
-                  } as MenuItem,
-                ]
-              : []),
+            // ...(hasHotsellingAccess
+            //   ? [
+            //       {
+            //         title: "Tu Coach Virtual",
+            //         url: "/alumno/agentes/copy",
+            //         icon: Sparkles,
+            //       } as MenuItem,
+            //     ]
+            //   : []),
             {
               title: "Feedback",
               url: `/admin/alumnos/${code}/feedback`,
@@ -1375,9 +1375,9 @@ export function AppSidebar() {
                 <p className="text-sm font-semibold text-sidebar-foreground leading-tight">
                   Emma
                 </p>
-                <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5">
+                {/* <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5">
                   Tu Coach Virtual
-                </p>
+                </p> */}
               </div>
 
               {/* Etiqueta “Nuevo” + flecha */}
