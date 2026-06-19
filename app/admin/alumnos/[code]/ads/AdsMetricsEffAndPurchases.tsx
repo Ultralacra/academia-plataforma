@@ -53,7 +53,7 @@ export default function AdsMetricsEffAndPurchases({
               onChange={(e) => onChange("visitas", e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
+          {/* <div className="space-y-1.5">
             <Label>Pagos iniciados</Label>
             <Input
               inputMode="numeric"
@@ -61,7 +61,7 @@ export default function AdsMetricsEffAndPurchases({
               value={data.pagos || ""}
               onChange={(e) => onChange("pagos", e.target.value)}
             />
-          </div>
+          </div> */}
           <div className="space-y-1.5 col-span-2">
             <Label>Carga de página (%)</Label>
             <Input
@@ -100,7 +100,7 @@ export default function AdsMetricsEffAndPurchases({
               Se calcula: clics / alcance × 100
             </div>
           </div>
-          <div className="space-y-1.5">
+          {/* <div className="space-y-1.5">
             <Label>Pago iniciado (pagos/visitas)</Label>
             <Input
               inputMode="decimal"
@@ -115,7 +115,7 @@ export default function AdsMetricsEffAndPurchases({
                 onChange("eff_pago", sanitizePercentInput(e.target.value))
               }
             />
-          </div>
+          </div> */}
           <div className="space-y-1.5">
             <Label>Compra (%)</Label>
             <Input

@@ -1768,7 +1768,7 @@ export default function AdsMetricsForm({
                           onChange={(e) => onChange("visitas", e.target.value)}
                         />
                       </div>
-                      <div className="space-y-1.5">
+                      {/* <div className="space-y-1.5">
                         <Label>Pagos iniciados</Label>
                         <Input
                           inputMode="numeric"
@@ -1776,7 +1776,7 @@ export default function AdsMetricsForm({
                           value={data.pagos || ""}
                           onChange={(e) => onChange("pagos", e.target.value)}
                         />
-                      </div>
+                      </div> */}
                     </div>
 
                     <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
@@ -1881,7 +1881,7 @@ export default function AdsMetricsForm({
                         }
                       />
                     </div>
-                    <div className="space-y-1">
+                    {/* <div className="space-y-1">
                       <Label>Pago iniciado (pagos/visitas)</Label>
                       <Input
                         inputMode="decimal"
@@ -1889,7 +1889,7 @@ export default function AdsMetricsForm({
                         disabled
                         value={`${fmtRatioToPercent(view.eff_pago)}%`}
                       />
-                    </div>
+                    </div> */}
                     <div className="space-y-1">
                       <Label>Compra (carnada/visitas)</Label>
                       <Input
