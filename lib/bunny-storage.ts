@@ -25,7 +25,7 @@ export async function uploadToBunny(
     throw new Error(`Bunny upload failed: ${res.status} - ${text}`);
   }
 
-  return `${BUNNY_CDN}/${path}`;
+  return `${BUNNY_BASE}/${path}`;
 }
 
 export async function downloadFromBunny(path: string): Promise<Buffer> {
@@ -52,7 +52,8 @@ export async function deleteFromBunny(path: string): Promise<void> {
 }
 
 export async function listBunnyDirectory(path: string): Promise<BunnyFile[]> {
-  const res = await fetch(`${BUNNY_BASE}/${path}`, {
+  const normalized = path.endsWith('/') ? path : `${path}/`;
+  const res = await fetch(`${BUNNY_BASE}/${normalized}`, {
     headers: { 'AccessKey': BUNNY_KEY },
   });
 
@@ -76,5 +77,5 @@ export interface BunnyFile {
 }
 
 export function getBunnyFileUrl(path: string): string {
-  return `${BUNNY_CDN}/${path}`;
+  return `${BUNNY_BASE}/${path}`;
 }

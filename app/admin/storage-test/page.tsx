@@ -26,6 +26,11 @@ import {
   CheckCircle,
   Users as UsersIcon,
   Building,
+  FolderOpen,
+  FolderPlus,
+  Save,
+  HardDrive,
+  CheckCircle2,
 } from 'lucide-react';
 
 // ─── Bunny Upload Section ────────────────────────────────────────────────────
@@ -325,12 +330,12 @@ function ZoomSection() {
                             className={`flex items-center justify-center gap-1.5 w-full px-3 py-1.5 rounded-lg text-xs font-medium ${isTranscript ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
                             {isTranscript ? <FileText className="h-3 w-3" /> : <Download className="h-3 w-3" />}
                             {isTranscript ? 'Ver' : 'Descargar'}
-                          </a>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                              </a>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
               </div>
             ))}
           </div>
@@ -480,7 +485,8 @@ function isTranscriptFile(file: { recording_type?: string; file_type?: string })
 }
 
 function zoomDownloadProxy(downloadUrl: string, filename: string): string {
-  const params = new URLSearchParams({ url: downloadUrl, filename });
+  const safeFilename = filename.replace(/\.chat$/i, '.txt');
+  const params = new URLSearchParams({ url: downloadUrl, filename: safeFilename });
   return `/api/zoom/download?${params}`;
 }
 
@@ -840,6 +846,14 @@ function ZoomUsersSection() {
   const [selectedRecording, setSelectedRecording] = useState<ZoomRecording | null>(null);
   const [userDateFrom, setUserDateFrom] = useState(() => new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]);
   const [userDateTo, setUserDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+  const [bunnyFolders, setBunnyFolders] = useState<Set<string>>(new Set());
+  const [creatingBunnyFolder, setCreatingBunnyFolder] = useState<string | null>(null);
+  const [syncingToBunny, setSyncingToBunny] = useState(false);
+  const [showSyncDialog, setShowSyncDialog] = useState(false);
+  const [bunnySyncResult, setBunnySyncResult] = useState<{ uploaded: number; message: string; errors?: string[] } | null>(null);
+  const [selectedSyncFileIds, setSelectedSyncFileIds] = useState<Set<string>>(new Set());
+  const [transcribingForMeeting, setTranscribingForMeeting] = useState<string | null>(null);
+  const [transcriptionResult, setTranscriptionResult] = useState<{ meetingId: string; topic: string; transcription: string; analysis?: string } | null>(null);
 
   const checkConnection = useCallback(async () => {
     try {
@@ -886,6 +900,13 @@ function ZoomUsersSection() {
   }, [viewType]);
 
   useEffect(() => { checkConnection(); }, []);
+
+  useEffect(() => {
+    if (bunnySyncResult) {
+      const timer = setTimeout(() => setBunnySyncResult(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [bunnySyncResult]);
 
   const filteredUsers = users.filter((u) => {
     if (!searchText.trim()) return true;
@@ -955,6 +976,149 @@ function ZoomUsersSection() {
     }
   };
 
+  const loadBunnyFolders = async () => {
+    try {
+      const res = await fetch('/api/bunny-manage');
+      const data = await res.json();
+      if (data.success) {
+        const folderNames = new Set<string>();
+        for (const f of data.folders || []) {
+          folderNames.add(f.Name);
+        }
+        setBunnyFolders(folderNames);
+      }
+    } catch {
+      // fallo silencioso
+    }
+  };
+
+  useEffect(() => {
+    if (connected) {
+      loadBunnyFolders();
+    }
+  }, [connected]);
+
+  const handleCreateBunnyFolder = async (user: ZoomUserItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCreatingBunnyFolder(user.email);
+    try {
+      const res = await fetch('/api/bunny-manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create-folder', coachName: user.email }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Carpeta creada para ${user.email}`);
+        loadBunnyFolders();
+      } else {
+        toast.error(data.error || 'Error creando carpeta');
+      }
+    } catch {
+      toast.error('Error creando carpeta');
+    } finally {
+      setCreatingBunnyFolder(null);
+    }
+  };
+
+  const handleSyncFiles = async () => {
+    if (!selectedUser || selectedSyncFileIds.size === 0) return;
+    setShowSyncDialog(false);
+    setSyncingToBunny(true);
+    setBunnySyncResult(null);
+
+    const files: Array<{
+      download_url: string;
+      recording_type: string;
+      file_type: string;
+      meeting_topic: string;
+      meeting_start: string;
+      meeting_id: string;
+      file_id: string;
+    }> = [];
+
+    for (const meeting of userRecordings) {
+      for (const file of meeting.recording_files || []) {
+        if (selectedSyncFileIds.has(file.id)) {
+          files.push({
+            download_url: file.download_url,
+            recording_type: file.recording_type,
+            file_type: file.file_type,
+            meeting_topic: meeting.topic,
+            meeting_start: meeting.start_time,
+            meeting_id: meeting.meeting_id,
+            file_id: file.id,
+          });
+        }
+      }
+    }
+
+    try {
+      const res = await fetch('/api/bunny-manage/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          coachName: selectedUser.email,
+          files,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBunnySyncResult({
+          uploaded: data.uploaded?.length || 0,
+          message: data.message,
+          errors: data.errors,
+        });
+        toast.success(data.message);
+        loadBunnyFolders();
+      } else {
+        toast.error(data.error || 'Error en sincronización');
+      }
+    } catch {
+      toast.error('Error en sincronización');
+    } finally {
+      setSyncingToBunny(false);
+    }
+  };
+
+  const handleTranscribe = async (meeting: ZoomRecording) => {
+    const m4aFile = meeting.recording_files?.find(f => (f.file_type || '').toUpperCase() === 'M4A');
+    const mp4File = meeting.recording_files?.find(f => (f.file_type || '').toUpperCase() === 'MP4');
+    const audioFile = m4aFile || mp4File;
+    if (!audioFile) return;
+
+    const proxyUrl = zoomDownloadProxy(audioFile.download_url, `audio.${audioFile.file_type?.toLowerCase() || 'mp4'}`);
+    setTranscribingForMeeting(meeting.id);
+    setTranscriptionResult(null);
+    try {
+      const res = await fetch('/api/zoom/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          downloadUrl: `${window.location.origin}${proxyUrl}`,
+          meetingTopic: meeting.topic,
+          analyze: true,
+        }),
+      });
+      const data = await res.json();
+      if (data.transcription) {
+        setTranscriptionResult({
+          meetingId: meeting.id,
+          topic: meeting.topic,
+          transcription: data.transcription,
+          analysis: data.analysis,
+        });
+        toast.success('Transcripción generada con Whisper');
+      } else {
+        toast.error(data.error || 'Error generando transcripción');
+      }
+    } catch {
+      toast.error('Error de red al generar transcripción');
+    } finally {
+      setTranscribingForMeeting(null);
+    }
+  };
+
   // Vista detalle de usuario seleccionado
   if (selectedUser) {
     const allTranscripts: TranscriptFile[] = [];
@@ -999,7 +1163,30 @@ function ZoomUsersSection() {
           <span className={`px-4 py-2 rounded-xl text-sm font-semibold ${selectedUser.type === 1 ? 'bg-red-100 text-red-700' : selectedUser.type === 2 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>
             {getUserTypeLabel(selectedUser.type)}
           </span>
+          <button
+            onClick={() => { setShowSyncDialog(true); setSelectedSyncFileIds(new Set()); }}
+            disabled={syncingToBunny}
+            className="px-5 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+          >
+            {syncingToBunny ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
+            {syncingToBunny ? 'Sincronizando...' : 'Sincronizar a Bunny'}
+          </button>
         </div>
+
+        {/* Sync result */}
+        {bunnySyncResult && (
+          <div className={`rounded-xl border p-4 ${bunnySyncResult.errors?.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+            <p className="text-sm font-medium text-slate-800">{bunnySyncResult.message}</p>
+            {bunnySyncResult.errors && bunnySyncResult.errors.length > 0 && (
+              <div className="mt-2">
+                <p className="text-xs font-medium text-amber-700 mb-1">Errores:</p>
+                <ul className="text-xs text-amber-700 space-y-0.5 list-disc list-inside">
+                  {bunnySyncResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Filtros de fecha */}
         <div className="flex items-center gap-4 flex-wrap">
@@ -1078,6 +1265,7 @@ function ZoomUsersSection() {
                     </div>
 
                     {selectedRecording?.id === rec.id && (
+                      <>
                       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {rec.recording_files.map((file) => {
                           const Icon = getFileIcon(file.recording_type);
@@ -1104,6 +1292,55 @@ function ZoomUsersSection() {
                           );
                         })}
                       </div>
+
+                      {/* Generar transcripción con Whisper */}
+                      {!(rec.recording_files || []).some(f => isTranscriptFile(f)) && (
+                        <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleTranscribe(rec)}
+                            disabled={transcribingForMeeting === rec.id}
+                            className="px-5 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+                          >
+                            {transcribingForMeeting === rec.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Generando transcripción con Whisper...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-4 w-4" />
+                                Generar transcripción con Whisper
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Mostrar resultado de transcripción */}
+                      {transcriptionResult?.meetingId === rec.id && (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                              <Sparkles className="h-4 w-4 text-amber-600" /> Transcripción generada con Whisper
+                            </h4>
+                            <button onClick={() => setTranscriptionResult(null)}
+                              className="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+                          </div>
+                          {transcriptionResult.analysis && (
+                            <div className="mb-4 p-4 bg-white rounded-lg border border-amber-200">
+                              <h5 className="text-xs font-semibold text-amber-700 uppercase mb-2">Análisis</h5>
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{transcriptionResult.analysis}</p>
+                            </div>
+                          )}
+                          <div className="p-4 bg-white rounded-lg border border-amber-200">
+                            <h5 className="text-xs font-semibold text-amber-700 uppercase mb-2">Transcripción</h5>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto">
+                              {transcriptionResult.transcription}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      </>
                     )}
                   </div>
                 ))}
@@ -1141,6 +1378,126 @@ function ZoomUsersSection() {
               </div>
             )}
           </>
+        )}
+
+        {/* Sync file selection dialog */}
+        {showSyncDialog && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => { setShowSyncDialog(false); setSelectedSyncFileIds(new Set()); }}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Sincronizar a Bunny</h3>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    Archivos de <strong>{selectedUser?.email}</strong>
+                  </p>
+                </div>
+                <button onClick={() => { setShowSyncDialog(false); setSelectedSyncFileIds(new Set()); }}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                  ✕
+                </button>
+              </div>
+
+              {/* Actions bar */}
+              <div className="flex items-center justify-between gap-4 mb-4 p-3 bg-slate-50 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => {
+                    const allIds = new Set<string>();
+                    for (const m of userRecordings) {
+                      for (const f of m.recording_files || []) {
+                        const ft = (f.file_type || '').toUpperCase();
+                        const rt = (f.recording_type || '').toLowerCase();
+                        if (ft === 'MP4' || ft === 'M4A' || ft === 'VTT' || ft === 'CHAT' || rt.includes('transcript')) {
+                          allIds.add(f.id);
+                        }
+                      }
+                    }
+                    setSelectedSyncFileIds(allIds);
+                  }}
+                    className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-300 transition-colors">
+                    Seleccionar todo
+                  </button>
+                  <button onClick={() => setSelectedSyncFileIds(new Set())}
+                    className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-300 transition-colors">
+                    Deseleccionar todo
+                  </button>
+                </div>
+                <span className="text-sm font-medium text-slate-600">
+                  {selectedSyncFileIds.size} archivos seleccionados
+                </span>
+              </div>
+
+              {/* Scrollable file list */}
+              <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+                {userRecordings.map((meeting) => {
+                  const syncFiles = (meeting.recording_files || []).filter(f => {
+                    const ft = (f.file_type || '').toUpperCase();
+                    const rt = (f.recording_type || '').toLowerCase();
+                    return ft === 'MP4' || ft === 'M4A' || ft === 'VTT' || ft === 'CHAT' || rt.includes('transcript');
+                  });
+                  if (syncFiles.length === 0) return null;
+                  return (
+                    <div key={meeting.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{meeting.topic}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{formatDate(meeting.start_time)} · {formatDuration(meeting.duration)}</p>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {syncFiles.map((file) => {
+                          const ft = (file.file_type || '').toUpperCase();
+                          const rt = (file.recording_type || '').toLowerCase();
+                          const isTranscript = rt.includes('transcript') || ft === 'VTT';
+                          const isChatFile = ft === 'CHAT' || rt === 'chat_file';
+                          const Icon = isChatFile ? MessageSquare : isTranscript ? FileText : (ft === 'MP4' ? Film : Headphones);
+                          const isChecked = selectedSyncFileIds.has(file.id);
+                          return (
+                            <label key={file.id}
+                              className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${isChecked ? 'bg-violet-50' : ''}`}>
+                              <input type="checkbox" checked={isChecked}
+                                onChange={(e) => {
+                                  const next = new Set(selectedSyncFileIds);
+                                  if (e.target.checked) next.add(file.id);
+                                  else next.delete(file.id);
+                                  setSelectedSyncFileIds(next);
+                                }}
+                                className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500" />
+                              <div className={`h-9 w-9 rounded-lg grid place-items-center flex-shrink-0 ${isChatFile ? 'bg-amber-100' : isTranscript ? 'bg-emerald-100' : 'bg-blue-100'}`}>
+                                <Icon className={`h-4 w-4 ${isChatFile ? 'text-amber-600' : isTranscript ? 'text-emerald-600' : 'text-blue-600'}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-slate-800 truncate">
+                                  {file.recording_type?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                </div>
+                                <div className="text-xs text-slate-400">
+                                  {file.file_type} · {formatFileSize(file.file_size)}
+                                </div>
+                              </div>
+                              {isChecked && <CheckCircle className="h-4 w-4 text-violet-600 flex-shrink-0" />}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+                {userRecordings.length === 0 && (
+                  <div className="text-center py-12 text-slate-400 text-sm">No hay grabaciones disponibles</div>
+                )}
+              </div>
+
+              {/* Bottom bar */}
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-200 mt-4">
+                <button onClick={handleSyncFiles} disabled={selectedSyncFileIds.size === 0 || syncingToBunny}
+                  className="flex-1 px-5 py-3 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                  {syncingToBunny ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
+                  {syncingToBunny ? 'Sincronizando...' : `Sincronizar (${selectedSyncFileIds.size})`}
+                </button>
+                <button onClick={() => { setShowSyncDialog(false); setSelectedSyncFileIds(new Set()); }}
+                  className="px-5 py-3 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -1255,6 +1612,7 @@ function ZoomUsersSection() {
                     <th className="px-4 py-3 text-left font-medium">Tipo</th>
                     <th className="px-4 py-3 text-left font-medium">Estado</th>
                     <th className="px-4 py-3 text-left font-medium">Último login</th>
+                    <th className="px-4 py-3 text-center font-medium">Bunny</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1277,6 +1635,26 @@ function ZoomUsersSection() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{user.last_login_time ? formatDate(user.last_login_time) : 'Nunca'}</td>
+                      <td className="px-4 py-3 text-center">
+                        {bunnyFolders.has(user.email) || bunnyFolders.has(user.email.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s@._-]/g, '_').trim()) ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-full">
+                            <CheckCircle2 className="h-3 w-3" /> Creada
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => handleCreateBunnyFolder(user, e)}
+                            disabled={creatingBunnyFolder === user.email}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
+                          >
+                            {creatingBunnyFolder === user.email ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <HardDrive className="h-3 w-3" />
+                            )}
+                            Crear carpeta
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1327,6 +1705,281 @@ function ZoomUsersSection() {
   );
 }
 
+// ─── Bunny Manager Section ───────────────────────────────────────────────────
+
+interface CoachItem {
+  id?: string | number | null;
+  name: string;
+}
+
+interface BunnyFolder {
+  Guid: string;
+  Name: string;
+  Path: string;
+  IsDirectory: boolean;
+}
+
+function BunnyManagerSection() {
+  const [coaches, setCoaches] = useState<CoachItem[]>([]);
+  const [folders, setFolders] = useState<BunnyFolder[]>([]);
+  const [zoomUsers, setZoomUsers] = useState<ZoomUserItem[]>([]);
+  const [selectedCoach, setSelectedCoach] = useState('');
+  const [selectedZoomUser, setSelectedZoomUser] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ uploaded: number; message: string; errors?: string[] } | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+
+  useEffect(() => {
+    loadCoaches();
+    loadFolders();
+    loadZoomUsers();
+  }, []);
+
+  const loadCoaches = async () => {
+    try {
+      const res = await fetch('/api/coaches');
+      const data = await res.json();
+      if (data.success) {
+        setCoaches(data.coaches || []);
+      } else {
+        toast.error(data.error || 'Error cargando coaches');
+      }
+    } catch {
+      toast.error('Error de red cargando coaches');
+    }
+  };
+
+  const loadFolders = async () => {
+    try {
+      const res = await fetch('/api/bunny-manage');
+      const data = await res.json();
+      if (data.success) setFolders(data.folders || []);
+    } catch {
+      toast.error('Error cargando carpetas de Bunny');
+    }
+  };
+
+  const loadZoomUsers = async () => {
+    try {
+      const res = await fetch('/api/zoom/users?page_size=100');
+      if (res.ok) {
+        const data = await res.json();
+        setZoomUsers(data.users || []);
+      } else {
+        toast.error('Zoom no conectado. Conecta Zoom para sincronizar.');
+      }
+    } catch {
+      toast.error('Error de red cargando usuarios de Zoom');
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!selectedCoach) {
+      toast.error('Selecciona un coach primero');
+      return;
+    }
+    const coach = coaches.find(c => c.name === selectedCoach);
+    if (!coach) return;
+    setCreatingFolder(true);
+    try {
+      const res = await fetch('/api/bunny-manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create-folder', coachName: coach.name }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        loadFolders();
+      } else {
+        toast.error(data.error || 'Error creando carpeta');
+      }
+    } catch {
+      toast.error('Error creando carpeta');
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
+  const handleSync = async () => {
+    if (!selectedZoomUser || !selectedCoach) {
+      toast.error('Selecciona un usuario de Zoom y un coach');
+      return;
+    }
+    setSyncLoading(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/bunny-manage/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          zoomUserId: selectedZoomUser,
+          coachName: selectedCoach,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSyncResult({
+          uploaded: data.uploaded?.length || 0,
+          message: data.message,
+          errors: data.errors,
+        });
+        toast.success(data.message);
+        loadFolders();
+      } else {
+        toast.error(data.error || 'Error en sincronización');
+      }
+    } catch {
+      toast.error('Error en sincronización');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900">Bunny Manager</h2>
+        <p className="text-sm text-slate-500 mt-1">Gestiona carpetas por coach y sincroniza grabaciones desde Zoom</p>
+      </div>
+
+      {/* Card: Crear Carpetas */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-xl bg-blue-100 grid place-items-center">
+            <FolderPlus className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Crear Carpetas por Coach</h3>
+            <p className="text-xs text-slate-500">Crea una carpeta en Bunny para un coach seleccionado</p>
+          </div>
+        </div>
+        <div className="flex items-end gap-4 flex-wrap">
+          <div className="flex-1 min-w-[240px]">
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Coach</label>
+            <select
+              value={selectedCoach}
+              onChange={(e) => setSelectedCoach(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Selecciona un coach...</option>
+              {coaches.map((coach) => (
+                <option key={coach.name} value={coach.name}>{coach.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleCreateFolder}
+            disabled={creatingFolder || !selectedCoach}
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+          >
+            {creatingFolder ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
+            Crear Carpeta
+          </button>
+        </div>
+      </div>
+
+      {/* Card: Carpetas Existentes */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-emerald-100 grid place-items-center">
+              <FolderOpen className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Carpetas Existentes en Bunny</h3>
+              <p className="text-xs text-slate-500">Carpetas creadas dentro de uploads/</p>
+            </div>
+          </div>
+          <button onClick={loadFolders} className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50">
+            <RefreshCw className="h-4 w-4 inline" /> Actualizar
+          </button>
+        </div>
+        {folders.length === 0 ? (
+          <div className="text-center py-8 text-slate-400 text-sm">No hay carpetas creadas aún</div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {folders.map((folder) => (
+              <div key={folder.Guid} className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50">
+                <FolderOpen className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">{folder.Name}</p>
+                  <p className="text-[10px] text-slate-400 font-mono truncate">{folder.Path}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Card: Sincronizar Grabaciones */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-xl bg-violet-100 grid place-items-center">
+            <Save className="h-5 w-5 text-violet-600" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Sincronizar Grabaciones Zoom → Bunny</h3>
+            <p className="text-xs text-slate-500">Descarga grabaciones y transcripciones de Zoom y súbelas a la carpeta del coach</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 mb-5">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Usuario Zoom</label>
+            <select
+              value={selectedZoomUser}
+              onChange={(e) => setSelectedZoomUser(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+            >
+              <option value="">Selecciona usuario...</option>
+              {zoomUsers.map((user) => (
+                <option key={user.id} value={user.id}>{user.display_name || `${user.first_name} ${user.last_name}`} ({user.email})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Coach destino</label>
+            <select
+              value={selectedCoach}
+              onChange={(e) => setSelectedCoach(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+            >
+              <option value="">Selecciona coach...</option>
+              {coaches.map((coach) => (
+                <option key={coach.name} value={coach.name}>{coach.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <button
+          onClick={handleSync}
+          disabled={syncLoading || !selectedZoomUser || !selectedCoach}
+          className="px-6 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+        >
+          {syncLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {syncLoading ? 'Sincronizando...' : 'Sincronizar Grabaciones'}
+        </button>
+
+        {syncResult && (
+          <div className={`mt-5 rounded-xl border p-4 ${syncResult.errors?.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+            <p className="text-sm font-medium text-slate-800">{syncResult.message}</p>
+            {syncResult.errors && syncResult.errors.length > 0 && (
+              <div className="mt-2">
+                <p className="text-xs font-medium text-amber-700 mb-1">Errores:</p>
+                <ul className="text-xs text-amber-700 space-y-0.5 list-disc list-inside">
+                  {syncResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function StorageTestPage() {
@@ -1335,7 +1988,7 @@ export default function StorageTestPage() {
       <DashboardLayout>
         <div className="p-6 w-full">
           <Tabs defaultValue="zoom" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4 h-12">
+            <TabsList className="grid w-full grid-cols-5 h-12">
               <TabsTrigger value="zoom" className="flex items-center gap-2 text-sm font-semibold">
                 <Video className="h-4 w-4" /> Grabaciones
               </TabsTrigger>
@@ -1348,11 +2001,15 @@ export default function StorageTestPage() {
               <TabsTrigger value="bunny" className="flex items-center gap-2 text-sm font-semibold">
                 <Upload className="h-4 w-4" /> Bunny
               </TabsTrigger>
+              <TabsTrigger value="bunny-manager" className="flex items-center gap-2 text-sm font-semibold">
+                <FolderOpen className="h-4 w-4" /> Manager
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="zoom"><ZoomSection /></TabsContent>
             <TabsContent value="transcripts"><ZoomTranscriptsSection /></TabsContent>
             <TabsContent value="users"><ZoomUsersSection /></TabsContent>
             <TabsContent value="bunny"><BunnyUploadSection /></TabsContent>
+            <TabsContent value="bunny-manager"><BunnyManagerSection /></TabsContent>
           </Tabs>
         </div>
       </DashboardLayout>
