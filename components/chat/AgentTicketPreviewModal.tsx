@@ -25,6 +25,8 @@ interface AgentTicketPreviewModalProps {
   onSuccess: () => void;
   /** Archivos adjuntados en el chat — se suben junto al ticket */
   files?: File[];
+  /** URLs extraídas del mensaje del alumno */
+  urls?: string[];
   /** Función alternativa de creación (ej. createTicketAsAgent) */
   createFn?: (
     form: import("@/app/admin/alumnos/api").CreateTicketForm,
@@ -42,6 +44,7 @@ export function AgentTicketPreviewModal({
   priority,
   onSuccess,
   files,
+  urls,
   createFn,
 }: AgentTicketPreviewModalProps) {
   const [creating, setCreating] = useState(false);
@@ -60,6 +63,7 @@ export function AgentTicketPreviewModal({
         tipo: category,
         descripcion: description,
         estado: "EN_PROGRESO",
+        urls: urls && urls.length > 0 ? urls : undefined,
       });
 
       // Upload files if any

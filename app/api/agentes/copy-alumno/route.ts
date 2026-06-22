@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextRequest } from "next/server";
+import { computeCostUSD } from "@/lib/model-pricing";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -102,6 +103,7 @@ async function logAgentUsage(
     model: string;
     input_tokens: number;
     output_tokens: number;
+    cost_usd?: number;
     user_message_chars: number;
     created_at: string;
   },
@@ -954,6 +956,7 @@ export async function POST(request: NextRequest) {
           model: modelId,
           input_tokens: inputTokens,
           output_tokens: outputTokens,
+          cost_usd: computeCostUSD(modelId, inputTokens, outputTokens),
           user_message_chars: userChars,
           created_at: new Date().toISOString(),
         });

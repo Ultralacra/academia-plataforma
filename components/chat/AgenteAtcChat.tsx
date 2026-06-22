@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTabActiveRef } from "@/hooks/use-tab-visibility";
 import {
   AlertTriangle,
   Bot,
@@ -52,6 +53,9 @@ interface TicketAction {
   descripcion: string;
   categoria: string;
   prioridad: string;
+  urls?: string[];
+  file_ids?: string[];
+  message_ids?: string[];
 }
 
 interface EscalateAction {
@@ -93,6 +97,7 @@ interface PendingTicket {
   messageId: string;
   status: "pending" | "creating" | "created" | "cancelled";
   ticketId?: string;
+  userUrls?: string[];
 }
 
 interface PendingPause {
@@ -110,27 +115,70 @@ interface PendingTarea {
   ticketId?: string;
 }
 
+// ─── URL extraction ──────────────────────────────────────────────────────────
+
+const URL_REGEX = /https?:\/\/[^\s<>)\]"]+/gi;
+
+function extractUrlsFromText(text: string): string[] {
+  const matches = text.match(URL_REGEX);
+  if (!matches) return [];
+  return Array.from(new Set(matches.map((u) => u.replace(/[.,;:!?)\]]+$/, "")))).filter((u) => u.length > 10);
+}
+
 // ─── Action parser ────────────────────────────────────────────────────────────
 
-const ACTION_REGEX = /\[ACCION:(\{[^[\]]*\})\]/g;
+const ACTION_PREFIX = "[ACCION:";
 
 function parseActionBlocks(text: string): {
   cleanText: string;
   actions: AgentAction[];
 } {
   const actions: AgentAction[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
+  let searchFrom = 0;
 
-  while ((match = ACTION_REGEX.exec(text)) !== null) {
+  while (true) {
+    const start = text.indexOf(ACTION_PREFIX, searchFrom);
+    if (start === -1) break;
+
+    const jsonStart = start + ACTION_PREFIX.length;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let jsonEnd = -1;
+
+    for (let i = jsonStart; i < text.length; i++) {
+      const ch = text[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === "\\" && inString) { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) { jsonEnd = i + 1; break; }
+      }
+    }
+
+    if (jsonEnd === -1) break;
+
+    const jsonStr = text.slice(jsonStart, jsonEnd);
     try {
-      actions.push(JSON.parse(match[1]) as AgentAction);
-    } catch {}
-    lastIndex = match.index + match[0].length;
+      actions.push(JSON.parse(jsonStr) as AgentAction);
+    } catch {
+      // AI may have output real newlines inside JSON string values — escape them
+      const sanitized = jsonStr.replace(/\n/g, "\\n").replace(/\r/g, "");
+      try {
+        actions.push(JSON.parse(sanitized) as AgentAction);
+      } catch {}
+    }
+
+    searchFrom = jsonEnd;
   }
 
-  const cleanText = text.slice(0, lastIndex > 0 ? text.lastIndexOf("[ACCION:", lastIndex - 1) : undefined).trimEnd();
-  return { cleanText: actions.length > 0 ? cleanText : text.trimEnd(), actions };
+  const cleanText = actions.length > 0
+    ? text.slice(0, text.indexOf(ACTION_PREFIX)).trimEnd()
+    : text.trimEnd();
+  return { cleanText, actions };
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
@@ -145,13 +193,22 @@ function MessageBubble({
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
 
+  const timeStr = message.timestamp.toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded-2xl rounded-br-sm bg-[#dd4970] px-4 py-3 text-sm text-white shadow-sm">
-          <p className="whitespace-pre-wrap leading-relaxed">
-            {message.content}
-          </p>
+        <div className="flex flex-col items-end gap-0.5">
+          <div className="max-w-[78%] rounded-2xl rounded-br-sm bg-[#dd4970] px-4 py-3 text-sm text-white shadow-sm">
+            <p className="whitespace-pre-wrap leading-relaxed">
+              {message.content}
+            </p>
+          </div>
+          <span className="text-[10px] text-muted-foreground/60">{timeStr}</span>
         </div>
       </div>
     );
@@ -163,32 +220,35 @@ function MessageBubble({
         <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#2d9eea] to-[#7aaad7] shadow-sm">
           <Bot className="h-4 w-4 text-white" />
         </div>
-        <div className="max-w-[78%] rounded-2xl rounded-tl-sm border border-border bg-card px-4 py-3 text-sm shadow-sm">
-          {mode === "atc_team" ? (
-            <div
-              className="prose prose-sm dark:prose-invert max-w-none leading-relaxed [&_strong]:font-semibold"
-              dangerouslySetInnerHTML={{
-                __html: message.content
-                  .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-                  .replace(/\n/g, "<br/>"),
-              }}
-            />
-          ) : (
-            <p className="whitespace-pre-wrap leading-relaxed">
-              {message.content}
-            </p>
-          )}
-          {message.feedbackUrl && (
-            <a
-              href={message.feedbackUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#dd4970] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 active:scale-95"
-            >
-              <FileText className="h-4 w-4" />
-              Ver feedback
-            </a>
-          )}
+        <div className="flex flex-col gap-0.5">
+          <div className="max-w-[78%] rounded-2xl rounded-tl-sm border border-border bg-card px-4 py-3 text-sm shadow-sm">
+            {mode === "atc_team" ? (
+              <div
+                className="prose prose-sm dark:prose-invert max-w-none leading-relaxed [&_strong]:font-semibold"
+                dangerouslySetInnerHTML={{
+                  __html: message.content
+                    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                    .replace(/\n/g, "<br/>"),
+                }}
+              />
+            ) : (
+              <p className="whitespace-pre-wrap leading-relaxed">
+                {message.content}
+              </p>
+            )}
+            {message.feedbackUrl && (
+              <a
+                href={message.feedbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#dd4970] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 active:scale-95"
+              >
+                <FileText className="h-4 w-4" />
+                Ver feedback
+              </a>
+            )}
+          </div>
+          <span className="pl-1 text-[10px] text-muted-foreground/60">{timeStr}</span>
         </div>
       </div>
     );
@@ -691,6 +751,8 @@ export interface AgenteAtcChatProps {
   createAsAgent?: boolean;
   /** Historial de chat ATC↔alumno (texto formateado) para dar contexto al AI */
   chatHistory?: string;
+  /** Callback when unread message count changes */
+  onUnreadChange?: (count: number) => void;
 }
 
 export function AgenteAtcChat({
@@ -703,6 +765,7 @@ export function AgenteAtcChat({
   onTicketCreated,
   createAsAgent = false,
   chatHistory,
+  onUnreadChange,
 }: AgenteAtcChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -735,6 +798,42 @@ export function AgenteAtcChat({
   const [isConvertingAudio, setIsConvertingAudio] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [pendingAudioFile, setPendingAudioFile] = useState<File | null>(null);
+
+  // ── Unread message tracking ──────────────────────────────────────────────
+  const tabActiveRef = useTabActiveRef();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadCountRef = useRef(0);
+
+  const incrementUnread = useCallback(() => {
+    if (!tabActiveRef.current) {
+      setUnreadCount((n) => {
+        const next = n + 1;
+        unreadCountRef.current = next;
+        onUnreadChange?.(next);
+        return next;
+      });
+    }
+  }, [tabActiveRef, onUnreadChange]);
+
+  const resetUnread = useCallback(() => {
+    if (unreadCountRef.current > 0) {
+      setUnreadCount(0);
+      unreadCountRef.current = 0;
+      onUnreadChange?.(0);
+    }
+  }, [onUnreadChange]);
+
+  // Captura el estado de la pestaña al ENViar, no al completar el stream
+  const tabActiveAtSendRef = useRef(true);
+
+  // Reset unread when tab becomes active again
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") resetUnread();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [resetUnread]);
 
   // ── Persistencia del historial en metadata ──────────────────────────────────
   // 1 sólo registro por alumno; se crea con POST la primera vez y se va
@@ -801,10 +900,11 @@ export function AgenteAtcChat({
           feedbackUrl: data.feedbackUrl || "",
         },
       ]);
+      incrementUnread();
     });
 
     return unsub;
-  }, []);
+  }, [incrementUnread]);
 
   // ── Auto-guardar en metadata cuando cambia el historial ──────────────────────
   // Se ignora hasta que la carga inicial haya terminado, y se excluye el welcome.
@@ -1040,6 +1140,9 @@ export function AgenteAtcChat({
     const text = (textOverride ?? input).trim();
     if (!text || isStreaming) return;
 
+    // Capturar estado de pestaña al momento de enviar
+    tabActiveAtSendRef.current = tabActiveRef.current;
+
     if (!textOverride) {
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -1166,12 +1269,18 @@ export function AgenteAtcChat({
               setAttachedFiles((prev) => [...prev, pendingAudioFile]);
               setPendingAudioFile(null);
             }
+            // Extract URLs from the user's last message
+            const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+            const msgUrls = lastUserMsg ? extractUrlsFromText(lastUserMsg.content) : [];
+            const actionUrls = (action as TicketAction).urls ?? [];
+            const allUrls = Array.from(new Set([...actionUrls, ...msgUrls]));
             setPendingTickets((prev) => [
               ...prev,
               {
                 action,
                 messageId: assistantMsgId,
                 status: "pending",
+                userUrls: allUrls.length > 0 ? allUrls : undefined,
               },
             ]);
           } else if (action.tipo === "escalar") {
@@ -1211,6 +1320,16 @@ export function AgenteAtcChat({
             });
           }
         }
+      }
+
+      // Increment unread if tab was hidden WHEN USER SENT the message
+      if (!tabActiveAtSendRef.current) {
+        setUnreadCount((n) => {
+          const next = n + 1;
+          unreadCountRef.current = next;
+          onUnreadChange?.(next);
+          return next;
+        });
       }
     } catch (err: unknown) {
       const e = err as { name?: string; message?: string };
@@ -1875,6 +1994,7 @@ export function AgenteAtcChat({
           category={pendingTickets[ticketModalIndex].action.categoria}
           priority={pendingTickets[ticketModalIndex].action.prioridad}
           files={attachedFiles}
+          urls={pendingTickets[ticketModalIndex].userUrls}
           createFn={createAsAgent ? createTicketAsAgent : undefined}
           onSuccess={() => {
             setTicketModalOpen(false);
@@ -1900,6 +2020,7 @@ export function AgenteAtcChat({
           defaultType={pendingTickets[ticketModalIndex].action.categoria}
           createFn={createAsAgent ? createTicketAsAgent : undefined}
           defaultFiles={attachedFiles}
+          defaultUrls={pendingTickets[ticketModalIndex].userUrls}
           onSuccess={() => {
             setTicketModalOpen(false);
             const idx = ticketModalIndex;

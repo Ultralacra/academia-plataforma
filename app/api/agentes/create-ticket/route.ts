@@ -107,6 +107,7 @@ async function dispatchTicketCreatedNotifications(opts: {
  *   ai_run_id?  string  — ID de corrida IA (opcional)
  *   message_ids? string[] — IDs de mensajes (opcional)
  *   file_ids?   string[] — IDs de archivos (opcional)
+ *   urls?       string[] — URLs adjuntas (opcional)
  */
 export async function POST(request: NextRequest) {
   // Validar que el caller esté autenticado (cualquier JWT válido del browser)
@@ -124,6 +125,7 @@ export async function POST(request: NextRequest) {
     ai_run_id?: string;
     message_ids?: string[];
     file_ids?: string[];
+    urls?: string[];
   };
 
   try {
@@ -132,7 +134,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
   }
 
-  const { id_alumno, nombre, tipo, descripcion, estado, ai_run_id, message_ids, file_ids } = body;
+  const { id_alumno, nombre, tipo, descripcion, estado, ai_run_id, message_ids, file_ids, urls } = body;
 
   if (!id_alumno || !nombre || !tipo) {
     return NextResponse.json(
@@ -159,6 +161,12 @@ export async function POST(request: NextRequest) {
   fd.set("tipo", tipoNorm);
 
   let desc = descripcion ?? "";
+  if (Array.isArray(urls) && urls.length > 0) {
+    const unique = Array.from(new Set(urls.map((u) => u.trim()).filter(Boolean)));
+    const urlsComma = unique.join(', ');
+    desc = desc ? `${desc}\nURLs: ${urlsComma}` : urlsComma;
+    fd.set("urls", JSON.stringify(unique));
+  }
   fd.set("descripcion", desc);
 
   if (estado) fd.set("estado", estado);

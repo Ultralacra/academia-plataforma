@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { NextRequest } from "next/server";
+import { computeCostUSD } from "@/lib/model-pricing";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -259,6 +260,9 @@ Si el alumno consulta sobre Copy Y Ads, emite DOS bloques [ACCION] separados:
 Categorías válidas: Copy | Ads | Técnico | Operativo | ATC
 Prioridades válidas: BAJA | MEDIA | ALTA
 
+**INCLUIR URLs DEL ALUMNO:** Si el alumno comparte un enlace (link de documento, imagen, página, etc.) en su mensaje, inclúyelo en el campo "urls" del bloque [ACCION] como array de strings. Ejemplo:
+[ACCION:{"tipo":"ticket","titulo":"...","descripcion":"...","categoria":"ATC","prioridad":"MEDIA","urls":["https://ejemplo.com/doc"]}]
+
 **REGLA DE CATEGORÍA POR COACH:**
 Al crear un ticket, revisa la sección "COACHES ASIGNADOS AL ALUMNO" y asigna la categoría que corresponda al área del coach. Si hay un coach de Copy, usa categoria="Copy". Si hay un coach de Ads, usa categoria="Ads". Si no hay coach específico para el área, usa "ATC".
 
@@ -399,6 +403,9 @@ Razón: [1-2 líneas justificando el nivel]
 
 Cuando el análisis indica que se debe crear un ticket, incluye al final:
 [ACCION:{"tipo":"ticket","titulo":"TÍTULO","descripcion":"DESCRIPCIÓN","categoria":"Copy|Ads|Técnico|Operativo|ATC","prioridad":"BAJA|MEDIA|ALTA"}]
+
+Si el alumno compartió URLs en su mensaje, incluirlas en el campo "urls" del bloque:
+[ACCION:{"tipo":"ticket","titulo":"TÍTULO","descripcion":"DESCRIPCIÓN","categoria":"Copy|Ads|Técnico|Operativo|ATC","prioridad":"BAJA|MEDIA|ALTA","urls":["https://..."]}]
 
 Cuando se debe escalar:
 [ACCION:{"tipo":"escalar","motivo":"RAZÓN","nivel":"ALTO"}]
@@ -1982,7 +1989,7 @@ export async function POST(request: NextRequest) {
             model: modelId,
             input_tokens: inputTokens,
             output_tokens: outputTokens,
-            cost_usd: (inputTokens / 1_000_000) * 3 + (outputTokens / 1_000_000) * 15,
+            cost_usd: computeCostUSD(modelId, inputTokens, outputTokens),
             user_message_chars: userMsg.length,
             mode,
             user_codigo: currentUser.codigo ?? undefined,
@@ -2071,7 +2078,7 @@ export async function POST(request: NextRequest) {
           model: oaiModel,
           input_tokens: inputTokens,
           output_tokens: outputTokens,
-          cost_usd: (inputTokens / 1_000_000) * 2.5 + (outputTokens / 1_000_000) * 10,
+          cost_usd: computeCostUSD(oaiModel, inputTokens, outputTokens),
           user_message_chars: userMsg.length,
           mode,
           user_codigo: currentUser.codigo ?? undefined,

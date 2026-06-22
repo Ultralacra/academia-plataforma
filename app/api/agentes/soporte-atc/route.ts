@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { NextRequest } from "next/server";
+import { computeCostUSD } from "@/lib/model-pricing";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -419,6 +420,7 @@ async function logAgentUsage(
     model: string;
     input_tokens: number;
     output_tokens: number;
+    cost_usd?: number;
     user_message_chars: number;
     alumno_codigo?: string;
     signals?: string[];
@@ -621,6 +623,7 @@ export async function POST(request: NextRequest) {
               model: modelId,
               input_tokens: inputTokens,
               output_tokens: outputTokens,
+              cost_usd: computeCostUSD(modelId, inputTokens, outputTokens),
               user_message_chars: userMsg.length,
               alumno_codigo: alumnoCode || undefined,
               signals: atcCtx.signals,
@@ -708,6 +711,7 @@ export async function POST(request: NextRequest) {
             model: oaiModel,
             input_tokens: inputTokens,
             output_tokens: outputTokens,
+            cost_usd: computeCostUSD(oaiModel, inputTokens, outputTokens),
             user_message_chars: userMsg.length,
             alumno_codigo: alumnoCode || undefined,
             signals: atcCtx.signals,

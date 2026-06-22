@@ -813,6 +813,16 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
  * identidad de servicio ATC en lugar del alumno/usuario del browser.
  */
 export async function createTicketAsAgent(form: CreateTicketForm): Promise<any> {
+  // Merge URLs into description like createTicket does
+  let descripcion = form.descripcion ?? '';
+  if (form.urls && form.urls.length > 0) {
+    const unique = Array.from(new Set(form.urls.map((u) => u.trim()).filter(Boolean)));
+    const urlsComma = unique.join(', ');
+    descripcion = descripcion
+      ? `${descripcion}\nURLs: ${urlsComma}`
+      : urlsComma;
+  }
+
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const res = await fetch('/api/agentes/create-ticket', {
     method: 'POST',
@@ -825,11 +835,12 @@ export async function createTicketAsAgent(form: CreateTicketForm): Promise<any> 
       id_alumno: form.id_alumno,
       nombre: form.nombre,
       tipo: form.tipo,
-      descripcion: form.descripcion ?? '',
+      descripcion,
       estado: form.estado,
       ai_run_id: form.ai_run_id,
       message_ids: form.message_ids,
       file_ids: form.file_ids,
+      urls: form.urls && form.urls.length > 0 ? form.urls : undefined,
     }),
   });
   if (!res.ok) {

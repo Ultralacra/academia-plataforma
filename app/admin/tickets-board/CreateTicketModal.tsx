@@ -50,6 +50,7 @@ export function CreateTicketModal({
   defaultType,
   createFn,
   defaultFiles,
+  defaultUrls,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,6 +65,8 @@ export function CreateTicketModal({
   ) => Promise<any>;
   /** Archivos pre-adjuntados desde el chat del agente. */
   defaultFiles?: File[];
+  /** URLs pre-adjuntadas desde el chat del agente. */
+  defaultUrls?: string[];
 }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -180,7 +183,7 @@ export function CreateTicketModal({
       setTitle(defaultTitle || "");
       setType([]);
       setDescription(defaultDescription || "");
-      setLinks([]);
+      setLinks(defaultUrls || []);
       setNewLink("");
       setFiles([]);
       setFlowStage("form");

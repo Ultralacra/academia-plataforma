@@ -18,6 +18,7 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { useAuth } from "@/hooks/use-auth";
 import { authService, getAuthToken } from "@/lib/auth";
+import { trackUnreadReceived, trackUnreadRead } from "@/lib/unread-metrics";
 import {
   Dialog,
   DialogContent,
@@ -86,12 +87,14 @@ function StudentSidebar({
   tickets,
   loadingTickets,
   onRefreshTickets,
+  nuevosResueltos = 0,
 }: {
   nombre: string;
   codigo: string;
   tickets: StudentTicket[];
   loadingTickets: boolean;
   onRefreshTickets: () => void;
+  nuevosResueltos?: number;
 }) {
   function formatDate(dateStr?: string) {
     if (!dateStr) return null;
@@ -173,6 +176,11 @@ function StudentSidebar({
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-semibold">Mis feedbacks</span>
+              {nuevosResueltos > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dd4970] px-1.5 text-[10px] font-bold text-white">
+                  {nuevosResueltos}
+                </span>
+              )}
             </div>
             <button
               onClick={onRefreshTickets}
@@ -397,6 +405,35 @@ function AgentePageContent() {
   const [retryedCode, setRetryedCode] = useState<string | null>(null);
   const retryRef = useRef(false);
 
+  // ── Unread message tracking ──────────────────────────────────────────────
+  const [unreadCount, setUnreadCount] = useState(0);
+  const originalTitleRef = useRef("Emma · Asistente IA");
+
+  const handleUnreadChange = useCallback(
+    (count: number) => {
+      setUnreadCount((prev) => {
+        if (count > prev) {
+          trackUnreadReceived(count - prev);
+        } else if (prev > 0 && count === 0) {
+          trackUnreadRead(prev);
+        }
+        return count;
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (unreadCount > 0 && document.visibilityState !== "visible") {
+      document.title = `🔴 (${unreadCount}) ${originalTitleRef.current}`;
+    } else {
+      document.title = originalTitleRef.current;
+    }
+    return () => {
+      document.title = originalTitleRef.current;
+    };
+  }, [unreadCount]);
+
   const alumnoCode = (user as any)?.codigo ?? retryedCode ?? "";
   const alumnoName = user?.name ?? alumnoCode;
 
@@ -575,6 +612,7 @@ function AgentePageContent() {
   // ── Polling de tickets resueltos ─────────────────────────────────────────
   const yaProcesadosRef = useRef<Set<string>>(new Set());
   const primeraConsultaRef = useRef(true);
+  const [nuevosResueltos, setNuevosResueltos] = useState(0);
   useEffect(() => {
     if (!alumnoCode) return;
     let cancelled = false;
@@ -601,6 +639,8 @@ function AgentePageContent() {
           yaProcesadosRef.current.add(ticket.ticketId);
 
           if (isFirstPoll) continue;
+
+          setNuevosResueltos((n) => n + 1);
 
           const mensaje = `Hola ${alumnoName.split(" ")[0]} 😊\n\n¡Listo! Tu coach ya revisó tu consulta y dejó el feedback correspondiente.\n\nTe recomendamos revisar cuidadosamente las observaciones y aplicar las recomendaciones indicadas para continuar avanzando en tu implementación.\n\nSi después de revisar el feedback te surge una nueva duda o necesitas una aclaración puntual, puedes escribirnos nuevamente por este medio y con gusto te apoyaremos.\n\n¡Muchos éxitos! 🚀`;
 
@@ -699,11 +739,15 @@ function AgentePageContent() {
           codigo={alumnoCode}
           tickets={tickets}
           loadingTickets={loadingTickets}
-          onRefreshTickets={refreshTickets}
+          onRefreshTickets={() => {
+            setNuevosResueltos(0);
+            refreshTickets();
+          }}
+          nuevosResueltos={nuevosResueltos}
         />
 
         {/* Chat */}
-        <div className="flex-1 overflow-hidden" style={{ minHeight: "520px" }}>
+        <div className="relative flex-1 overflow-hidden" style={{ minHeight: "520px" }}>
           <AgenteAtcChat
             alumnoCode={alumnoCode}
             alumnoName={alumnoName}
@@ -714,7 +758,19 @@ function AgentePageContent() {
             onTicketCreated={refreshTickets}
             createAsAgent={true}
             chatHistory={chatHistory}
+            onUnreadChange={handleUnreadChange}
           />
+          {unreadCount > 0 && (
+            <div className="absolute bottom-20 left-1/2 z-50 -translate-x-1/2 animate-bounce">
+              <div className="flex items-center gap-2 rounded-full bg-[#dd4970] px-4 py-2 text-xs font-semibold text-white shadow-lg">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+                </span>
+                {unreadCount} {unreadCount === 1 ? "mensaje nuevo" : "mensajes nuevos"} sin leer
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

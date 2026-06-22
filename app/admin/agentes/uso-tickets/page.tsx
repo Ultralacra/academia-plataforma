@@ -16,6 +16,7 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { getAuthToken } from "@/lib/auth";
+import { PRICE_PER_MILLION, priceForModel } from "@/lib/model-pricing";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -76,29 +77,8 @@ type DayStats = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const PRICE_PER_MILLION: Record<string, { input: number; output: number }> = {
-  default: { input: 2.5, output: 10 },
-  "gpt-4o": { input: 2.5, output: 10 },
-  "gpt-4o-mini": { input: 0.15, output: 0.6 },
-  "gpt-4-turbo": { input: 10, output: 30 },
-  "gpt-4": { input: 30, output: 60 },
-  "gpt-3.5-turbo": { input: 0.5, output: 1.5 },
-  "gpt-5": { input: 10, output: 40 },
-  "gpt-4.5": { input: 75, output: 150 },
-  o3: { input: 10, output: 40 },
-  "o4-mini": { input: 1.1, output: 4.4 },
-};
-
-function priceFor(model: string | null | undefined) {
-  const key = String(model ?? "").toLowerCase();
-  for (const k of Object.keys(PRICE_PER_MILLION)) {
-    if (k !== "default" && key.includes(k)) return PRICE_PER_MILLION[k];
-  }
-  return PRICE_PER_MILLION.default;
-}
-
 function calcCost(model: string | null, inputTok: number, outputTok: number) {
-  const p = priceFor(model);
+  const p = priceForModel(model);
   return (inputTok / 1_000_000) * p.input + (outputTok / 1_000_000) * p.output;
 }
 
