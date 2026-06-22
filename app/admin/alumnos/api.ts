@@ -855,7 +855,11 @@ export type TicketUpdatePayload = Partial<{
   descripcion: string | null;
 }>;
 
-export async function updateTicket(ticketId: string, payload: TicketUpdatePayload): Promise<any> {
+export async function updateTicket(
+  ticketId: string,
+  payload: TicketUpdatePayload,
+  alumnoCode?: string,
+): Promise<any> {
   // El endpoint documentado usa PUT para actualizar un ticket
   const path = `/ticket/update/ticket/${encodeURIComponent(ticketId)}`;
   // Filtrar campos prohibidos y construir body limpio
@@ -863,11 +867,32 @@ export async function updateTicket(ticketId: string, payload: TicketUpdatePayloa
   delete rest.alumno_url;
   delete rest.equipo;
 
-  return await fetchJson<any>(path, {
+  const result = await fetchJson<any>(path, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rest),
   });
+
+  // Si el ticket se marca como RESUELTO, disparar notificación de Emma al alumno
+  const estadoUpper = String(payload.estado ?? "").toUpperCase();
+  if (estadoUpper.includes("RESUELTO")) {
+    const effectiveAlumnoCode = alumnoCode?.trim();
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
+    fetch("/api/agentes/emma/notificar-resuelto", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        ticket_id: ticketId,
+        alumno_code: effectiveAlumnoCode || undefined,
+      }),
+      cache: "no-store",
+    }).catch(() => {});
+  }
+
+  return result;
 }
 
 // 7) Opciones

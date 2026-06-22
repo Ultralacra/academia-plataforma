@@ -1504,10 +1504,14 @@ export default function TicketsPanelCoach({
       return;
     }
     try {
-      await updateTicket(ticketCodigo, { estado: newEstado });
+      const t = rows.find((r) => r.codigo === ticketCodigo);
+      await updateTicket(
+        ticketCodigo,
+        { estado: newEstado },
+        t?.id_alumno?.trim() || undefined,
+      );
       // Notificación local: cambio de estado
       try {
-        const t = rows.find((r) => r.codigo === ticketCodigo);
         const title = `Ticket actualizado: ${t?.nombre || ticketCodigo} → ${
           STATUS_LABEL[newEstado]
         }`;
@@ -3587,9 +3591,13 @@ export default function TicketsPanelCoach({
 
                                     if (editTicket?.codigo) {
                                       try {
-                                        await updateTicket(editTicket.codigo, {
-                                          estado: newStatus,
-                                        });
+                                        await updateTicket(
+                                          editTicket.codigo,
+                                          {
+                                            estado: newStatus,
+                                          },
+                                          editTicket?.id_alumno?.trim() || undefined,
+                                        );
 
                                         // Update local state
                                         setRows((prev) =>

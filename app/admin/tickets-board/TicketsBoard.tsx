@@ -1691,7 +1691,8 @@ function TicketsBoardContent({
     const tk = tickets.find((t) => t.id === tid);
     const codigo = tk?.codigo ?? null;
     if (!codigo) return;
-    updateTicket(codigo, { estado: targetEstado })
+    const alumnoCode = (tk as any)?.id_alumno?.trim() || undefined;
+    updateTicket(codigo, { estado: targetEstado }, alumnoCode)
       .then(() => {
         // Notificación local: cambio de estado
         try {
@@ -2661,7 +2662,11 @@ function TicketsBoardContent({
           typeof editForm.estado === "string" ? editForm.estado : undefined;
         payload.deadline = editForm.deadline ?? undefined;
       }
-      await updateTicket(selectedTicket.codigo, payload as any);
+      await updateTicket(
+        selectedTicket.codigo,
+        payload as any,
+        (selectedTicket as any)?.id_alumno?.trim() || undefined,
+      );
       // Notificación local: guardado de cambios (incluye estado si cambia)
       try {
         const current =
@@ -5434,6 +5439,7 @@ function TicketsBoardContent({
                                           await updateTicket(
                                             selectedTicket.codigo,
                                             { estado: newStatus },
+                                            (selectedTicket as any)?.id_alumno?.trim() || undefined,
                                           );
 
                                           setTickets((prev) =>

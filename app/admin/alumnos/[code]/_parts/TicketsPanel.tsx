@@ -441,7 +441,7 @@ export default function TicketsPanel({
       const ticket = all.find((t) => t.id === ticketId);
       const codigo = ticket?.codigo;
       if (!codigo) throw new Error("No se encontró el código UUID del ticket");
-      await updateTicket(codigo, { estado: newEstado });
+      await updateTicket(codigo, { estado: newEstado }, ticket?.id_alumno?.trim() || undefined);
       try {
         if (typeof window !== "undefined") {
           const proto = window.location.protocol === "https:" ? "wss" : "ws";

@@ -10,6 +10,7 @@ import {
   FileText,
   Loader2,
   MessageSquarePlus,
+  RefreshCw,
   Send,
   User2,
 } from "lucide-react";
@@ -30,6 +31,7 @@ import {
   AgenteAtcChat,
   type AIProvider,
 } from "@/components/chat/AgenteAtcChat";
+import { emitirTicketResuelto } from "@/components/chat/TicketResueltoNotifier";
 import { getStudentTickets } from "@/app/admin/alumnos/api";
 import { AI_PROVIDER_KEY } from "@/app/admin/agentes/page";
 import { io } from "socket.io-client";
@@ -83,11 +85,13 @@ function StudentSidebar({
   codigo,
   tickets,
   loadingTickets,
+  onRefreshTickets,
 }: {
   nombre: string;
   codigo: string;
   tickets: StudentTicket[];
   loadingTickets: boolean;
+  onRefreshTickets: () => void;
 }) {
   function formatDate(dateStr?: string) {
     if (!dateStr) return null;
@@ -165,9 +169,19 @@ function StudentSidebar({
       {/* Recent feedbacks */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Mis feedbacks</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">Mis feedbacks</span>
+            </div>
+            <button
+              onClick={onRefreshTickets}
+              disabled={loadingTickets}
+              className="rounded-lg p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+              title="Actualizar"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingTickets ? "animate-spin" : ""}`} />
+            </button>
           </div>
         </div>
         <div className="divide-y divide-border">
@@ -558,6 +572,64 @@ function AgentePageContent() {
     refreshTickets();
   }, [refreshTickets]);
 
+  // ── Polling de tickets resueltos ─────────────────────────────────────────
+  const yaProcesadosRef = useRef<Set<string>>(new Set());
+  const primeraConsultaRef = useRef(true);
+  useEffect(() => {
+    if (!alumnoCode) return;
+    let cancelled = false;
+    const POLL_INTERVAL = 10_000;
+
+    async function verificarTicketsResueltos() {
+      if (cancelled) return;
+      try {
+        const token = getAuthToken();
+        const isFirstPoll = primeraConsultaRef.current;
+        primeraConsultaRef.current = false;
+        const url = `/api/agentes/emma/tickets-resueltos?alumno=${encodeURIComponent(alumnoCode)}`;
+        const res = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          cache: "no-store",
+        });
+
+        if (!res.ok) return;
+        const data = await res.json();
+        const ticketsResueltos: any[] = data.tickets || [];
+
+        for (const ticket of ticketsResueltos) {
+          if (yaProcesadosRef.current.has(ticket.ticketId)) continue;
+          yaProcesadosRef.current.add(ticket.ticketId);
+
+          if (isFirstPoll) continue;
+
+          const mensaje = `Hola ${alumnoName.split(" ")[0]} 😊\n\n¡Listo! Tu coach ya revisó tu consulta y dejó el feedback correspondiente.\n\nTe recomendamos revisar cuidadosamente las observaciones y aplicar las recomendaciones indicadas para continuar avanzando en tu implementación.\n\nSi después de revisar el feedback te surge una nueva duda o necesitas una aclaración puntual, puedes escribirnos nuevamente por este medio y con gusto te apoyaremos.\n\n¡Muchos éxitos! 🚀`;
+
+          emitirTicketResuelto(
+            {
+              id: `emma-resuelto-${ticket.ticketId}`,
+              content: mensaje,
+              feedbackLink: ticket.feedbackUrl || ticket.nombre || "",
+              feedbackUrl: ticket.feedbackUrl || "",
+            },
+            ticket.ticketId,
+          );
+        }
+
+        refreshTickets();
+      } catch {
+        // silencioso
+      }
+    }
+
+    const interval = setInterval(verificarTicketsResueltos, POLL_INTERVAL);
+    verificarTicketsResueltos();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [alumnoCode, alumnoName, refreshTickets]);
+
   const welcomeMessage = alumnoName
     ? `¡Hola ${alumnoName.split(" ")[0]}! 👋 Me llamo Emma, soy tu Asistente IA de Hotselling PRO. Estoy aquí para ayudarte con cualquier consulta sobre tu programa: membresías, contratos, pausas, extensiones, bonos, garantías y mucho más.\n\n¿En qué te puedo ayudar hoy?`
     : "¡Hola! 👋 Soy Emma, tu Asistente IA. ¿En qué te puedo ayudar hoy?";
@@ -627,6 +699,7 @@ function AgentePageContent() {
           codigo={alumnoCode}
           tickets={tickets}
           loadingTickets={loadingTickets}
+          onRefreshTickets={refreshTickets}
         />
 
         {/* Chat */}

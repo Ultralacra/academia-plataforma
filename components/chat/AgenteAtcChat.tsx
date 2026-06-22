@@ -7,6 +7,7 @@ import {
   Bot,
   Calendar,
   CheckCircle2,
+  FileText,
   Loader2,
   MessageSquare,
   Mic,
@@ -30,6 +31,7 @@ import {
 import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
 import { AgentTicketPreviewModal } from "@/components/chat/AgentTicketPreviewModal";
 import { useAgenteAtcHistory } from "@/components/chat/useAgenteAtcHistory";
+import { onTicketResuelto } from "@/components/chat/TicketResueltoNotifier";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +43,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  feedbackUrl?: string;
 }
 
 interface TicketAction {
@@ -174,6 +177,17 @@ function MessageBubble({
             <p className="whitespace-pre-wrap leading-relaxed">
               {message.content}
             </p>
+          )}
+          {message.feedbackUrl && (
+            <a
+              href={message.feedbackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#dd4970] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 active:scale-95"
+            >
+              <FileText className="h-4 w-4" />
+              Ver feedback
+            </a>
           )}
         </div>
       </div>
@@ -768,6 +782,29 @@ export function AgenteAtcChat({
       ]);
     }
   }, [historyLoaded, persistedMessages, persistedContextInfo, welcomeMessage]);
+
+  // ── Escuchar tickets resueltos vía emitter ──────────────────────────────
+  const ticketResueltoIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const unsub = onTicketResuelto((data) => {
+      const id = data.id;
+      if (ticketResueltoIdsRef.current.has(id)) return;
+      ticketResueltoIdsRef.current.add(id);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id,
+          role: "assistant" as const,
+          content: data.content,
+          timestamp: new Date(),
+          feedbackUrl: data.feedbackUrl || "",
+        },
+      ]);
+    });
+
+    return unsub;
+  }, []);
 
   // ── Auto-guardar en metadata cuando cambia el historial ──────────────────────
   // Se ignora hasta que la carga inicial haya terminado, y se excluye el welcome.
