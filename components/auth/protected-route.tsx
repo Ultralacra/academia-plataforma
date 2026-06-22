@@ -165,6 +165,10 @@ function ProtectedRouteContent({
       segments[0] === "admin" &&
       segments[1] === "metrics" &&
       segments[2] === "nueva";
+    const isMetricsEmmaPath =
+      segments[0] === "admin" &&
+      segments[1] === "metrics" &&
+      segments[2] === "emma";
     const isAgentesPath = segments[0] === "admin" && segments[1] === "agentes";
     // Permitir chat general beta
     const isChatGeneralPath = segments[0] === "chat" && segments[1] === "beta";
@@ -200,6 +204,7 @@ function ProtectedRouteContent({
       !isMensajesSeguimientoPath &&
       !isMetricsChatPath &&
       !isMetricsNuevaPath &&
+      !isMetricsEmmaPath &&
       !isAgentesPath &&
       !isChatGeneralPath &&
       !isRendimientoAreasPath

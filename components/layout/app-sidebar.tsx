@@ -560,6 +560,11 @@ export function AppSidebar() {
                       url: "/admin/metrics/nueva",
                       icon: BarChart3,
                     },
+                    {
+                      title: "Métricas Emma",
+                      url: "/admin/metrics/emma",
+                      icon: Bot,
+                    },
                   ],
                 },
                 {
@@ -647,6 +652,11 @@ export function AppSidebar() {
                       title: "Métrica Nueva",
                       url: "/admin/metrics/nueva",
                       icon: BarChart3,
+                    },
+                    {
+                      title: "Métricas Emma",
+                      url: "/admin/metrics/emma",
+                      icon: Bot,
                     },
                   ],
                 },

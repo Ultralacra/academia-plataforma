@@ -23,10 +23,13 @@ import {
   ChevronRight,
   Loader2,
   MessageSquare,
+  Ticket,
   TrendingUp,
   Users,
 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
+import TicketsContent from "@/app/admin/tickets/components/tickets-content";
+import type { Ticket } from "@/lib/data-service";
 
 interface ChatMessage {
   id: string;
@@ -253,7 +256,17 @@ function formatNumber(n: number): string {
   return new Intl.NumberFormat("es-ES").format(n);
 }
 
+function isEmmaTicket(t: Ticket): boolean {
+  const informante = (t.informante ?? "").trim();
+  const idAlumno = (t.id_alumno ?? "").trim();
+  if (informante && idAlumno && informante === idAlumno) return true;
+  const nombre = (t.informante_nombre ?? "").toLowerCase().trim();
+  const code = (t.informante ?? "").toLowerCase().trim();
+  return nombre.includes("emma") || code.includes("emma");
+}
+
 export default function EmmaMetricsPage() {
+  const [tab, setTab] = useState<"chat" | "tickets">("chat");
   const [histories, setHistories] = useState<HistoryEntry[]>([]);
   const [pauseOutcomes, setPauseOutcomes] = useState<PauseOutcome[]>([]);
   const [loading, setLoading] = useState(true);
@@ -638,7 +651,7 @@ export default function EmmaMetricsPage() {
   return (
     <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
-        <div className="space-y-6 p-6">
+        <div className="space-y-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -646,19 +659,59 @@ export default function EmmaMetricsPage() {
                 Métricas de Emma IA
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                Análisis de temas más hablados en conversaciones con el agente
-                IA.
+                {tab === "chat"
+                  ? "Análisis de temas más hablados en conversaciones con el agente IA."
+                  : "Tickets creados por Emma — mismos KPIs y filtros que la vista Tickets."}
               </p>
             </div>
+            <div className="flex items-center gap-2">
+              {tab === "chat" && (
+                <button
+                  onClick={loadHistories}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  Actualizar
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-1 border-b border-slate-200">
             <button
-              onClick={loadHistories}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+              onClick={() => setTab("chat")}
+              className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors -mb-px border-b-2 ${
+                tab === "chat"
+                  ? "border-[#2d9eea] text-[#2d9eea] bg-white"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
             >
-              <TrendingUp className="h-4 w-4" />
-              Actualizar
+              <MessageSquare className="h-4 w-4 inline mr-1.5" />
+              Chat
+            </button>
+            <button
+              onClick={() => setTab("tickets")}
+              className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors -mb-px border-b-2 ${
+                tab === "tickets"
+                  ? "border-[#2d9eea] text-[#2d9eea] bg-white"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Ticket className="h-4 w-4 inline mr-1.5" />
+              Tickets
             </button>
           </div>
+
+          {tab === "tickets" && (
+            <TicketsContent
+              preFilter={isEmmaTicket}
+              title="Tickets de Emma"
+            />
+          )}
+
+          {tab === "chat" && (
+            <>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1433,6 +1486,8 @@ export default function EmmaMetricsPage() {
               </table>
             </div>
           </div>
+          </>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>
