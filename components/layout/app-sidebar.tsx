@@ -813,15 +813,15 @@ export function AppSidebar() {
               url: "/alumno/agente",
               icon: Sparkles,
             },
-            // ...(hasHotsellingAccess
-            //   ? [
-            //       {
-            //         title: "Tu Coach Virtual",
-            //         url: "/alumno/agentes/copy",
-            //         icon: Sparkles,
-            //       } as MenuItem,
-            //     ]
-            //   : []),
+            ...(hasHotsellingAccess
+              ? [
+                  {
+                    title: "Tu Coach Virtual",
+                    url: "/alumno/agentes/copy",
+                    icon: Sparkles,
+                  } as MenuItem,
+                ]
+              : []),
             {
               title: "Feedback",
               url: `/admin/alumnos/${code}/feedback`,

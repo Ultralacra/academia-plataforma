@@ -16,21 +16,7 @@ function normalizeRole(rawRole?: unknown, rawTipo?: unknown) {
   return "other";
 }
 
-/**
- * Normaliza el tag quitando acentos, espacios extra y pasando a lowercase.
- * "Hotselling Starter" → "hotselling starter"
- * "HotSelling starter" → "hotselling starter"
- */
-function normalizeTag(tag?: string | null): string {
-  return String(tag ?? "")
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-const ALLOWED_TAGS = ["hotselling foundation", "hotselling starter"];
+const ALLOWED_CODES = ["GtfjYj1aZINQoNsw"];
 
 async function fetchMe(authorization: string) {
   const res = await fetch(buildUrl("/auth/me"), {
@@ -51,54 +37,19 @@ async function fetchMe(authorization: string) {
   } | null;
 }
 
-async function fetchStudentTag(
-  authorization: string,
-  codigo: string,
-): Promise<string | null> {
-  const res = await fetch(
-    buildUrl(
-      `/client/get/clients?page=1&pageSize=5&search=${encodeURIComponent(codigo)}`,
-    ),
-    {
-      headers: { Authorization: authorization, Accept: "application/json" },
-      cache: "no-store",
-    },
-  );
-  if (!res.ok) return null;
-  const json = await res.json().catch(() => null);
-  const rows: any[] = Array.isArray(json?.data)
-    ? json.data
-    : Array.isArray(json?.clients?.data)
-      ? json.clients.data
-      : Array.isArray(json?.getClients?.data)
-        ? json.getClients.data
-        : [];
-  if (rows.length === 0) return null;
-  const student =
-    rows.find(
-      (r) =>
-        String(r.codigo ?? "").toLowerCase() === codigo.toLowerCase(),
-    ) ?? rows[0];
-  return (
-    String(
-      student?.tag ?? student?.etiqueta ?? student?.tags ?? "",
-    ).trim() || null
-  );
-}
-
 /**
  * GET /api/agentes/copy-alumno/check-access
  *
  * Verifica si el alumno autenticado tiene acceso al agente HotSelling.
- * Requisito: role = student AND tag normalizado = "hotselling starter"
+ * Requisito: role = student AND codigo = GtfjYj1aZINQoNsw
  *
- * Response: { allowed: boolean, tag: string | null, reason?: string }
+ * Response: { allowed: boolean, reason?: string }
  */
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   if (!auth.trim()) {
     return NextResponse.json(
-      { allowed: false, tag: null, reason: "No autenticado" },
+      { allowed: false, reason: "No autenticado" },
       { status: 401 },
     );
   }
@@ -106,7 +57,7 @@ export async function GET(req: NextRequest) {
   const me = await fetchMe(auth);
   if (!me) {
     return NextResponse.json(
-      { allowed: false, tag: null, reason: "Token inválido" },
+      { allowed: false, reason: "Token inválido" },
       { status: 401 },
     );
   }
@@ -115,7 +66,6 @@ export async function GET(req: NextRequest) {
   if (role !== "student") {
     return NextResponse.json({
       allowed: false,
-      tag: null,
       reason: "Solo disponible para alumnos",
     });
   }
@@ -124,20 +74,16 @@ export async function GET(req: NextRequest) {
   if (!codigo) {
     return NextResponse.json({
       allowed: false,
-      tag: null,
       reason: "Sin código de alumno",
     });
   }
 
-  const rawTag = await fetchStudentTag(auth, codigo);
-  const normalizedTag = normalizeTag(rawTag);
-  const allowed = ALLOWED_TAGS.includes(normalizedTag);
+  const allowed = ALLOWED_CODES.includes(codigo);
 
   return NextResponse.json({
     allowed,
-    tag: rawTag,
     reason: allowed
       ? undefined
-      : "Acceso exclusivo para alumnos HotSelling Foundation o HotSelling Starter",
+      : "Acceso exclusivo restringido",
   });
 }

@@ -23,16 +23,7 @@ function normalizeRole(rawRole?: unknown, rawTipo?: unknown) {
   return "other";
 }
 
-function normalizeTag(tag?: string | null): string {
-  return String(tag ?? "")
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-const ALLOWED_TAG = "hotselling foundation";
+const ALLOWED_CODES = ["GtfjYj1aZINQoNsw"];
 
 async function fetchMe(authorization: string) {
   const res = await fetch(buildUrl("/auth/me"), {
@@ -51,45 +42,6 @@ async function fetchMe(authorization: string) {
     tipo?: string;
     codigo?: string;
   } | null;
-}
-
-async function fetchStudent(
-  authorization: string,
-  codigo: string,
-): Promise<any | null> {
-  const res = await fetch(
-    buildUrl(
-      `/client/get/clients?page=1&pageSize=5&search=${encodeURIComponent(codigo)}`,
-    ),
-    {
-      headers: { Authorization: authorization, Accept: "application/json" },
-      cache: "no-store",
-    },
-  );
-  if (!res.ok) return null;
-  const json = await res.json().catch(() => null);
-  const rows: any[] = Array.isArray(json?.data)
-    ? json.data
-    : Array.isArray(json?.clients?.data)
-      ? json.clients.data
-      : Array.isArray(json?.getClients?.data)
-        ? json.getClients.data
-        : [];
-  if (rows.length === 0) return null;
-  return (
-    rows.find(
-      (r) => String(r.codigo ?? "").toLowerCase() === codigo.toLowerCase(),
-    ) ?? rows[0]
-  );
-}
-
-function extractStudentTag(student: any | null): string | null {
-  if (!student) return null;
-  return (
-    String(
-      student?.tag ?? student?.etiqueta ?? student?.tags ?? "",
-    ).trim() || null
-  );
 }
 
 async function logAgentUsage(
@@ -850,24 +802,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. Verificar tag "Hotselling Starter"
+  // 3. Verificar código de alumno autorizado
   const codigo = String(me.codigo ?? me.id ?? "");
-  if (!codigo) {
-    return new Response(
-      JSON.stringify({ error: "Sin código de alumno" }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
-  }
-  const student = await fetchStudent(authorization, codigo);
-  const rawTag = extractStudentTag(student);
-  if (normalizeTag(rawTag) !== ALLOWED_TAG) {
+  if (!codigo || !ALLOWED_CODES.includes(codigo)) {
     return new Response(
       JSON.stringify({
-        error: "Acceso exclusivo para alumnos HotSelling Foundation",
+        error: "Acceso exclusivo restringido",
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
   }
+
+  const student = null;
 
   const messages = body.messages;
   const agentType = String(body.agentType ?? "hotsystem");
