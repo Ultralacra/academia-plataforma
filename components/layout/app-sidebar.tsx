@@ -398,11 +398,11 @@ export function AppSidebar() {
                     url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
                     icon: GraduationCap,
                   },
-                  // {
-                  //   title: "Chat soporte",
-                  //   url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  //   icon: MessageSquare,
-                  // },
+                  {
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                    icon: MessageSquare,
+                  },
                   {
                     title: "Feedback",
                     url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
@@ -755,11 +755,11 @@ export function AppSidebar() {
                     url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
                     icon: GraduationCap,
                   },
-                  // {
-                  //   title: "Chat soporte",
-                  //   url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  //   icon: MessageSquare,
-                  // },
+                  {
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                    icon: MessageSquare,
+                  },
                   {
                     title: "Feedback",
                     url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
@@ -802,12 +802,12 @@ export function AppSidebar() {
               url: `/admin/alumnos/${code}/perfil`,
               icon: GraduationCap,
             },
-            // {
-            //   title: "Chat soporte",
-            //   url: `/admin/alumnos/${code}/chat`,
-            //   icon: MessageSquare,
-            //   disabled: isCompleted,
-            // },
+            {
+              title: "Chat soporte",
+              url: `/admin/alumnos/${code}/chat`,
+              icon: MessageSquare,
+              disabled: isCompleted,
+            },
             {
               title: "Emma · Asistente IA",
               url: "/alumno/agente",

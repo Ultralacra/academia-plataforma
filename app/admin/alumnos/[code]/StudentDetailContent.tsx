@@ -3293,7 +3293,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
               />
             </div>
 
-            {/* Tickets movidos a la sección Feedback */}
+            <TabsTicketsChat
+              code={student.code || code}
+              studentName={student.name}
+              student={student}
+              onChangedTickets={(n: number) => setTicketsCount(n)}
+            />
           </div>
           {/* Columna lateral: equipo y contrato (sticky) */}
           <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">

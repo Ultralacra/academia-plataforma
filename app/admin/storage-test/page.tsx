@@ -31,7 +31,13 @@ import {
   Save,
   HardDrive,
   CheckCircle2,
+  TrendingUp,
+  Target,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { getDisplayName, isVisibleZoomAccount } from '@/lib/sales-analysis-types';
 
 // ─── Bunny Upload Section ────────────────────────────────────────────────────
 
@@ -267,6 +273,7 @@ function ZoomSection() {
   };
 
   const filtered = usersData.filter((u) => {
+    if (!isVisibleZoomAccount(u.user_email)) return false;
     if (!searchText.trim()) return true;
     const s = searchText.toLowerCase();
     return u.user_email?.toLowerCase().includes(s) || u.user_name?.toLowerCase().includes(s);
@@ -283,7 +290,7 @@ function ZoomSection() {
           <button onClick={() => { setSelectedUser(null); setSelectedRecording(null); }}
             className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50">← Volver</button>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-slate-900">{selectedUser.user_name}</h2>
+            <h2 className="text-2xl font-bold text-slate-900">{getDisplayName(selectedUser.user_email) || selectedUser.user_name}</h2>
             <p className="text-sm text-slate-500">{selectedUser.user_email}</p>
           </div>
         </div>
@@ -435,7 +442,7 @@ function ZoomSection() {
                 <UsersIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-slate-900">{user.user_name}</div>
+                <div className="font-semibold text-slate-900">{getDisplayName(user.user_email) || user.user_name}</div>
                 <div className="text-sm text-slate-500">{user.user_email}</div>
               </div>
               <div className="flex items-center gap-6 text-sm">
@@ -617,6 +624,7 @@ function ZoomTranscriptsSection() {
   };
 
   const filtered = transcripts.filter((t) => {
+    if (!isVisibleZoomAccount(t.user_email || '')) return false;
     if (!searchText.trim()) return true;
     const search = searchText.toLowerCase();
     return (
@@ -909,6 +917,7 @@ function ZoomUsersSection() {
   }, [bunnySyncResult]);
 
   const filteredUsers = users.filter((u) => {
+    if (!isVisibleZoomAccount(u.email)) return false;
     if (!searchText.trim()) return true;
     const search = searchText.toLowerCase();
     return (
@@ -1620,7 +1629,7 @@ function ZoomUsersSection() {
                     <tr key={user.id} onClick={() => handleSelectUser(user)}
                       className="hover:bg-slate-50 cursor-pointer transition-colors">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800">{user.display_name || `${user.first_name} ${user.last_name}`}</div>
+                        <div className="font-medium text-slate-800">{getDisplayName(user.email) || user.display_name || `${user.first_name} ${user.last_name}`}</div>
                         <div className="text-xs text-slate-400 font-mono mt-0.5">ID: {user.id}</div>
                       </td>
                       <td className="px-4 py-3 text-slate-600 text-xs">{user.email}</td>
@@ -1699,6 +1708,657 @@ function ZoomUsersSection() {
               </table>
             </div>
           )
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Sales Analysis Section ──────────────────────────────────────────────────
+
+function SalesAnalysisSection() {
+  const [globalData, setGlobalData] = useState<UserWithRecordings[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserWithRecordings | null>(null);
+  const [analyzingFor, setAnalyzingFor] = useState<string | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<Record<string, any>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    discovery: false, questions: false, talkRatio: false, valueBuilding: false,
+    offer: false, objections: false, process: false, profile: false,
+    delivery: false, coaching: false, evidence: false, alerts: false,
+  });
+  const [dateFrom, setDateFrom] = useState(() => new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]);
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ from: dateFrom, to: dateTo });
+      const res = await fetch(`/api/zoom/global-recordings?${params}`);
+      if (!res.ok) throw new Error('Error cargando grabaciones');
+      const data = await res.json();
+      const visible = (data.users || []).filter((u: UserWithRecordings) => isVisibleZoomAccount(u.user_email));
+      setGlobalData(visible);
+    } catch (err: any) {
+      setError(err.message);
+    } finally { setLoading(false); }
+  }, [dateFrom, dateTo]);
+
+  const handleSelectUser = useCallback((user: UserWithRecordings) => {
+    setSelectedUser(user);
+    setAnalysisResults({});
+  }, []);
+
+  const handleAnalyze = async (recording: ZoomRecording) => {
+    const m4aFile = recording.recording_files?.find(f => (f.file_type || '').toUpperCase() === 'M4A');
+    const mp4File = recording.recording_files?.find(f => (f.file_type || '').toUpperCase() === 'MP4');
+    const audioFile = m4aFile || mp4File;
+    if (!audioFile) { toast.error('No se encontró archivo de audio'); return; }
+
+    const proxyUrl = zoomDownloadProxy(audioFile.download_url, `audio.${audioFile.file_type?.toLowerCase() || 'mp4'}`);
+    const meetingId = recording.id;
+    setAnalyzingFor(meetingId);
+
+    try {
+      const res = await fetch('/api/zoom/sales-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          downloadUrl: `${window.location.origin}${proxyUrl}`,
+          meetingTopic: recording.topic,
+          closerEmail: selectedUser?.user_email || '',
+          closerName: getDisplayName(selectedUser?.user_email || '') || selectedUser?.user_name || '',
+          recordingStart: recording.start_time,
+          duration: recording.duration,
+        }),
+      });
+      const data = await res.json();
+      if (data.analysis) {
+        setAnalysisResults(prev => ({ ...prev, [meetingId]: data.analysis }));
+        toast.success('Análisis de ventas completado');
+      } else {
+        toast.error(data.error || 'Error en el análisis');
+      }
+    } catch {
+      toast.error('Error de red al analizar');
+    } finally {
+      setAnalyzingFor(null);
+    }
+  };
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const scoreBadge = (score: number, label: string) => {
+    let color = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    if (score < 5) color = 'bg-red-100 text-red-700 border-red-200';
+    else if (score < 7) color = 'bg-amber-100 text-amber-700 border-amber-200';
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${color}`}>
+        {label}: {score}/10
+      </span>
+    );
+  };
+
+  const matchScoreBadge = (score: number) => {
+    let color = 'bg-emerald-100 text-emerald-700';
+    if (score < 80) color = 'bg-amber-100 text-amber-700';
+    if (score < 60) color = 'bg-red-100 text-red-700';
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${color}`}>
+        Expectation Match: {score}/100
+      </span>
+    );
+  };
+
+  const complianceBar = (pct: number, label: string) => (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-slate-600 w-24 text-right">{label}</span>
+      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+          style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs font-bold text-slate-700 w-8">{pct}%</span>
+    </div>
+  );
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Detail view
+  if (selectedUser) {
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center gap-4 flex-wrap pb-4 border-b border-slate-200">
+          <button onClick={() => { setSelectedUser(null); setAnalysisResults({}); }}
+            className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors">
+            ← Volver
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-2xl font-bold text-slate-900 truncate">
+              {getDisplayName(selectedUser.user_email) || selectedUser.user_name}
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">{selectedUser.user_email}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-slate-600">Desde:</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-slate-600">Hasta:</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <button onClick={loadData} disabled={loading}
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin inline" /> : 'Buscar'}
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20"><Loader2 className="h-10 w-10 animate-spin text-blue-500" /></div>
+        ) : selectedUser.meetings.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center">
+            <Video className="h-20 w-20 text-slate-200 mx-auto mb-4" />
+            <p className="text-lg font-medium text-slate-500">No se encontraron grabaciones</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {selectedUser.meetings.map((rec) => {
+              const hasResult = rec.id in analysisResults;
+              const result = analysisResults[rec.id];
+              const isAnalyzing = analyzingFor === rec.id;
+              return (
+                <div key={rec.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="px-6 py-5 flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-slate-900 text-base truncate">{rec.topic}</div>
+                      <div className="flex items-center gap-3 mt-1.5 text-sm text-slate-500">
+                        <span>{formatDate(rec.start_time)}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{formatDuration(rec.duration)}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{rec.recording_count} archivos</span>
+                      </div>
+                    </div>
+                    {hasResult ? (
+                      <button onClick={() => setAnalysisResults(prev => { const n = { ...prev }; delete n[rec.id]; return n; })}
+                        className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors">
+                        Ocultar análisis
+                      </button>
+                    ) : (
+                      <button onClick={() => handleAnalyze(rec)} disabled={isAnalyzing}
+                        className="px-5 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
+                        {isAnalyzing ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" /> Analizando con IA...</>
+                        ) : (
+                          <><Sparkles className="h-4 w-4" /> Analizar con IA</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {hasResult && result && (
+                    <div className="border-t border-slate-100 px-6 py-5 space-y-5 bg-slate-50">
+                      {/* Header Card */}
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-xl bg-white border border-slate-200 p-4">
+                          <p className="text-xs text-slate-500 uppercase font-medium">Resultado</p>
+                          <p className={`text-xl font-bold mt-1 ${result.won ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {result.won ? 'GANADA' : 'PERDIDA'}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-white border border-slate-200 p-4">
+                          <p className="text-xs text-slate-500 uppercase font-medium">Probabilidad de cierre</p>
+                          <p className="text-xl font-bold mt-1 text-slate-800">{result.closeProbability}%</p>
+                        </div>
+                        <div className="rounded-xl bg-white border border-slate-200 p-4">
+                          <p className="text-xs text-slate-500 uppercase font-medium">Temperatura del lead</p>
+                          <p className={`text-xl font-bold mt-1 ${result.leadTemperature === 'Caliente' ? 'text-red-600' : result.leadTemperature === 'Tibio' ? 'text-amber-600' : 'text-blue-600'}`}>
+                            {result.leadTemperature}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-white border border-slate-200 p-4">
+                          <p className="text-xs text-slate-500 uppercase font-medium">Próxima acción</p>
+                          <p className="text-sm font-semibold mt-1 text-slate-800 leading-tight">{result.nextAction || 'N/A'}</p>
+                        </div>
+                      </div>
+
+                      {/* Executive Summary */}
+                      <div className="rounded-xl bg-white border border-slate-200 p-4">
+                        <h4 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2"><FileText className="h-4 w-4 text-blue-500" /> Resumen Ejecutivo</h4>
+                        <p className="text-sm text-slate-600 leading-relaxed">{result.executiveSummary}</p>
+                      </div>
+
+                      {/* Scores Row */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {scoreBadge(result.discovery?.score ?? 0, 'Discovery')}
+                        {scoreBadge(result.valueBuilding?.score ?? 0, 'Value')}
+                        {scoreBadge(result.offer?.score ?? 0, 'Offer')}
+                        {scoreBadge(result.objectionScore ?? 0, 'Objeciones')}
+                        {matchScoreBadge(result.expectationMatchScore ?? 0)}
+                      </div>
+
+                      {/* Talk Ratio */}
+                      <div className="rounded-xl bg-white border border-slate-200 p-4">
+                        <h4 className="text-sm font-bold text-slate-900 mb-3">Participación en la conversación</h4>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1">
+                            <div className="flex justify-between text-xs text-slate-500 mb-1">
+                              <span>Closer</span><span>{result.talkRatio?.closer ?? 0}%</span>
+                            </div>
+                            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${(result.talkRatio?.closer ?? 0) > 65 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                style={{ width: `${result.talkRatio?.closer ?? 0}%` }} />
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex justify-between text-xs text-slate-500 mb-1">
+                              <span>Prospecto</span><span>{result.talkRatio?.prospect ?? 0}%</span>
+                            </div>
+                            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-emerald-500"
+                                style={{ width: `${result.talkRatio?.prospect ?? 0}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                        {result.talkRatio?.alert && (
+                          <div className="mt-3 flex items-center gap-2 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                            <AlertTriangle className="h-3 w-3" /> {result.talkRatio.alert}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Collapsible Sections */}
+                      {[
+                        { key: 'discovery', icon: Search, label: 'Calidad del Discovery', content: (
+                          <div className="space-y-3">
+                            {[
+                              ['problemIdentification', 'Identificación del problema'],
+                              ['painDeepening', 'Profundización del dolor'],
+                              ['consequences', 'Consecuencias del problema'],
+                              ['economicImpact', 'Impacto económico'],
+                              ['emotionalImpact', 'Impacto emocional'],
+                              ['urgency', 'Urgencia'],
+                              ['previousAttempts', 'Intentos previos'],
+                              ['objectives', 'Objetivos'],
+                              ['realMotivators', 'Motivadores reales'],
+                              ['decisionCapacity', 'Capacidad de decisión'],
+                            ].map(([key, label]) => (
+                              <div key={key} className="flex items-center gap-2">
+                                <div className={`h-2 w-2 rounded-full ${result.discovery?.[key] ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                <span className="text-sm text-slate-700">{label}</span>
+                              </div>
+                            ))}
+                            {result.discovery?.strengths?.length > 0 && (
+                              <div className="mt-2 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                                <p className="text-xs font-semibold text-emerald-700 mb-1">Fortalezas</p>
+                                {result.discovery.strengths.map((s: string, i: number) => (
+                                  <p key={i} className="text-xs text-emerald-600">• {s}</p>
+                                ))}
+                              </div>
+                            )}
+                            {result.discovery?.improvements?.length > 0 && (
+                              <div className="mt-2 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                                <p className="text-xs font-semibold text-amber-700 mb-1">Oportunidades de mejora</p>
+                                {result.discovery.improvements.map((s: string, i: number) => (
+                                  <p key={i} className="text-xs text-amber-600">• {s}</p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )},
+                        { key: 'questions', icon: MessageSquare, label: 'Calidad de Preguntas', content: (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {[
+                              ['openEnded', 'Abiertas', 'text-blue-600', 'bg-blue-50'],
+                              ['closed', 'Cerradas', 'text-amber-600', 'bg-amber-50'],
+                              ['deepening', 'Profundización', 'text-violet-600', 'bg-violet-50'],
+                              ['diagnostic', 'Diagnóstico', 'text-emerald-600', 'bg-emerald-50'],
+                            ].map(([key, label, textColor, bgColor]) => (
+                              <div key={key} className={`rounded-xl ${bgColor} p-3 text-center`}>
+                                <p className={`text-2xl font-bold ${textColor}`}>{result.questions?.[key] ?? 0}</p>
+                                <p className="text-xs text-slate-600 mt-0.5">{label}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )},
+                        { key: 'valueBuilding', icon: Target, label: 'Construcción de Valor', content: (
+                          <div className="space-y-2">
+                            {[
+                              ['personalization', 'Personalización'],
+                              ['problemSolutionConnection', 'Conexión problema-solución'],
+                              ['methodClarity', 'Claridad del método'],
+                              ['programClarity', 'Claridad del programa'],
+                              ['expectedResultsClarity', 'Claridad de resultados esperados'],
+                            ].map(([key, label]) => (
+                              <div key={key} className="flex items-center gap-2">
+                                <div className={`h-2 w-2 rounded-full ${result.valueBuilding?.[key] ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                <span className="text-sm text-slate-700">{label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )},
+                        { key: 'offer', icon: TrendingUp, label: 'Presentación de Oferta', content: (
+                          <div className="space-y-2">
+                            {[
+                              ['offerClarity', 'Claridad de la oferta'],
+                              ['priceClarity', 'Claridad del precio'],
+                              ['conditionsClarity', 'Claridad de condiciones'],
+                              ['nextStepsClarity', 'Claridad de próximos pasos'],
+                              ['expectationsClarity', 'Claridad de expectativas'],
+                            ].map(([key, label]) => (
+                              <div key={key} className="flex items-center gap-2">
+                                <div className={`h-2 w-2 rounded-full ${result.offer?.[key] ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                <span className="text-sm text-slate-700">{label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )},
+                        { key: 'objections', icon: AlertTriangle, label: 'Manejo de Objeciones', content: (
+                          <div className="space-y-3">
+                            {(!result.objections || result.objections.length === 0) ? (
+                              <p className="text-sm text-slate-500 italic">No se detectaron objeciones</p>
+                            ) : (
+                              result.objections.map((obj: any, i: number) => (
+                                <div key={i} className="p-3 bg-white border border-slate-200 rounded-lg">
+                                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className="px-2 py-0.5 bg-slate-100 rounded text-xs font-bold text-slate-700">{obj.type}</span>
+                                    <span className="text-xs text-slate-400">{obj.minute}</span>
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      obj.result === 'Resuelta' ? 'bg-emerald-100 text-emerald-700' :
+                                      obj.result === 'Parcialmente resuelta' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                    }`}>{obj.result}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-600 mb-1"><strong>Evidencia:</strong> {obj.evidence}</p>
+                                  <p className="text-xs text-slate-600"><strong>Respuesta:</strong> {obj.response}</p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )},
+                        { key: 'process', icon: CheckCircle, label: 'Cumplimiento del Proceso Comercial', content: (
+                          <div className="space-y-2">
+                            {result.processCompliance && Object.entries(result.processCompliance).map(([key, val]) => (
+                              complianceBar(val as number, key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'))
+                            ))}
+                          </div>
+                        )},
+                        { key: 'profile', icon: UsersIcon, label: 'Perfil Automático del Prospecto', content: (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {result.prospectProfile && [
+                              ['Nombre', 'name'],
+                              ['Profesión', 'profession'],
+                              ['Nicho', 'niche'],
+                              ['Experiencia', 'experienceLevel'],
+                              ['Facturación actual', 'currentRevenue'],
+                              ['Facturación objetivo', 'targetRevenue'],
+                              ['Dolor principal', 'mainPain'],
+                              ['Programa de interés', 'programOfInterest'],
+                              ['Nivel de consciencia', 'consciousnessLevel'],
+                              ['Problema principal', 'mainProblem'],
+                              ['Perfil conductual', 'behavioralProfile'],
+                            ].map(([label, key]) => (
+                              <div key={key} className="p-2">
+                                <p className="text-xs text-slate-400 uppercase">{label}</p>
+                                <p className="text-sm font-medium text-slate-800">{result.prospectProfile[key] || 'N/A'}</p>
+                              </div>
+                            ))}
+                            {result.prospectProfile?.behavioralProfileExplanation && (
+                              <div className="sm:col-span-2 p-2">
+                                <p className="text-xs text-slate-400 uppercase">Explicación del perfil</p>
+                                <p className="text-sm text-slate-600">{result.prospectProfile.behavioralProfileExplanation}</p>
+                              </div>
+                            )}
+                            {result.prospectProfile?.objectives && (
+                              <div className="sm:col-span-2 p-2">
+                                <p className="text-xs text-slate-400 uppercase mb-1">Objetivos</p>
+                                <p className="text-sm text-slate-600"><strong>Corto plazo:</strong> {result.prospectProfile.objectives.shortTerm || 'N/A'}</p>
+                                <p className="text-sm text-slate-600"><strong>Largo plazo:</strong> {result.prospectProfile.objectives.longTerm || 'N/A'}</p>
+                              </div>
+                            )}
+                          </div>
+                        )},
+                        { key: 'delivery', icon: FolderOpen, label: 'Resumen para Delivery', content: (
+                          <div className="space-y-3">
+                            {result.deliverySummary && [
+                              ['¿Por qué compró?', 'whyBought'],
+                              ['Resultado deseado', 'desiredResult'],
+                              ['Expectativa del programa', 'programExpectation'],
+                              ['Nivel de compromiso', 'commitmentLevel'],
+                              ['Acompañamiento necesario', 'supportNeeded'],
+                              ['Cree que va a recibir', 'believesWillReceive'],
+                            ].map(([label, key]) => (
+                              <div key={key} className="p-3 bg-white border border-slate-100 rounded-lg">
+                                <p className="text-xs text-slate-400 uppercase mb-1">{label}</p>
+                                <p className="text-sm text-slate-700">{result.deliverySummary[key] || 'N/A'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )},
+                        { key: 'coaching', icon: Sparkles, label: 'Coaching Automático', content: (
+                          <div className="grid gap-4 sm:grid-cols-3">
+                            <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                              <h5 className="text-xs font-bold text-emerald-700 uppercase mb-2">Fortalezas</h5>
+                              {result.coaching?.strengths?.map((s: string, i: number) => (
+                                <p key={i} className="text-sm text-emerald-700 mb-1">• {s}</p>
+                              )) || <p className="text-sm text-slate-500 italic">N/A</p>}
+                            </div>
+                            <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                              <h5 className="text-xs font-bold text-amber-700 uppercase mb-2">Oportunidades</h5>
+                              {result.coaching?.opportunities?.map((s: string, i: number) => (
+                                <p key={i} className="text-sm text-amber-700 mb-1">• {s}</p>
+                              )) || <p className="text-sm text-slate-500 italic">N/A</p>}
+                            </div>
+                            <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                              <h5 className="text-xs font-bold text-blue-700 uppercase mb-2">Plan de Acción</h5>
+                              {result.coaching?.actionPlan?.map((s: string, i: number) => (
+                                <p key={i} className="text-sm text-blue-700 mb-1">• {s}</p>
+                              )) || <p className="text-sm text-slate-500 italic">N/A</p>}
+                            </div>
+                          </div>
+                        )},
+                        { key: 'evidence', icon: FileText, label: 'Evidencia y Hallazgos', content: (
+                          <div className="space-y-2">
+                            {(!result.evidence || result.evidence.length === 0) ? (
+                              <p className="text-sm text-slate-500 italic">No se registraron evidencias</p>
+                            ) : (
+                              result.evidence.map((e: any, i: number) => (
+                                <div key={i} className="p-3 bg-white border border-slate-100 rounded-lg">
+                                  <p className="text-xs font-semibold text-slate-700 mb-1">{e.insight}</p>
+                                  <p className="text-xs text-slate-500 font-mono">[{e.minute}] "{e.phrase}"</p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )},
+                        { key: 'alerts', icon: AlertTriangle, label: 'Alertas', content: (
+                          <div className="space-y-2">
+                            {(!result.alerts || result.alerts.length === 0) ? (
+                              <p className="text-sm text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg">Sin alertas</p>
+                            ) : (
+                              result.alerts.map((a: any, i: number) => (
+                                <div key={i} className={`flex items-start gap-2 px-3 py-2 rounded-lg text-sm ${
+                                  a.severity === 'critical' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                                }`}>
+                                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  <div>
+                                    <p className="font-medium">{a.type}</p>
+                                    {a.detail && <p className="text-xs mt-0.5 opacity-80">{a.detail}</p>}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )},
+                      ].map(({ key, icon: Icon, label, content }) => (
+                        <div key={key} className="rounded-xl bg-white border border-slate-200 overflow-hidden">
+                          <button onClick={() => toggleSection(key)}
+                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-4 w-4 text-slate-500" />
+                              <span className="text-sm font-semibold text-slate-800">{label}</span>
+                            </div>
+                            {expandedSections[key] ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                          </button>
+                          {expandedSections[key] && (
+                            <div className="px-4 pb-4">{content}</div>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Recommendations */}
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {result.salesRecommendations?.length > 0 && (
+                          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                            <h4 className="text-xs font-bold text-blue-700 uppercase mb-2">Recomendaciones para Ventas</h4>
+                            {result.salesRecommendations.map((r: string, i: number) => (
+                              <p key={i} className="text-sm text-blue-700 mb-1">• {r}</p>
+                            ))}
+                          </div>
+                        )}
+                        {result.deliveryRecommendations?.length > 0 && (
+                          <div className="p-4 bg-violet-50 border border-violet-100 rounded-xl">
+                            <h4 className="text-xs font-bold text-violet-700 uppercase mb-2">Recomendaciones para Delivery</h4>
+                            {result.deliveryRecommendations.map((r: string, i: number) => (
+                              <p key={i} className="text-sm text-violet-700 mb-1">• {r}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Risks */}
+                      {result.risks?.length > 0 && (
+                        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
+                          <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4" /> Riesgos identificados
+                          </h4>
+                          {result.risks.map((r: string, i: number) => (
+                            <p key={i} className="text-sm text-amber-700 mb-1">• {r}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Main list view
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold mb-1">Análisis de Ventas</h2>
+          <p className="text-sm text-muted-foreground">
+            Analiza grabaciones de llamadas comerciales con IA para generar inteligencia de ventas
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={loadData} disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Actualizar
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-slate-600">Desde:</label>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-slate-600">Hasta:</label>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <button onClick={loadData} disabled={loading}
+          className="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin inline" /> : 'Buscar'}
+        </button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Closers activos</p>
+            <UsersIcon className="h-5 w-5 text-violet-500" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{globalData.length}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total grabaciones</p>
+            <Video className="h-5 w-5 text-blue-500" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{globalData.reduce((a, u) => a + u.meetings_count, 0)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Transcripciones</p>
+            <FileText className="h-5 w-5 text-emerald-500" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{globalData.reduce((a, u) => a + u.transcripts_count, 0)}</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-900">Closers con grabaciones ({globalData.length})</h3>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+        ) : globalData.length === 0 ? (
+          <div className="text-center py-12">
+            <UsersIcon className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm text-slate-500">No se encontraron grabaciones para los closers</p>
+            <p className="text-xs text-slate-400 mt-1">Prueba cambiar el rango de fechas</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {globalData.map((user) => (
+              <div key={user.user_id} onClick={() => handleSelectUser(user)}
+                className="px-6 py-5 cursor-pointer hover:bg-slate-50 transition-colors flex items-center gap-4">
+                <div className="h-12 w-12 rounded-xl bg-violet-100 flex items-center justify-center">
+                  <UsersIcon className="h-6 w-6 text-violet-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-slate-900">
+                    {getDisplayName(user.user_email) || user.user_name}
+                  </div>
+                  <div className="text-sm text-slate-500">{user.user_email}</div>
+                </div>
+                <div className="flex items-center gap-6 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{user.meetings_count}</div>
+                    <div className="text-xs text-slate-500">grabaciones</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-emerald-600">{user.transcripts_count}</div>
+                    <div className="text-xs text-slate-500">transcripciones</div>
+                  </div>
+                </div>
+                <Sparkles className="h-5 w-5 text-slate-400" />
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -1988,12 +2648,15 @@ export default function StorageTestPage() {
       <DashboardLayout>
         <div className="p-6 w-full">
           <Tabs defaultValue="zoom" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5 h-12">
+            <TabsList className="grid w-full grid-cols-6 h-12">
               <TabsTrigger value="zoom" className="flex items-center gap-2 text-sm font-semibold">
                 <Video className="h-4 w-4" /> Grabaciones
               </TabsTrigger>
               <TabsTrigger value="transcripts" className="flex items-center gap-2 text-sm font-semibold">
                 <FileText className="h-4 w-4" /> Transcripciones
+              </TabsTrigger>
+              <TabsTrigger value="sales-analysis" className="flex items-center gap-2 text-sm font-semibold">
+                <TrendingUp className="h-4 w-4" /> Análisis Ventas
               </TabsTrigger>
               <TabsTrigger value="users" className="flex items-center gap-2 text-sm font-semibold">
                 <UsersIcon className="h-4 w-4" /> Usuarios
@@ -2007,6 +2670,7 @@ export default function StorageTestPage() {
             </TabsList>
             <TabsContent value="zoom"><ZoomSection /></TabsContent>
             <TabsContent value="transcripts"><ZoomTranscriptsSection /></TabsContent>
+            <TabsContent value="sales-analysis"><SalesAnalysisSection /></TabsContent>
             <TabsContent value="users"><ZoomUsersSection /></TabsContent>
             <TabsContent value="bunny"><BunnyUploadSection /></TabsContent>
             <TabsContent value="bunny-manager"><BunnyManagerSection /></TabsContent>
