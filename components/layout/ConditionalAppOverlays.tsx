@@ -13,6 +13,7 @@ import { PwaPushClient } from "@/components/pwa/PwaPushClient";
 import { UpdateEmailOnLoginModal } from "@/components/auth/UpdateEmailOnLoginModal";
 import { StudentWelcomeModal } from "@/components/auth/StudentWelcomeModal";
 import { StudentInactivityModal } from "@/components/auth/StudentInactivityModal";
+import { StudentCompletedBlockModal } from "@/components/auth/StudentCompletedBlockModal";
 
 function isPublicNoNotificationsPath(pathname: string) {
   if (!pathname) return false;
@@ -42,6 +43,7 @@ export function ConditionalAppOverlays({
       <UpdateEmailOnLoginModal />
       <StudentWelcomeModal />
       <StudentInactivityModal />
+      <StudentCompletedBlockModal />
       {children}
     </SseNotificationsProvider>
   );

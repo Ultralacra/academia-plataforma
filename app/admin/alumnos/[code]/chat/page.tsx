@@ -6,7 +6,7 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import ChatPanel from "../_parts/ChatPanel";
 import { useAuth } from "@/hooks/use-auth";
-import { getAuthToken } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-config";
 import { MessageSquare } from "lucide-react";
 
 const WHATSAPP_URL =
@@ -29,26 +29,37 @@ export default function StudentChatFullPage() {
       setIsCompleted(false);
       return;
     }
-    const token = getAuthToken();
-    if (!token) {
-      setIsCompleted(false);
-      return;
-    }
 
-    fetch(`/client/get/clients?pageSize=5&search=${encodeURIComponent(studentCode)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then((json) => {
-        const items = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        const student = items.find(
-          (s: any) => String(s.code || s.codigo || "").toLowerCase() === studentCode.toLowerCase(),
+    (async () => {
+      try {
+        const json = await apiFetch<any>(
+          `/client/get/cliente-estatus/${encodeURIComponent(studentCode)}`,
+          undefined,
+          { background: true },
         );
-        const stage = String(student?.stage || "").toUpperCase();
-        setIsCompleted(stage === "F5");
-      })
-      .catch(() => setIsCompleted(false));
+        const raw: any[] = Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json)
+            ? json
+            : Array.isArray(json?.data?.data)
+              ? json.data.data
+              : Array.isArray(json?.rows)
+                ? json.rows
+                : [];
+        const sorted = [...raw].sort(
+          (a, b) =>
+            new Date(b.created_at || b.fecha || 0).getTime() -
+            new Date(a.created_at || a.fecha || 0).getTime(),
+        );
+        const latest = sorted[0];
+        const estadoId = String(
+          latest?.estatus_id ?? latest?.estado_id ?? latest?.estado ?? latest?.status ?? "",
+        ).toUpperCase();
+        setIsCompleted(estadoId === "COMPLETADO");
+      } catch {
+        setIsCompleted(false);
+      }
+    })();
   }, [user]);
 
   // Loading state while checking status

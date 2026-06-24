@@ -49,6 +49,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthToken } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-config";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
@@ -273,19 +274,33 @@ export function AppSidebar() {
       .then((json) => setHasHotsellingAccess(json?.allowed === true))
       .catch(() => {});
 
-    // Fetch student stage to check COMPLETADO
-    fetch(`/client/get/clients?pageSize=5&search=${encodeURIComponent(code)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then((json) => {
-        const items = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        const student = items.find((s: any) => String(s.code || s.codigo || "").toLowerCase() === code.toLowerCase());
-        const stage = String(student?.stage || "").toUpperCase();
-        if (stage === "F5") setIsCompleted(true);
-      })
-      .catch(() => {});
+    // Fetch student status to check COMPLETADO
+    (async () => {
+      try {
+        const json = await apiFetch<any>(
+          `/client/get/cliente-estatus/${encodeURIComponent(code)}`,
+          undefined,
+          { background: true },
+        );
+        const raw: any[] = Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json)
+            ? json
+            : Array.isArray(json?.data?.data)
+              ? json.data.data
+              : Array.isArray(json?.rows)
+                ? json.rows
+                : [];
+        const sorted = [...raw].sort(
+          (a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime(),
+        );
+        const latest = sorted[0];
+        const estadoId = String(latest?.estatus_id ?? latest?.estado_id ?? latest?.estado ?? latest?.status ?? "").toUpperCase();
+        if (estadoId === "COMPLETADO") setIsCompleted(true);
+      } catch {
+        // ignore
+      }
+    })();
   }, [user]);
 
   const menuItems: MenuItem[] = useMemo(() => {
