@@ -430,6 +430,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
     "activa" | "anulada"
   >("activa");
   const [tempMembresiaMotivo, setTempMembresiaMotivo] = useState<string>("");
+  const [tempMembresiaFechaDesde, setTempMembresiaFechaDesde] =
+    useState<string>("");
+  const [tempMembresiaFechaHasta, setTempMembresiaFechaHasta] =
+    useState<string>("");
   const [savingMembresia, setSavingMembresia] = useState(false);
 
   const [confirmRemoveMembresiaOpen, setConfirmRemoveMembresiaOpen] =
@@ -1593,6 +1597,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
           "",
       ),
     );
+    setTempMembresiaFechaDesde(
+      String((meta as any)?.payload?.fecha_desde ?? ""),
+    );
+    setTempMembresiaFechaHasta(
+      String((meta as any)?.payload?.fecha_hasta ?? ""),
+    );
     setEditMembresiaOpen(true);
   }
 
@@ -1632,6 +1642,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
       const nextPayload: any = {
         ...prevPayload,
         meses,
+        fecha_desde: tempMembresiaFechaDesde || prevPayload?.fecha_desde || null,
+        fecha_hasta: tempMembresiaFechaHasta || prevPayload?.fecha_hasta || null,
         motivo: motivo || null,
         // Actualizar snapshot de pausas para que el delta se calcule correctamente.
         // Sobrescribe un 0 incorrecto (race condition al crear) con el valor actual.
@@ -5012,6 +5024,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
             setEditingMembresia(null);
             setTempMembresiaMotivo("");
             setTempMembresiaEstado("activa");
+            setTempMembresiaFechaDesde("");
+            setTempMembresiaFechaHasta("");
           }
         }}
       >
@@ -5040,6 +5054,24 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 Anular mantiene el registro histórico, pero deja de sumar al
                 acceso.
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fecha desde</Label>
+              <Input
+                type="date"
+                value={tempMembresiaFechaDesde}
+                onChange={(e) => setTempMembresiaFechaDesde(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fecha hasta</Label>
+              <Input
+                type="date"
+                value={tempMembresiaFechaHasta}
+                onChange={(e) => setTempMembresiaFechaHasta(e.target.value)}
+              />
             </div>
 
             <div className="space-y-2">
