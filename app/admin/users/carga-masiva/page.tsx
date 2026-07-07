@@ -975,7 +975,7 @@ function BulkUsersContent() {
       metodo: "transfer",
       tipo_pago: tipoPago,
       referencia: "",
-      concepto: `Plan ${user.planNombre || "Hotselling Foundation"}`,
+      concepto: `Plan ${user.planNombre || "Hotselling Starter"}`,
       notas: "Generado por carga masiva de usuarios",
       details,
     });

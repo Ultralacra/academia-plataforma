@@ -116,6 +116,22 @@ import StudentBrevoEvents from "./_parts/StudentBrevoEvents";
 import StudentProfileDataPanel from "./_parts/StudentProfileDataPanel";
 import StudentAuditButton from "./_parts/StudentAuditButton";
 
+function normalizeTagKey(tag?: string | null) {
+  return String(tag ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function canonicalTagLabel(tag?: string | null) {
+  const normalized = normalizeTagKey(tag);
+  if (!normalized) return tag ?? null;
+  if (normalized === "hotselling foundation") return "Hotselling Starter";
+  return String(tag ?? "").trim();
+}
+
 function extractStudentTag(raw: any): string | null {
   const pick = (value: any): string | null => {
     if (typeof value === "string") {
@@ -2908,7 +2924,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
             </p>
             <div className="mt-1">
               <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
-                {currentTag ?? "Sin tag"}
+                {canonicalTagLabel(currentTag) ?? "Sin tag"}
               </span>
             </div>
           </div>
@@ -3009,7 +3025,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 <SelectContent>
                   {STUDENT_TAG_OPTIONS.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {option}
+                      {canonicalTagLabel(option)}
                     </SelectItem>
                   ))}
                 </SelectContent>

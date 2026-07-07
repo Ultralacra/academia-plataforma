@@ -1,11 +1,12 @@
 export type CrmPaymentPlanType = "contado" | "cuotas" | "excepcion_2_cuotas" | "reserva";
 export type CrmPaymentPricingPreset = "lista" | "descuento";
 
-export type CrmProgramValue = "HOTSELLING PRO" | "HOTSELLING FOUNDATION";
+export type CrmProgramValue = "HOTSELLING PRO" | "HOTSELLING FOUNDATION" | "HOTSELLING STARTER";
 
 export const CRM_PRODUCT_OPTIONS: Array<{ value: CrmProgramValue; label: string }> = [
   { value: "HOTSELLING PRO", label: "HOTSELLING PRO" },
   { value: "HOTSELLING FOUNDATION", label: "HOTSELLING FOUNDATION" },
+  { value: "HOTSELLING STARTER", label: "HOTSELLING STARTER" },
 ];
 
 export const CRM_PRICING = {
@@ -29,7 +30,7 @@ export function inferProgramKey(program?: string | null) {
   const v = String(program ?? "")
     .trim()
     .toLowerCase();
-  if (v.includes("foundation")) return "FOUNDATION" as const;
+  if (v.includes("starter") || v.includes("foundation")) return "FOUNDATION" as const;
   if (v.includes("pro")) return "PRO" as const;
   return "UNKNOWN" as const;
 }

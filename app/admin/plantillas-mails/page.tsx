@@ -278,7 +278,7 @@ function normalizeTagKey(tag?: string | null) {
 function canonicalTagLabel(tag?: string | null) {
   const normalized = normalizeTagKey(tag);
   if (!normalized) return "";
-  if (normalized === "hotselling foundation") return "Hotselling Foundation";
+  if (normalized === "hotselling foundation") return "Hotselling Starter";
   return String(tag ?? "").trim();
 }
 

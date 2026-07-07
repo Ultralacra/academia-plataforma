@@ -95,8 +95,14 @@ function normalizeTagKey(tag?: string | null) {
 function canonicalTagLabel(tag?: string | null) {
   const normalized = normalizeTagKey(tag);
   if (!normalized) return "";
-  if (normalized === "hotselling foundation") return "Hotselling Foundation";
+  if (normalized === "hotselling foundation") return "Hotselling Starter";
   return String(tag ?? "").trim();
+}
+
+function filterTagKey(tag?: string | null) {
+  const normalized = normalizeTagKey(tag);
+  if (normalized === "hotselling starter") return "hotselling foundation";
+  return normalized;
 }
 
 const NO_TAG_FILTER = "Sin tag";
@@ -1819,7 +1825,7 @@ export default function StudentsContent() {
         const tagKey = normalizeTagKey(s.tag);
         const tagMatches = filterTag.some((item) => {
           if (item === NO_TAG_FILTER) return !tagKey;
-          return tagKey === normalizeTagKey(item);
+          return tagKey === filterTagKey(item);
         });
         if (!tagMatches) return false;
       }
@@ -2389,7 +2395,7 @@ export default function StudentsContent() {
         const tagKey = normalizeTagKey(s.tag);
         const tagMatches = filterTag.some((item) => {
           if (item === NO_TAG_FILTER) return !tagKey;
-          return tagKey === normalizeTagKey(item);
+          return tagKey === filterTagKey(item);
         });
         if (!tagMatches) return false;
       }

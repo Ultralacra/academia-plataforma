@@ -92,8 +92,14 @@ function normalizeTagKey(tag?: string | null) {
 function canonicalTagLabel(tag?: string | null) {
   const normalized = normalizeTagKey(tag);
   if (!normalized) return "";
-  if (normalized === "hotselling foundation") return "Hotselling Foundation";
+  if (normalized === "hotselling foundation") return "Hotselling Starter";
   return String(tag ?? "").trim();
+}
+
+function filterTagKey(tag?: string | null) {
+  const normalized = normalizeTagKey(tag);
+  if (normalized === "hotselling starter") return "hotselling foundation";
+  return normalized;
 }
 
 function getUniqueTags(rows: EnrichedRow[]) {
@@ -454,7 +460,7 @@ export default function VistaEnriquecidaContent() {
         const tagKey = normalizeTagKey(r.tag);
         const tagMatches = filterTag.some((item) => {
           if (item === NO_TAG_FILTER) return !tagKey;
-          return normalizeTagKey(item) === tagKey;
+          return filterTagKey(item) === tagKey;
         });
         if (!tagMatches) return false;
       }

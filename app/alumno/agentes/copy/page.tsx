@@ -607,11 +607,11 @@ function CopyAlumnoWorkspace() {
           <Lock className="h-7 w-7 text-slate-400" />
         </div>
         <h2 className="mb-2 text-lg font-semibold text-slate-800 dark:text-slate-100">
-          Acceso exclusivo HotSelling Foundation / Starter
+          Acceso exclusivo HotSelling Starter
         </h2>
         <p className="mb-6 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-          Este agente está disponible solo para alumnos HotSelling Foundation o
-          HotSelling Starter. Contacta a soporte si crees que esto es un error.
+          Este agente está disponible solo para alumnos HotSelling Starter.
+          Contacta a soporte si crees que esto es un error.
         </p>
         <Link
           href="/alumno/agentes"

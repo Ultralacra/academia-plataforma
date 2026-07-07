@@ -1116,7 +1116,7 @@ function buildProfileBlock(profile: Record<string, unknown>): string {
   const ingreso = String(profile.ingreso ?? profile.joinDate ?? "");
   const contrato = profile.contrato as Record<string, unknown> | null | undefined;
 
-  // Tag (Hotselling Pro / Foundation)
+  // Tag (Hotselling Pro / Starter)
   const tagRaw = profile.tag ?? profile.tags ?? profile.etiqueta ?? profile.label;
   const tag = tagRaw
     ? typeof tagRaw === "string"
