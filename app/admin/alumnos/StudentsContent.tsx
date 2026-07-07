@@ -1201,34 +1201,57 @@ export default function StudentsContent() {
       setLoading(true);
       setProgress(0);
       try {
-        // 1) Traer alumnos (hasta 1000) desde backend una sola vez.
-        // Luego, filtros/búsqueda se aplican localmente sin refetch.
-        const res = await getAllStudentsPaged({
-          page: 1,
-          pageSize: SERVER_PAGE_SIZE,
-        });
-        const items = res.items;
-        setAll(items);
-        allTodosRef.current = items;
-        setPage(1);
-        setServerPage(1);
-        setServerTotal(res.total ?? null);
-        setServerTotalPages(res.totalPages ?? null);
-        if (res.totalPages != null) {
-          setHasMore((res.page ?? 1) < res.totalPages);
+        // 1) Traer TODOS los alumnos desde backend iterando todas las páginas.
+        const pageSize = SERVER_PAGE_SIZE;
+        const first = await getAllStudentsPaged({ page: 1, pageSize });
+        const allRows: StudentRow[] = Array.isArray(first.items) ? [...first.items] : [];
+        let currentServerPage = 1;
+        let currentTotal = first.total ?? null;
+        let currentTotalPages = first.totalPages ?? null;
+
+        const totalPages = Number(first.totalPages ?? 0);
+        if (totalPages > 1) {
+          for (let p = 2; p <= totalPages; p += 1) {
+            const next = await getAllStudentsPaged({ page: p, pageSize });
+            const rows = Array.isArray(next.items) ? next.items : [];
+            allRows.push(...rows);
+            currentServerPage = p;
+            currentTotal = next.total ?? currentTotal;
+            currentTotalPages = next.totalPages ?? currentTotalPages;
+            setProgress(Math.round((p / totalPages) * 90));
+          }
         } else {
-          setHasMore((items?.length ?? 0) >= SERVER_PAGE_SIZE);
+          // Fallback si la API no informa totalPages
+          let p = 2;
+          while ((allRows.length === 0 || allRows.length % pageSize === 0) && p <= 50) {
+            const next = await getAllStudentsPaged({ page: p, pageSize });
+            const rows = Array.isArray(next.items) ? next.items : [];
+            if (!rows.length) break;
+            allRows.push(...rows);
+            currentServerPage = p;
+            currentTotal = next.total ?? currentTotal;
+            currentTotalPages = next.totalPages ?? currentTotalPages;
+            setProgress(Math.min(90, Math.round((p / 50) * 90)));
+            if (rows.length < pageSize) break;
+            p += 1;
+          }
         }
 
+        setAll(allRows);
+        allTodosRef.current = allRows;
+        setPage(1);
+        setServerPage(currentServerPage);
+        setServerTotal(currentTotal);
+        setServerTotalPages(currentTotalPages);
+        setHasMore(false);
+
         todosMetaRef.current = {
-          serverPage: 1,
-          serverTotal: res.total ?? null,
-          serverTotalPages: res.totalPages ?? null,
-          hasMore:
-            res.totalPages != null
-              ? (res.page ?? 1) < res.totalPages
-              : (items?.length ?? 0) >= SERVER_PAGE_SIZE,
+          serverPage: currentServerPage,
+          serverTotal: currentTotal,
+          serverTotalPages: currentTotalPages,
+          hasMore: false,
         };
+        setProgress(95);
       } catch (e) {
         console.error(e);
         setAll([]);
@@ -1237,6 +1260,7 @@ export default function StudentsContent() {
         setServerTotalPages(null);
       } finally {
         setLoading(false);
+        setProgress(100);
       }
     }, 350);
     return () => clearTimeout(t);
@@ -2627,36 +2651,7 @@ export default function StudentsContent() {
   const loadExportRows = async () => {
     let sourceForExport = [...all];
 
-    if (coach === "todos" && hasMore) {
-      setLoadingMore(true);
-      let nextPage = serverPage;
-      let keepGoing = true;
-      let acc = [...sourceForExport];
-
-      while (keepGoing) {
-        nextPage += 1;
-        const res = await getAllStudentsPaged({
-          page: nextPage,
-          pageSize: SERVER_PAGE_SIZE,
-        });
-        const items = res.items ?? [];
-        acc = [...acc, ...items];
-
-        setAll(acc);
-        setServerPage(nextPage);
-        setServerTotal(res.total ?? serverTotal ?? null);
-        setServerTotalPages(res.totalPages ?? serverTotalPages ?? null);
-
-        if (res.totalPages != null) {
-          keepGoing = nextPage < res.totalPages;
-        } else {
-          keepGoing = items.length >= SERVER_PAGE_SIZE;
-        }
-      }
-
-      setHasMore(false);
-      sourceForExport = acc;
-    }
+    // Ya no es necesario cargar más páginas: la carga inicial trae todo.
 
     if (
       coach !== "todos" &&
@@ -4013,11 +4008,58 @@ export default function StudentsContent() {
                                 ? "bg-muted text-muted-foreground"
                                 : "bg-muted text-muted-foreground";
                         return (
-                          <span
-                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
-                          >
-                            {student.state || "—"}
-                          </span>
+                          <div className="inline-flex items-center gap-1.5">
+                            <span
+                              className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
+                            >
+                              {student.state || "—"}
+                            </span>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted/60 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                                  title="Ver detalle del estatus"
+                                >
+                                  <AlertCircle className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                side="top"
+                                align="center"
+                                className="w-[280px] p-3 text-xs"
+                              >
+                                <div className="space-y-1.5">
+                                  <p className="font-medium text-sm">
+                                    {student.state || "Sin estado"}
+                                  </p>
+                                  <p className="text-muted-foreground leading-relaxed">
+                                    {(() => {
+                                      const s = (student.state || "").toUpperCase();
+                                      const inact = student.inactivityDays;
+                                      const parts: string[] = [];
+                                      if (s === "INACTIVO" || s === "INACTIVO_POR_PAGO") {
+                                        if (inact != null) parts.push(`Sin actividad por ${inact} días`);
+                                        if (s === "INACTIVO_POR_PAGO") parts.push("Inactivo por falta de pago");
+                                      } else if (s === "PAUSADO") {
+                                        parts.push("Pausa temporal activa");
+                                      } else if (s === "MEMBRESIA") {
+                                        parts.push("Tiene membresía activa");
+                                      } else if (s === "ACTIVO") {
+                                        parts.push("Alumno activo en el sistema");
+                                        if (inact != null && inact > 0) parts.push(`${inact} días sin actividad`);
+                                      } else {
+                                        parts.push("Estado sin clasificación adicional");
+                                      }
+                                      if (student.stage) parts.push(`Fase: ${student.stage}`);
+                                      if (student.tag) parts.push(`Tag: ${student.tag}`);
+                                      return parts.length > 0 ? parts.join(" · ") : "Sin información adicional";
+                                    })()}
+                                  </p>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                         );
                       })()}
                     </td>

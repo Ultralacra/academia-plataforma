@@ -28,6 +28,7 @@ import {
   Bot,
   HardDrive,
   BookOpen,
+  GitCompare,
 } from "lucide-react";
 import {
   Sidebar,
@@ -189,6 +190,7 @@ const adminItems: MenuItem[] = [
     ],
   },
   { title: "Opciones", url: "/admin/opciones", icon: Settings },
+  { title: "Migración Estados", url: "/admin/migracion-estatus", icon: GitCompare },
   {
     title: "Monitor Metadata",
     url: "/admin/metadata-analytics",
