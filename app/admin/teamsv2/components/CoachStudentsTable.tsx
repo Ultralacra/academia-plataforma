@@ -610,27 +610,78 @@ export default function CoachStudentsTable({
     return cols;
   })();
 
+  const exportXlsx = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      const exportData = data.map((r) => ({
+        Alumno: r.name ?? "",
+        Estado: r.state ?? "",
+        Fase: r.stage ?? "",
+        Ingreso: r.ingreso ? fmt.format(new Date(r.ingreso)) : "",
+        "Última actividad": r.lastActivity
+          ? fmt.format(new Date(r.lastActivity))
+          : "",
+        "Inactividad (días)":
+          r.inactividad == null || isNaN(Number(r.inactividad))
+            ? ""
+            : Number(r.inactividad),
+        Tickets: r.tickets == null || isNaN(Number(r.tickets))
+          ? ""
+          : Number(r.tickets),
+      }));
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
+      XLSX.writeFile(
+        wb,
+        `alumnos_${coachCode ?? "coach"}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      );
+      toast({
+        title: "Exportación lista",
+        description: `${data.length} alumnos exportados a Excel`,
+      });
+    } catch (e) {
+      toast({
+        title: "Error al exportar",
+        description:
+          (e as any)?.message ?? "No se pudo exportar el listado",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-border bg-card text-card-foreground overflow-hidden">
       <div className="border-b border-border/60 px-5 py-4 flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold text-foreground">{title}</h3>
-          <p className="text-sm text-muted-foreground">
-            Listado compacto · {total.toLocaleString("es-ES")} alumnos
-          </p>
+          <div>
+            <h3 className="text-base font-bold text-foreground">{title}</h3>
+            <p className="text-sm text-muted-foreground">
+              Listado compacto · {total.toLocaleString("es-ES")} alumnos
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={exportXlsx}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-file-spreadsheet"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
+              Exportar Excel
+            </Button>
+            {selected.size > 0 && coachCode && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-500/40 dark:text-blue-300 dark:hover:bg-blue-500/10"
+                onClick={openTransferDialog}
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                Sustituir ({selected.size})
+              </Button>
+            )}
+          </div>
         </div>
-        {selected.size > 0 && coachCode && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-500/40 dark:text-blue-300 dark:hover:bg-blue-500/10"
-            onClick={openTransferDialog}
-          >
-            <ArrowRightLeft className="h-4 w-4" />
-            Sustituir ({selected.size})
-          </Button>
-        )}
-      </div>
       <div className="overflow-x-auto pb-4">
         <table className="min-w-full text-sm">
           <thead>
