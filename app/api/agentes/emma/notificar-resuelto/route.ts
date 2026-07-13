@@ -189,6 +189,26 @@ export async function POST(request: NextRequest) {
     results.websocket = "error";
   }
 
+  // WebSocket a room "tickets" para que el alumno reciba toast desde cualquier página
+  try {
+    await fetch(`${origin}/api/socket`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        room: "tickets",
+        type: "ticket:status_changed",
+        data: {
+          ticketId,
+          current: "RESUELTO",
+          title: mensaje,
+          alumnoNombre,
+          alumnoCode,
+        },
+      }),
+      cache: "no-store",
+    });
+  } catch {}
+
   // Push notification
   try {
     const pushRes = await fetch(`${origin}/api/push/send`, {
@@ -211,6 +231,70 @@ export async function POST(request: NextRequest) {
     results.push = pushRes.ok ? "ok" : "error";
   } catch {
     results.push = "error";
+  }
+
+  // 5. Guardar mensaje en el historial del chat de Emma (super_atc_chat_history)
+  try {
+    const metaEntity = "super_atc_chat_history";
+    const metaUrl = buildUrl(
+      `/metadata?entity=${encodeURIComponent(metaEntity)}&entity_id=${encodeURIComponent(alumnoCode)}`,
+    );
+    const metaRes = await fetch(metaUrl, {
+      headers: { Authorization: authHeader },
+      signal: AbortSignal.timeout(5_000),
+    });
+
+    if (metaRes.ok) {
+      const metaJson = await metaRes.json();
+      const items: any[] = Array.isArray(metaJson?.data) ? metaJson.data : [];
+      const existing = items.find(
+        (m: any) => m?.entity === metaEntity && m?.entity_id === alumnoCode,
+      );
+
+      const newMessage = {
+        id: `emma-resuelto-${ticketId}-${Date.now()}`,
+        role: "assistant",
+        content: mensaje,
+        timestamp: new Date().toISOString(),
+      };
+
+      if (existing) {
+        const messages = Array.isArray(existing.payload?.messages)
+          ? existing.payload.messages
+          : [];
+        messages.push(newMessage);
+        await fetch(
+          buildUrl(`/metadata/${encodeURIComponent(String(existing.id))}`),
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader,
+            },
+            body: JSON.stringify({
+              payload: { ...existing.payload, messages },
+            }),
+            signal: AbortSignal.timeout(5_000),
+          },
+        );
+      } else {
+        await fetch(buildUrl("/metadata"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+          body: JSON.stringify({
+            entity: metaEntity,
+            entity_id: alumnoCode,
+            payload: { messages: [newMessage] },
+          }),
+          signal: AbortSignal.timeout(5_000),
+        });
+      }
+    }
+  } catch {
+    // fallo al guardar historial, no crítico
   }
 
   return NextResponse.json({

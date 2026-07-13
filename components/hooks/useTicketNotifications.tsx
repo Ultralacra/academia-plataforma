@@ -66,6 +66,16 @@ export function useTicketNotifications(opts?: { room?: string }) {
               variant: "default",
             });
           } catch {}
+          // Refrescar el tickets board para que aparezca automáticamente
+          try {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("tickets:refresh", {
+                  detail: { type: "ticket:agent_created", codigo: d.ticketId },
+                }),
+              );
+            }
+          } catch {}
           return;
         }
 

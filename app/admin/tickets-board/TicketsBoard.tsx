@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type React from "react";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { listMetadata } from "@/lib/metadata";
@@ -1663,6 +1663,61 @@ function TicketsBoardContent({
     ] as string[];
   }, []);
 
+  // ── Auto-resolve para tickets de Emma ──
+  const autoResolveTimeoutsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
+  const [autoResolvingIds, setAutoResolvingIds] = useState<Set<number>>(
+    new Set(),
+  );
+
+  // Cleanup timeouts al desmontar
+  useEffect(() => {
+    return () => {
+      for (const t of autoResolveTimeoutsRef.current.values())
+        clearTimeout(t);
+      autoResolveTimeoutsRef.current.clear();
+    };
+  }, []);
+
+  const isEmmaTicket = useCallback((t: TicketBoardItem): boolean => {
+    const informante = (t.informante ?? "").trim();
+    const idAlumno = (t.id_alumno ?? "").trim();
+    if (informante && idAlumno && informante === idAlumno) return true;
+    const nombre = (t.informante_nombre ?? "").toLowerCase().trim();
+    const code = (t.informante ?? "").toLowerCase().trim();
+    return nombre.includes("emma") || code.includes("emma");
+  }, []);
+
+  const scheduleAutoResolve = useCallback(
+    (ticket: TicketBoardItem, codigo: string, alumnoCode?: string) => {
+      const tid = ticket.id;
+      const existing = autoResolveTimeoutsRef.current.get(tid);
+      if (existing) clearTimeout(existing);
+
+      setAutoResolvingIds((prev) => new Set(prev).add(tid));
+
+      const timeoutId = setTimeout(async () => {
+        autoResolveTimeoutsRef.current.delete(tid);
+        setAutoResolvingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tid);
+          return next;
+        });
+        try {
+          await updateTicket(codigo, { estado: "RESUELTO" }, alumnoCode);
+          setTickets((prev) =>
+            prev.map((t) =>
+              t.id === tid ? { ...t, estado: "RESUELTO" } : t,
+            ),
+          );
+        } catch (err) {
+          console.error("Error auto-resolviendo ticket de Emma:", err);
+        }
+      }, 3000);
+      autoResolveTimeoutsRef.current.set(tid, timeoutId);
+    },
+    [],
+  );
+
   function handleDragStart(e: React.DragEvent, ticketId: number) {
     try {
       e.dataTransfer.setData("text/plain", String(ticketId));
@@ -1685,15 +1740,23 @@ function TicketsBoardContent({
       e.dataTransfer.getData("text/plain");
     if (!id) return;
     const tid = Number(id);
+    const tk = tickets.find((t) => t.id === tid);
     setTickets((prev) =>
       prev.map((t) => (t.id === tid ? { ...t, estado: targetEstado } : t)),
     );
-    const tk = tickets.find((t) => t.id === tid);
     const codigo = tk?.codigo ?? null;
     if (!codigo) return;
     const alumnoCode = (tk as any)?.id_alumno?.trim() || undefined;
     updateTicket(codigo, { estado: targetEstado }, alumnoCode)
       .then(() => {
+        // Auto-resolver ticket de Emma después de 3s
+        if (
+          tk &&
+          targetEstado === "PENDIENTE_DE_ENVIO" &&
+          isEmmaTicket(tk)
+        ) {
+          scheduleAutoResolve(tk, codigo, alumnoCode);
+        }
         // Notificación local: cambio de estado
         try {
           const title = `${uiTicket} actualizado: ${tk?.nombre || codigo} → ${
@@ -2667,11 +2730,23 @@ function TicketsBoardContent({
         payload as any,
         (selectedTicket as any)?.id_alumno?.trim() || undefined,
       );
+      // Auto-resolver ticket de Emma después de 3s
+      if (
+        selectedTicket &&
+        payload.estado === "PENDIENTE_DE_ENVIO" &&
+        isEmmaTicket(selectedTicket)
+      ) {
+        scheduleAutoResolve(
+          selectedTicket,
+          selectedTicket.codigo ?? "",
+          (selectedTicket as any)?.id_alumno?.trim() || undefined,
+        );
+      }
       // Notificación local: guardado de cambios (incluye estado si cambia)
       try {
         const current =
-          typeof editForm.estado === "string"
-            ? coerceStatus(editForm.estado)
+          typeof payload.estado === "string"
+            ? coerceStatus(payload.estado)
             : undefined;
         const title = `${uiTicket} actualizado: ${
           editForm.nombre || selectedTicket.nombre || selectedTicket.codigo
@@ -2697,7 +2772,9 @@ function TicketsBoardContent({
             ? {
                 ...t,
                 nombre: editForm.nombre ?? t.nombre,
-                ...(canEdit ? { estado: editForm.estado ?? t.estado } : {}),
+                ...(canEdit
+                  ? { estado: payload.estado ?? t.estado }
+                  : {}),
                 ...(canEdit
                   ? { deadline: editForm.deadline ?? t.deadline }
                   : {}),
@@ -3345,6 +3422,14 @@ function TicketsBoardContent({
                                   <span className="text-[11px] font-medium">
                                     Este Feedback requiere atención, por favor
                                     comunícate con el equipo de soporte.
+                                  </span>
+                                </div>
+                              )}
+                              {autoResolvingIds.has(t.id) && (
+                                <div className="flex items-center gap-1.5 rounded-md border border-purple-300/40 bg-purple-50/70 px-2 py-1 text-purple-700 dark:border-purple-400/30 dark:bg-purple-950/30 dark:text-purple-200">
+                                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-purple-400 border-t-transparent" />
+                                  <span className="text-[11px] font-medium">
+                                    Auto-resolviendo...
                                   </span>
                                 </div>
                               )}
@@ -5441,6 +5526,18 @@ function TicketsBoardContent({
                                             { estado: newStatus },
                                             (selectedTicket as any)?.id_alumno?.trim() || undefined,
                                           );
+
+                                          // Auto-resolver ticket de Emma después de 3s
+                                          if (
+                                            newStatus === "PENDIENTE_DE_ENVIO" &&
+                                            isEmmaTicket(selectedTicket)
+                                          ) {
+                                            scheduleAutoResolve(
+                                              selectedTicket,
+                                              selectedTicket.codigo,
+                                              (selectedTicket as any)?.id_alumno?.trim() || undefined,
+                                            );
+                                          }
 
                                           setTickets((prev) =>
                                             prev.map((t) =>

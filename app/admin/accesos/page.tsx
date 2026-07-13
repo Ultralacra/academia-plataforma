@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useAccessDueNotifications } from "@/components/hooks/useAccessDueNotifications";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -38,10 +39,13 @@ import {
   Crown,
   Download,
   Mail,
+  CheckSquare,
 } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
-import { apiFetch } from "@/lib/api-config";
+import { apiFetch, buildUrl } from "@/lib/api-config";
 import { ProtectedRoute } from "@/components/auth/protected-route";
+import { toast } from "@/components/ui/use-toast";
+import { getOpciones, type OpcionItem } from "@/app/admin/alumnos/api";
 import {
   CONTRACT_EXPIRY_TEMPLATES,
   type ContractExpiryKey,
@@ -221,6 +225,39 @@ function AccesosPageContent() {
     useState<InactivityPreset>("todos");
   const [inactivityCustomDays, setInactivityCustomDays] = useState<string>("");
 
+  // ── Bulk selection state ──
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkEstados, setBulkEstados] = useState<OpcionItem[]>([]);
+  const [bulkEstadoKey, setBulkEstadoKey] = useState<string>("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{
+    completed: number;
+    total: number;
+    errors: number;
+  }>({ completed: 0, total: 0, errors: 0 });
+
+  // Fetch estados when bulk dialog opens
+  const bulkFetchKeyRef = useRef(0);
+  useEffect(() => {
+    if (!bulkDialogOpen) return;
+    const key = ++bulkFetchKeyRef.current;
+    (async () => {
+      try {
+        const all = await getOpciones("estado_cliente");
+        // Filtrar estados que requieren fechas (PAUSADO) o flujos especiales
+        const filtered = all.filter(
+          (o) =>
+            !o.value.toUpperCase().includes("PAUSADO") &&
+            !o.value.toUpperCase().includes("PAUSA"),
+        );
+        if (key === bulkFetchKeyRef.current) setBulkEstados(filtered);
+      } catch {
+        // Silently fail, user will see empty state
+      }
+    })();
+  }, [bulkDialogOpen]);
+
   const dueMesOptions = useMemo(() => {
     const map = new Map<
       string,
@@ -351,6 +388,25 @@ function AccesosPageContent() {
     // filtro para_notificar eliminado
     return true;
   };
+
+  const toggleSelectItem = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedKeys.size === filteredOverdue.length) {
+      setSelectedKeys(new Set());
+    } else {
+      setSelectedKeys(new Set(filteredOverdue.map((it) => it.key)));
+    }
+  };
+
+  const clearSelection = () => setSelectedKeys(new Set());
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const filteredDue = useMemo(
@@ -487,11 +543,24 @@ function AccesosPageContent() {
     const requiereIntervencion =
       !isMembresia && it.daysLeft >= -1 && it.daysLeft <= 1;
 
+    const isOverdue = variant === "overdue";
+    const isChecked = isOverdue && selectedKeys.has(it.key);
+
     return (
       <div
         key={it.key}
-        className={`group relative flex items-center gap-4 rounded-xl border pl-6 pr-4 py-4 transition-all hover:shadow-sm cursor-default ${urgencyBg(it.daysLeft)}`}
+        className={`group relative flex items-center gap-3 rounded-xl border pr-4 py-4 transition-all hover:shadow-sm cursor-default ${isOverdue ? "pl-3" : "pl-6"} ${isChecked ? "ring-2 ring-primary/40 bg-primary/5" : ""} ${urgencyBg(it.daysLeft)}`}
       >
+        {isOverdue && (
+          <div className="shrink-0 flex items-center justify-center pl-1">
+            <Checkbox
+              checked={isChecked}
+              onCheckedChange={() => toggleSelectItem(it.key)}
+              aria-label={`Seleccionar ${who}`}
+              className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+            />
+          </div>
+        )}
         <div
           className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${urgencyBar(it.daysLeft)}`}
         />
@@ -1128,6 +1197,51 @@ function AccesosPageContent() {
               </div>
             ) : (
               <div className="space-y-2">
+                {/* Select all + bulk action bar */}
+                <div className="flex items-center justify-between gap-3 px-1">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+                    <Checkbox
+                      checked={
+                        filteredOverdue.length > 0 &&
+                        selectedKeys.size === filteredOverdue.length
+                      }
+                      onCheckedChange={handleSelectAll}
+                    />
+                    {selectedKeys.size > 0
+                      ? `${selectedKeys.size} de ${filteredOverdue.length} seleccionados`
+                      : "Seleccionar todos"}
+                  </label>
+                  {selectedKeys.size > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="default"
+                        className="gap-1.5"
+                        onClick={() => {
+                          setBulkEstadoKey("");
+                          setBulkProgress({
+                            completed: 0,
+                            total: 0,
+                            errors: 0,
+                          });
+                          setBulkDialogOpen(true);
+                        }}
+                      >
+                        <CheckSquare className="h-3.5 w-3.5" />
+                        Cambiar estatus
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={clearSelection}
+                      >
+                        Deseleccionar
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                   {filteredOverdue.map((it) => renderItem(it, "overdue"))}
                 </div>
@@ -1264,6 +1378,212 @@ function AccesosPageContent() {
                 </>
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk status change dialog ──────────────────── */}
+      <Dialog
+        open={bulkDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !bulkSaving) {
+            setBulkDialogOpen(false);
+            setBulkEstados([]);
+            setBulkEstadoKey("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckSquare className="w-5 h-5" /> Cambiar estatus masivo
+            </DialogTitle>
+            <DialogDescription>
+              {selectedKeys.size} alumno
+              {selectedKeys.size !== 1 ? "s" : ""} seleccionado
+              {selectedKeys.size !== 1 ? "s" : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 space-y-4">
+            {bulkSaving ? (
+              /* Progreso */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Actualizando estatus...
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {bulkProgress.completed + bulkProgress.errors} /{" "}
+                    {bulkProgress.total}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all duration-300"
+                    style={{
+                      width: `${
+                        bulkProgress.total > 0
+                          ? Math.round(
+                              ((bulkProgress.completed + bulkProgress.errors) /
+                                bulkProgress.total) *
+                                100,
+                            )
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {bulkProgress.completed} exitosos
+                  </span>
+                  {bulkProgress.errors > 0 && (
+                    <span className="text-destructive">
+                      {bulkProgress.errors} errores
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Load estados */}
+                {bulkEstados.length === 0 ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Cargando estatus...</span>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">
+                      Nuevo estatus
+                    </label>
+                    <Select
+                      value={bulkEstadoKey}
+                      onValueChange={setBulkEstadoKey}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecciona un estatus" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bulkEstados.map((o) => (
+                          <SelectItem key={o.id} value={o.key}>
+                            {o.value}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkDialogOpen(false);
+                setBulkEstados([]);
+                setBulkEstadoKey("");
+              }}
+              disabled={bulkSaving}
+            >
+              {bulkSaving ? "Procesando..." : "Cancelar"}
+            </Button>
+            {!bulkSaving && (
+              <Button
+                onClick={async () => {
+                  if (!bulkEstadoKey || bulkSaving) return;
+                  const selected = filteredOverdue.filter((it) =>
+                    selectedKeys.has(it.key),
+                  );
+                  const codes = selected
+                    .map((it) => it.alumnoCodigo)
+                    .filter(Boolean) as string[];
+                  if (codes.length === 0) {
+                    toast({
+                      title: "Sin códigos",
+                      description:
+                        "Ninguno de los seleccionados tiene código de alumno",
+                    });
+                    return;
+                  }
+                  setBulkSaving(true);
+                  setBulkProgress({
+                    completed: 0,
+                    total: codes.length,
+                    errors: 0,
+                  });
+                  const token = getAuthToken();
+                  let completed = 0;
+                  let errors = 0;
+                  // Concurrencia 4
+                  const CONCURRENCY = 4;
+                  const updateOne = async (code: string) => {
+                    try {
+                      const fd = new FormData();
+                      fd.set("estado", bulkEstadoKey);
+                      const url = buildUrl(
+                        `/client/update/client/${encodeURIComponent(code)}`,
+                      );
+                      const res = await fetch(url, {
+                        method: "PUT",
+                        body: fd,
+                        headers: token
+                          ? { Authorization: `Bearer ${token}` }
+                          : undefined,
+                      });
+                      if (!res.ok) throw new Error(await res.text());
+                      return true;
+                    } catch {
+                      return false;
+                    }
+                  };
+                  // Ejecutar con concurrencia limitada
+                  const results: boolean[] = [];
+                  let idx = 0;
+                  while (idx < codes.length) {
+                    const batch = codes.slice(idx, idx + CONCURRENCY);
+                    const batchResults = await Promise.all(
+                      batch.map((c) => updateOne(c)),
+                    );
+                    for (const ok of batchResults) {
+                      if (ok) completed++;
+                      else errors++;
+                    }
+                    results.push(...batchResults);
+                    setBulkProgress({ completed, total: codes.length, errors });
+                    idx += CONCURRENCY;
+                  }
+                  const okCount = results.filter(Boolean).length;
+                  const errCount = results.filter((r) => !r).length;
+                  toast({
+                    title: "Actualización masiva completada",
+                    description: `${okCount} de ${codes.length} actualizado${okCount !== 1 ? "s" : ""} correctamente${errCount > 0 ? `. ${errCount} error${errCount !== 1 ? "es" : ""}.` : "."}`,
+                  });
+                  setBulkSaving(false);
+                  setBulkDialogOpen(false);
+                  setBulkEstados([]);
+                  setBulkEstadoKey("");
+                  clearSelection();
+                  refresh();
+                }}
+                disabled={!bulkEstadoKey}
+              >
+                Cambiar estatus a{" "}
+                {
+                  filteredOverdue.filter((it) => selectedKeys.has(it.key))
+                    .length
+                }{" "}
+                alumno
+                {filteredOverdue.filter((it) => selectedKeys.has(it.key))
+                  .length !== 1
+                  ? "s"
+                  : ""}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
