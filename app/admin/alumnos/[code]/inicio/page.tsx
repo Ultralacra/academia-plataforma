@@ -629,14 +629,14 @@ export default function StudentInicioPage() {
             href="https://www.skool.com/hotselling-lite-4832"
           />
 
-          {!isStudent && (
+          {/* {!isStudent && (
             <InternalCard
               title="Chat soporte"
               description="Habla con Atención al Cliente"
               href={`/admin/alumnos/${code}/chat`}
               icon={MessageSquare}
             />
-          )}
+          )} */}
 
           <InternalCard
             title="Feedback"
