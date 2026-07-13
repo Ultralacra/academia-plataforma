@@ -1,0 +1,413 @@
+﻿CONTRATO DE PRESTACIÓN DE SERVICIOS DEL PROGRAMA “{{PROGRAMA}}”
+
+Entre los suscritos, de una parte, MHF GROUP LLC, sociedad constituida conforme a las leyes aplicables en los Estados Unidos de América, identificada con EIN 85-4320656, domiciliada para efectos de notificaciones en 13728 Lagoon Isle Way Apt 205, Orlando, FL 32824, Estados Unidos, quien para efectos del presente contrato se denominará LA EMPRESA; y de otra parte, {{NOMBRE_COMPLETO}}, identificado(a) con número {{DNI}}, domiciliado(a) en {{DIRECCION}}, correo electrónico {{EMAIL}}, teléfono o WhatsApp {{TELEFONO}}, quien para efectos del presente contrato se denominará EL CLIENTE, acuerdan celebrar el presente contrato de prestación de servicios, previas las siguientes declaraciones y cláusulas:
+
+DECLARACIONES PREVIAS
+
+EL CLIENTE declara que, antes de obligarse, recibió información suficiente sobre la naturaleza del programa, su duración, alcance, metodología, condiciones de acceso, valor, forma de pago, límites del servicio, condiciones de la garantía de satisfacción y reglas aplicables a la comunidad, plataformas y materiales.
+EL CLIENTE reconoce que {{PROGRAMA}} es un programa de formación, acompañamiento metodológico y acceso a recursos educativos orientados a la implementación de estrategias comerciales, sin que constituya asesoría legal, tributaria, financiera, contable, de inversión, societaria, laboral, publicitaria especializada, ni una promesa de ingresos, ventas, facturación, utilidad, rentabilidad o recuperación de inversión.
+EL CLIENTE declara que su decisión de contratar no se fundamenta en promesas verbales o escritas de resultados económicos específicos, ingresos mínimos, ventas garantizadas, recuperación de inversión, rentabilidad asegurada o éxito comercial automático.
+EL CLIENTE entiende que la obtención de resultados en cualquier negocio depende de múltiples factores ajenos al control de LA EMPRESA, incluyendo, sin limitarse a, la ejecución personal del CLIENTE, su constancia, disciplina, presupuesto disponible, calidad de su oferta, comportamiento del mercado, validación del público objetivo, decisiones comerciales, restricciones de plataformas, competencia, condiciones económicas, capacidad operativa y cumplimiento de instrucciones.
+Las partes acuerdan que cualquier modificación, garantía, beneficio, bono, promesa, extensión, descuento, autorización de acceso o condición especial solo será válida si consta por escrito y ha sido aceptada expresamente por LA EMPRESA.
+
+CLÁUSULAS
+
+PRIMERA. OBJETO.
+El presente contrato tiene por objeto regular la prestación del servicio educativo denominado "{{PROGRAMA}}", mediante el cual LA EMPRESA pondrá a disposición de EL CLIENTE una metodología de formación, acompañamiento y recursos digitales orientados a la creación e implementación de un ecosistema de ventas basado en la estrategia hotselling, conforme al alcance, condiciones y limitaciones establecidas en este documento.
+
+El servicio contratado corresponde a una obligación de medio y no de resultado. En consecuencia, LA EMPRESA se obliga a poner a disposición del CLIENTE la metodología, contenidos, sesiones, canales y recursos pactados, sin garantizar resultados económicos, ventas, facturación, rentabilidad, utilidad, recuperación de inversión, aprobación de campañas, validación de ofertas o comportamiento favorable del mercado.
+
+SEGUNDA. ALCANCE DEL SERVICIO.
+2.1. El servicio incluye, durante la vigencia contractual y conforme a las condiciones del programa:
+
+a. Cinco (5) sesiones pregrabadas de formación acelerada.
+b. Acceso secuencial a las fases del programa, conforme a la metodología denominada "El Ascenso".
+c. Canal de comunicación y soporte por los medios oficiales que LA EMPRESA habilite para el programa, tales como Skool, WhatsApp, Spaces, Notion u otros canales que los sustituyan o complementen.
+d. Acceso a la comunidad privada del programa durante la vigencia contractual.
+e. Sesiones adicionales semanales, conforme a la programación interna del programa, las cuales podrán incluir espacios de copywriting, ads, implementación técnica, revisión estratégica u otros contenidos definidos por LA EMPRESA.
+f. Área de miembros, recursos digitales, plantillas, herramientas, materiales y box de implementación rápida.
+g. Servicio de montaje inicial de campañas publicitarias mediante trafficker interno, únicamente en los términos, límites y condiciones previstos en la cláusula décima tercera.
+[[IF:TIENE_BONOS]]
+{{BONOS_LISTA}}
+[[ENDIF]]
+
+2.2. LA EMPRESA podrá modificar, actualizar, sustituir o reorganizar plataformas, canales, herramientas, formatos, horarios, sesiones o recursos del programa, siempre que ello no suprima de manera sustancial el objeto contratado. EL CLIENTE reconoce que los canales digitales pueden variar por razones técnicas, operativas, comerciales o de seguridad.
+
+2.3. El soporte se prestará exclusivamente por los canales oficiales definidos por LA EMPRESA. No se entenderán como canales oficiales perfiles personales, cuentas privadas de miembros del equipo, mensajes a terceros, redes sociales no autorizadas o comunicaciones dirigidas a personas no designadas para soporte.
+
+2.4. LA EMPRESA no será responsable por fallas de conectividad, interrupciones de internet, errores de dispositivos, restricciones de plataformas, caídas de servidores, cambios en políticas de terceros, bloqueos de cuentas, suspensión de perfiles, errores de procesadores de pago, incumplimientos de terceros, decisiones de Meta, Google, Hotmart, Skool, Notion, WhatsApp, Spaces, proveedores de hosting, dominios, pasarelas de pago, herramientas de automatización, inteligencia artificial o cualquier otra plataforma externa.
+
+TERCERA. ACCESO SECUENCIAL POR FASES.
+3.1. EL CLIENTE acepta que el acceso a las distintas sesiones, módulos o fases del programa podrá habilitarse de manera secuencial, de acuerdo con la metodología denominada "El Ascenso".
+
+3.2. Para acceder a una fase posterior, EL CLIENTE deberá completar y entregar de manera suficiente, verificable y oportuna las tareas, compromisos, insumos o avances mínimos requeridos por LA EMPRESA en la fase anterior.
+
+3.3. LA EMPRESA contará con un término razonable para revisar la información entregada por EL CLIENTE y habilitar la fase correspondiente. La falta de entrega, entrega incompleta, entrega tardía, entrega no verificable o entrega por canales no oficiales mantendrá la fase pendiente, sin que ello constituya incumplimiento de LA EMPRESA ni genere derecho a reembolso, compensación, extensión automática o reclamación.
+
+3.4. EL CLIENTE reconoce que la metodología secuencial tiene como finalidad promover una ejecución progresiva y ordenada, por lo cual no podrá exigir acceso anticipado, simultáneo o total a todas las fases si no ha cumplido las condiciones internas de avance.
+
+CUARTA. VIGENCIA Y EJECUCIÓN DEL SERVICIO.
+4.1. El servicio tendrá una duración de {{DURACION_PROGRAMA}}, contados a partir de la fecha de inicio del programa, la cual corresponde al día {{DIA_INICIO}} del mes de {{MES_INICIO}} del año {{ANIO_INICIO}}.
+
+4.2. La fecha de inicio y habilitación de accesos estará sujeta a que, para dicha fecha, se haya cumplido lo siguiente:
+a. Firma, aceptación electrónica o aceptación expresa del presente contrato.
+b. Pago total del programa, si se pactó pago único.
+c. Pago efectivo de la primera cuota y de cualquier valor vencido o exigible, si se pactó pago por cuotas.
+d. Suministro de la información mínima requerida para activar el acceso del CLIENTE.
+
+4.3. El plazo de acceso, la vigencia contractual, los términos de garantía, los tiempos de soporte y los plazos operativos correrán desde la fecha de activación del acceso o desde la fecha de inicio efectiva del servicio, lo que ocurra primero, aun cuando EL CLIENTE no ingrese a la plataforma, no use los contenidos, no asista a sesiones, no entregue tareas o no utilice los recursos puestos a su disposición.
+
+4.4. Cualquier recordatorio, aviso, mensaje de seguimiento o comunicación de LA EMPRESA será una cortesía comercial y no constituirá renuncia, modificación, interrupción, ampliación o extensión de los plazos pactados.
+
+4.5. Si EL CLIENTE no inicia, no utiliza o no aprovecha el programa dentro de la vigencia contractual por causas no imputables a LA EMPRESA, se entenderá que el servicio fue puesto a disposición de EL CLIENTE y no habrá lugar a reembolso, compensación, extensión, reposición o reactivación gratuita.
+
+QUINTA. PAUSAS O SUSPENSIÓN TEMPORAL DEL SERVICIO.
+5.1. EL CLIENTE podrá solicitar, por una sola vez durante la vigencia contractual, una suspensión temporal del servicio, previa aprobación expresa y escrita de LA EMPRESA.
+
+5.2. Las pausas únicamente podrán solicitarse por bloques completos de una (1) semana, dos (2) semanas, tres (3) semanas o un (1) mes. No se admitirán pausas fraccionadas por días, horas, sesiones, módulos, semanas incompletas o períodos retroactivos.
+
+5.3. Toda pausa aprobada iniciará y finalizará el día viernes. La regla operativa será de viernes a viernes, salvo autorización excepcional, previa y escrita de LA EMPRESA.
+
+5.4. Las pausas no son automáticas, no son retroactivas y no se entienden aprobadas por el solo envío de la solicitud. Solo producirán efectos cuando LA EMPRESA confirme expresamente su aprobación, fecha de inicio y fecha de finalización.
+
+5.5. No procederán solicitudes de pausa cuando exista mora, incumplimiento contractual, suspensión por conducta indebida, garantía de satisfacción en trámite, auditoría en curso, uso indebido de accesos, vencimiento del programa sin margen operativo suficiente o cualquier situación que impida la administración normal del servicio.
+
+5.6. Durante la pausa aprobada, LA EMPRESA podrá suspender total o parcialmente los accesos, sesiones, soporte, comunidad, plataformas, beneficios y demás recursos, hasta la fecha de reactivación correspondiente.
+
+5.7. La pausa aprobada suspenderá el cómputo de la vigencia del servicio únicamente por el periodo expresamente aprobado. No suspenderá obligaciones de pago vencidas, fechas de pago pactadas, deberes de confidencialidad, propiedad intelectual, restricciones de acceso, no solicitación, reglas de conducta, ni obligaciones que por su naturaleza deban mantenerse vigentes.
+
+SEXTA. HONORARIOS, VALOR Y MODALIDAD DE PAGO.
+6.1. EL CLIENTE se obliga a pagar a LA EMPRESA el valor del programa "{{PROGRAMA}}", conforme a la modalidad que se seleccione a continuación. Antes de la firma o aceptación del contrato deberá conservarse únicamente la modalidad aplicable al caso concreto y eliminarse cualquier modalidad no utilizada.
+
+[[IF:MODO==pago_total]]
+Modalidad 1. Pago único.
+
+Valor total: {{MONTO_TOTAL}}.
+Fecha de pago: {{FECHA_PAGO_CONTADO}}.
+Fecha de inicio del programa: {{FECHA_INICIO}}.
+
+[[ENDIF]]
+[[IF:MODO==3_cuotas]]
+Modalidad 2. Pago en tres (3) cuotas.
+
+Valor total: {{MONTO_TOTAL}}.
+Número de cuotas: tres (3).
+Periodicidad: cada treinta (30) días calendario.
+
+{{CUOTAS_LISTA}}
+
+Fecha de inicio del programa: {{FECHA_INICIO}}.
+
+[[ENDIF]]
+[[IF:MODO==excepcion_2_cuotas]]
+Modalidad 3. Pago en dos (2) cuotas personalizadas, sujeta a aprobación previa de LA EMPRESA.
+
+Esta modalidad solo podrá habilitarse de manera excepcional, previa aprobación expresa de LA EMPRESA.
+
+{{CUOTAS_LISTA}}
+
+Fecha de inicio del programa: {{FECHA_INICIO}}.
+
+[[ENDIF]]
+
+6.2. Todas las sumas se expresan en {{MONEDA}}. EL CLIENTE asumirá cualquier variación cambiaria, comisión bancaria, cargo internacional, impuesto, tasa de conversión, costo de intermediación, cargo de pasarela, costo de transferencia o retención aplicable según su país, banco, tarjeta, medio de pago o procesador.
+
+6.3. El pago de una reserva, abono o depósito no habilita por sí solo el acceso al programa, contenidos, comunidad, soporte, beneficios o servicios. La reserva tiene como finalidad asegurar una plaza, descuento o condición comercial específica y se imputará al valor total del programa.
+
+6.4. La reserva constituye un compromiso de compra. Salvo acuerdo escrito en contrario o disposición imperativa aplicable, la reserva no será reembolsable si EL CLIENTE desiste, no completa el pago inicial requerido, cambia de decisión, no suministra información, no inicia el programa o incumple las condiciones de activación.
+
+6.5. El acceso al programa será habilitado únicamente cuando se haya cumplido la condición de pago aplicable según la modalidad pactada.
+
+6.6. EL CLIENTE deberá pagar la totalidad del valor del programa para acceder a la última fase, a los beneficios finales, a servicios complementarios condicionados al pago completo y a cualquier entrega que LA EMPRESA haya definido como posterior al pago total.
+
+6.7. No serán válidas solicitudes de reembolso fundadas en la inasistencia, falta de uso, falta de ejecución, ausencia de tiempo, cambio de decisión, imposibilidad personal, baja participación, no ingreso a plataformas, no entrega de tareas, no asistencia a sesiones, falta de implementación o desaprovechamiento de recursos puestos a disposición por LA EMPRESA.
+
+[[IF:TIENE_RESERVA]]
+6.8. Conforme a la modalidad de pago anteriormente discriminada, EL CLIENTE ha acordado con LA EMPRESA realizar un pago anticipado por concepto de reserva del programa, correspondiente a un valor de {{MONTO_RESERVA}}, pagado en fecha {{FECHA_RESERVA_PAGO}}, y cuyo saldo restante deberá completarse a más tardar en {{FECHA_RESERVA_SALDO}}.
+
+[[ENDIF]]
+
+SÉPTIMA. MORA, SUSPENSIÓN POR PAGO Y ACELERACIÓN.
+7.1. El retraso en cualquier pago generará la suspensión inmediata del acceso al programa, soporte, comunidad, plataformas, sesiones, beneficios, bonos, trafficker y demás recursos contratados, hasta tanto EL CLIENTE regularice íntegramente su obligación.
+
+7.2. La suspensión por mora no suspende el cómputo de la vigencia contractual ni extiende gratuitamente el periodo de acceso.
+
+7.3. EL CLIENTE contará con un plazo máximo de treinta (30) días calendario para ponerse al día. Transcurrido dicho término sin pago completo de las sumas vencidas, LA EMPRESA podrá dar por terminado el contrato por incumplimiento imputable a EL CLIENTE, sin derecho a reembolso y sin perjuicio de reclamar los valores pendientes, intereses, costos de cobro y demás sumas causadas.
+
+7.4. En caso de mora, se causarán intereses moratorios a la tasa del uno punto cinco por ciento (1,5 %) mensual o a la máxima permitida por la ley aplicable, según resulte menor, sobre el saldo vencido.
+
+7.5. Cuando EL CLIENTE realice pagos parciales, estos se aplicarán en el siguiente orden: primero, costos de cobro y cargos de transacción asumidos por LA EMPRESA; segundo, intereses moratorios; tercero, sumas liquidadas por incumplimiento, si aplican; cuarto, cuotas vencidas; y quinto, capital o saldo principal.
+
+7.6. Si EL CLIENTE incurre en mora de cualquiera de las cuotas pactadas, LA EMPRESA podrá declarar vencido anticipadamente el saldo total pendiente y exigir su pago inmediato, siempre que dicha medida sea permitida por la ley aplicable y no contradiga normas imperativas de protección al consumidor.
+
+OCTAVA. OBLIGACIONES DE LA EMPRESA.
+LA EMPRESA se obliga a:
+
+8.1. Poner a disposición de EL CLIENTE el programa "{{PROGRAMA}}", conforme al alcance pactado.
+8.2. Habilitar los contenidos, recursos y accesos correspondientes, siempre que EL CLIENTE cumpla las condiciones de pago, activación, conducta y uso autorizado.
+8.3. Brindar soporte técnico o estratégico general durante la vigencia contractual, a través de los canales oficiales definidos por LA EMPRESA.
+8.4. Permitir el acceso a la comunidad privada del programa durante la vigencia contractual, salvo que exista mora, incumplimiento, conducta indebida, retiro de accesos, terminación, vencimiento o cualquier causal contractual que habilite la suspensión.
+8.5. Prestar el servicio de montaje inicial de campañas publicitarias en los términos y límites de la cláusula décima tercera, siempre que EL CLIENTE entregue oportunamente todos los insumos, accesos, autorizaciones y materiales requeridos.
+8.6. Tratar los datos personales de EL CLIENTE conforme a la política de privacidad aplicable y a la normativa que resulte exigible.
+8.7. Abstenerse de usar materiales, información o datos de EL CLIENTE por fuera de los fines autorizados en el presente contrato.
+
+NOVENA. OBLIGACIONES DEL CLIENTE.
+EL CLIENTE se obliga a:
+9.1. Pagar completa y oportunamente el valor del programa, conforme a la modalidad pactada.
+9.2. Ejecutar el programa con diligencia, disciplina, constancia y responsabilidad personal.
+9.3. Entregar de manera completa, oportuna y verificable las tareas, insumos, accesos, información y materiales requeridos para avanzar en las fases del programa o recibir servicios complementarios.
+9.4. Canalizar inquietudes, solicitudes, quejas, soportes o requerimientos por los canales oficiales definidos por LA EMPRESA.
+9.5. Mantener un trato respetuoso con otros participantes, colaboradores, mentores, prestadores, trabajadores, directivos y representantes de LA EMPRESA.
+9.6. Abstenerse de realizar conductas disruptivas, agresivas, difamatorias, injuriosas, abusivas, discriminatorias, fraudulentas, intimidantes, desleales o que afecten la comunidad, reputación, operación, equipo o participantes del programa.
+9.7. No compartir credenciales, enlaces, grabaciones, documentos, plantillas, capturas, sesiones, accesos, contenidos, estrategias, materiales, recursos, información confidencial o espacios de soporte con terceros no autorizados.
+9.8. No grabar, reproducir, redistribuir, revender, adaptar, copiar, divulgar, publicar, transferir, comercializar o explotar los materiales del programa sin autorización previa y escrita de LA EMPRESA.
+9.9. Asumir responsabilidad exclusiva por sus decisiones comerciales, presupuestos publicitarios, precios, ofertas, embudos, promesas a sus clientes, cumplimiento legal de su negocio, impuestos, facturación, políticas de privacidad, términos de venta, garantías propias, atención al consumidor y cualquier obligación frente a sus propios clientes, socios, aliados, coproductores o proveedores.
+9.10. Verificar, antes de implementar cualquier estrategia, que su actividad, producto, servicio, publicidad, procesamiento de pagos, tratamiento de datos, uso de testimonios y estructura comercial cumplan las leyes aplicables en su país, mercado objetivo y plataformas utilizadas.
+9.11. Informar oportunamente a LA EMPRESA cualquier novedad que afecte el desarrollo del programa, sin que dicha información genere por sí sola obligación de reembolso, extensión, pausa o modificación del contrato.
+9.12. Abstenerse de iniciar chargebacks, contracargos, disputas bancarias o desconocimientos de pago de mala fe, cuando el servicio haya sido activado, puesto a disposición o prestado conforme al contrato. Lo anterior no limita derechos irrenunciables del consumidor cuando exista una causa real y legalmente procedente.
+
+DÉCIMA. VALIDACIÓN DE OFERTA, MERCADO Y RESULTADOS.
+10.1. EL CLIENTE reconoce que la validación de su oferta, aceptación del mercado, disposición de pago del público objetivo, aprobación de campañas, conversión de anuncios, costos publicitarios, comportamiento de audiencias, funcionamiento de embudos, calidad de leads, cierre de ventas, margen de utilidad, entrega del producto o servicio final y viabilidad comercial del negocio son factores ajenos al control de LA EMPRESA.
+
+10.2. Tales variables no constituyen incumplimiento imputable a LA EMPRESA y no habilitan reclamaciones distintas a las previstas expresamente en la garantía de satisfacción.
+
+10.3. LA EMPRESA no garantiza ingresos, ventas, facturación, rentabilidad, utilidad, recuperación de inversión, validación comercial, aprobación de anuncios, escalamiento del negocio, comportamiento de algoritmos, estabilidad de plataformas, ausencia de bloqueos, ni resultados económicos presentes o futuros.
+
+10.4. Cualquier ejemplo, caso, testimonio, métrica histórica, simulación, proyección, referencia comercial o experiencia compartida dentro o fuera del programa tendrá finalidad educativa e ilustrativa. No constituye resultado típico, promesa, garantía, proyección financiera, asesoría de inversión ni expectativa contractual exigible.
+
+10.5. EL CLIENTE acepta que no podrá interpretar materiales promocionales, ejemplos de terceros, experiencias de otros estudiantes o resultados históricos como garantía de que obtendrá resultados iguales, similares o proporcionales.
+
+DÉCIMA PRIMERA. CARÁCTER PERSONAL DEL CONTRATO E INCORPORACIÓN DE TERCEROS.
+11.1. El presente contrato es personal, individual e intransferible. Los accesos, licencias, beneficios, soporte, acompañamiento, participación en comunidades, sesiones, contenidos y materiales se otorgan exclusivamente a la persona o personas expresamente identificadas en el contrato.
+
+11.2. Ningún socio, empleado, contratista, asistente, familiar, colaborador, agencia, coproductor, cliente, proveedor, aliado o tercero podrá acceder, visualizar, utilizar, descargar, recibir soporte, asistir a sesiones o participar en comunidades sin autorización previa, expresa y escrita de LA EMPRESA.
+
+11.3. La vinculación posterior de terceros requerirá aprobación expresa de LA EMPRESA y podrá estar sujeta a la firma de un otrosí, aceptación de condiciones adicionales, pago de valores complementarios, creación de usuarios independientes o celebración de un nuevo contrato.
+
+11.4. LA EMPRESA podrá negar, suspender, limitar o retirar accesos otorgados o utilizados por personas no contempladas contractualmente, sin que ello genere derecho a reembolso, compensación o extensión.
+
+11.5. EL CLIENTE será responsable por cualquier uso indebido, filtración, descarga, reproducción, divulgación, copia, acceso no autorizado o incumplimiento cometido por personas a quienes haya compartido información, enlaces, materiales, usuarios, claves, sesiones o contenidos del programa.
+
+DÉCIMA SEGUNDA. COPRODUCTORES, SOCIOS, COLABORADORES Y TERCEROS DEL CLIENTE.
+12.1. Cuando EL CLIENTE implemente el programa con coproductores, socios, aliados, colaboradores, empleados, contratistas, agencias, asistentes, proveedores, infoproductores, productores, operadores o cualquier tercero, dichas relaciones serán externas, autónomas e independientes de LA EMPRESA.
+
+12.2. LA EMPRESA no será parte, garante, representante, intermediaria, asesora, codeudora, empleadora, socia, aliada comercial ni responsable de los acuerdos económicos, contractuales, societarios, laborales, operativos, profesionales o comerciales que EL CLIENTE celebre con terceros.
+
+12.3. LA EMPRESA no responderá por incumplimientos, terminaciones, renuncias, conflictos, desacuerdos, diferencias sobre porcentajes, distribución de ingresos, reparto de utilidades, titularidad de activos, propiedad de bases de datos, manejo de cuentas, administración de pauta, decisiones comerciales, diferencias personales o cualquier controversia entre EL CLIENTE y sus coproductores, socios, colaboradores o terceros.
+
+12.4. La renuncia, desistimiento, retiro, incumplimiento, cambio de voluntad, terminación o conflicto con un coproductor, socio, colaborador o tercero no constituirá incumplimiento de LA EMPRESA ni causal de reembolso, compensación, extensión, pausa, reclamación o suspensión de pagos.
+
+12.5. En caso de terminación de la relación entre EL CLIENTE y un coproductor o tercero, EL CLIENTE podrá continuar el proceso por su propia cuenta, vincular un nuevo tercero previa autorización de LA EMPRESA si requiere acceso al programa, o redefinir su proyecto. Ninguno de estos eventos generará responsabilidad para LA EMPRESA.
+
+12.6. Cuando EL CLIENTE opere bajo modelo de coproducción, colaboración o asociación, solo podrá solicitar retroalimentación respecto de un (1) negocio o proyecto a la vez, salvo autorización expresa de LA EMPRESA.
+
+12.7. Cualquier referencia a ventas, facturación, métricas, desempeño, ingresos o resultados del proyecto se analizará sobre el resultado bruto o total generado por el proyecto o negocio, con independencia de la distribución interna, porcentajes, comisiones, utilidades, costos, compensaciones o acuerdos económicos que EL CLIENTE haya pactado con coproductores, socios, aliados, colaboradores o terceros.
+
+DÉCIMA TERCERA. SERVICIO DE MONTAJE DE CAMPAÑAS PUBLICITARIAS.
+13.1. LA EMPRESA podrá asignar un trafficker interno para realizar exclusivamente el montaje inicial de campañas publicitarias en Meta Ads u otras plataformas que LA EMPRESA determine, según la metodología del programa y la disponibilidad operativa.
+
+13.2. El servicio de trafficker comprende únicamente el montaje inicial de campañas, configuraciones básicas y estructuras acordadas dentro del programa. No incluye gestión continua, optimización posterior, monitoreo permanente, diseño gráfico, redacción integral de copy, creación de contenido, producción audiovisual, administración de presupuesto, atención de leads, cierre de ventas, estrategia personalizada ilimitada, asesoría técnica especializada en pauta digital ni garantía de aprobación o rendimiento de anuncios.
+13.3. EL CLIENTE deberá entregar de manera completa y oportuna todos los insumos necesarios para el montaje, incluyendo accesos, permisos, cuentas, materiales, textos, creativos, dominios, hosting, páginas, píxeles, cuentas publicitarias, medios de pago, productos, ofertas y demás elementos requeridos.
+
+13.4. El plazo de ejecución del montaje solo empezará a contarse desde la entrega completa, funcional y verificable de todos los insumos requeridos por LA EMPRESA.
+
+13.5. LA EMPRESA no será responsable por retrasos, imposibilidad de montaje, rechazos, bloqueos, sanciones, restricciones, errores, costos adicionales o limitaciones derivados de cuentas publicitarias inhabilitadas, métodos de pago rechazados, falta de permisos, incumplimientos de políticas de plataformas, falta de activos, errores del CLIENTE, problemas técnicos, verificaciones pendientes o restricciones impuestas por terceros.
+
+13.6. El servicio de montaje deberá ser solicitado formalmente durante la vigencia contractual y con una anticipación mínima de quince (15) días calendario antes de la fecha de terminación del contrato. Si EL CLIENTE no lo solicita dentro de dicho término o no entrega los insumos requeridos, el beneficio perderá vigencia sin derecho a reembolso, compensación o reactivación gratuita.
+
+13.7. El servicio de montaje estará disponible únicamente durante los {{DURACION_TEXTO}} meses de vigencia contractual y no se acumulará, extenderá, trasladará ni conservará después de terminado el contrato, salvo acuerdo escrito de LA EMPRESA.
+
+13.8. EL CLIENTE será responsable de revocar accesos, modificar contraseñas, retirar permisos y proteger sus cuentas una vez finalizado el montaje o terminado el contrato. LA EMPRESA no será responsable por accesos, incidentes de seguridad, cambios, movimientos, pérdidas, bloqueos o afectaciones ocurridas después de finalizado el servicio o cuando EL CLIENTE no haya revocado oportunamente los permisos.
+
+13.9. Durante el término del contrato y por un (1) año contado desde su aceptación, EL CLIENTE se abstendrá de contratar, contactar, solicitar, vincular o establecer relaciones comerciales, laborales, profesionales o de prestación de servicios con traffickers, mentores, colaboradores, contratistas o miembros del equipo de LA EMPRESA por fuera de los canales oficiales de LA EMPRESA, salvo autorización previa y escrita.
+
+DÉCIMA CUARTA. ACCESO A PLATAFORMAS, COMUNIDADES Y ECOSISTEMA DIGITAL.
+14.1. Los accesos a Skool, Notion, Spaces, WhatsApp, comunidades privadas, grabaciones, sesiones, plantillas, herramientas, recursos, materiales, áreas de miembros, canales, documentos, bases de conocimiento y demás activos del ecosistema son temporales, personales, limitados, revocables e intransferibles.
+
+14.2. Finalizada la vigencia contractual, vencida una membresía, terminado el servicio, configurada la mora, verificado un incumplimiento, detectado un uso indebido o presentada cualquier causal de suspensión o terminación, LA EMPRESA podrá suspender, limitar, retirar, cerrar o cancelar los accesos de EL CLIENTE al ecosistema digital.
+
+14.3. El acceso posterior al vencimiento del programa solo procederá cuando EL CLIENTE mantenga una membresía activa, haya contratado un servicio posterior que contemple dichos accesos o exista autorización previa y escrita de LA EMPRESA.
+14.4. EL CLIENTE reconoce que no adquiere derecho de acceso indefinido, perpetuo, vitalicio o ilimitado a contenidos, comunidades, plataformas, grabaciones, recursos o herramientas, salvo estipulación expresa, escrita y firmada por LA EMPRESA.
+
+14.5. LA EMPRESA podrá retirar o limitar accesos para proteger la seguridad de la comunidad, propiedad intelectual, datos personales, convivencia, operación, valor comercial de los programas activos, cumplimiento contractual o derechos de terceros.
+
+14.6. La terminación o retiro de accesos no elimina las obligaciones de confidencialidad, propiedad intelectual, no divulgación, no reproducción, no competencia desleal, no solicitación, pago, ni las demás que por su naturaleza deban sobrevivir.
+
+DÉCIMA QUINTA. CONFIDENCIALIDAD.
+15.1. Las partes se obligan a mantener en estricta confidencialidad toda información técnica, comercial, financiera, estratégica, operativa, metodológica, contractual, publicitaria, de clientes, de participantes, de campañas, de plataformas, de procesos, de proveedores o cualquier otra información no pública conocida con ocasión del contrato.
+
+15.2. EL CLIENTE se obliga especialmente a no divulgar, compartir, publicar, copiar, transferir, vender, entregar, reproducir o permitir acceso a contenidos, estrategias, sesiones, plantillas, documentos, grabaciones, conversaciones internas, capturas de pantalla, información de otros participantes, información del equipo, metodologías o materiales de LA EMPRESA.
+
+15.3. La obligación de confidencialidad permanecerá vigente durante el contrato y por un término de cinco (5) años contados desde su terminación. Respecto de secretos comerciales, metodologías, información estratégica y propiedad intelectual, la obligación subsistirá mientras dicha información no sea pública por causa no imputable a la parte receptora.
+
+15.4. El incumplimiento de esta cláusula facultará a LA EMPRESA para suspender o terminar el contrato de manera inmediata, retirar accesos, exigir la eliminación del contenido divulgado y ejercer las acciones legales correspondientes.
+
+DÉCIMA SEXTA. PROPIEDAD INTELECTUAL Y LICENCIA LIMITADA DE USO.
+16.1. Todos los contenidos, metodologías, materiales, documentos, plantillas, grabaciones, sesiones, textos, recursos, marcas, nombres comerciales, estrategias, procesos, estructuras, modelos, herramientas, guías, diseños, bases de conocimiento, frameworks y demás activos del programa son propiedad exclusiva de LA EMPRESA o de sus licenciantes.
+
+16.2. LA EMPRESA otorga a EL CLIENTE una licencia personal, limitada, revocable, no exclusiva, no comercial, no sublicenciable e intransferible para usar los materiales únicamente durante la vigencia contractual y exclusivamente para su implementación profesional personal.
+
+16.3. EL CLIENTE no podrá vender, copiar, reproducir, distribuir, adaptar, traducir, divulgar, publicar, cargar en internet, compartir con terceros, usar en programas propios, convertir en producto comercial, entrenar herramientas de inteligencia artificial, sublicenciar, arrendar, transferir o explotar los materiales de LA EMPRESA sin autorización previa y escrita.
+
+16.4. Cualquier uso no autorizado constituirá incumplimiento contractual y podrá dar lugar a suspensión inmediata, terminación del contrato, retiro de accesos, reclamación de daños, medidas cautelares, acciones por infracción de derechos de autor, secretos comerciales, competencia desleal y demás acciones disponibles.
+
+16.5. La terminación del contrato no autoriza a EL CLIENTE a conservar, copiar, explotar, difundir o continuar usando materiales a los que ya no tenga derecho de acceso.
+
+DÉCIMA SÉPTIMA. GARANTÍA DE SATISFACCIÓN.
+17.1. LA EMPRESA no promete ingresos, ventas, facturación, rentabilidad, utilidad, recuperación de inversión ni resultados económicos específicos.
+
+17.2. La única garantía otorgada por LA EMPRESA es una garantía de satisfacción de quince (15) días calendario, cuya finalidad es permitir que EL CLIENTE evalúe la metodología, contenidos disponibles, dinámica inicial y acompañamiento inicial del programa.
+
+17.3. El término de quince (15) días calendario se contará desde la fecha de activación del acceso al programa o desde la fecha de inicio efectiva del servicio, lo que ocurra primero.
+
+17.4. Para ejercer la garantía, EL CLIENTE deberá remitir solicitud escrita al canal oficial de atención dispuesto por LA EMPRESA antes del vencimiento del término de quince (15) días calendario. La solicitud deberá identificar al CLIENTE, correo de registro, fecha de activación, comprobante de pago y manifestación expresa de que solicita acogerse a la garantía de satisfacción.
+
+17.5. Vencido el término de quince (15) días calendario sin solicitud formal y oportuna, la garantía expirará automáticamente y la inversión realizada se entenderá definitiva, sin que ello implique promesa de resultados económicos futuros.
+
+17.6. La garantía de satisfacción no es una garantía de resultados, ventas, ingresos, facturación, utilidad, rentabilidad, recuperación de inversión, aprobación de campañas, validación de oferta o desempeño comercial.
+
+17.7. La garantía no procederá cuando:
+
+a. La solicitud sea presentada por fuera del plazo.
+b. EL CLIENTE haya incumplido obligaciones de pago.
+c. EL CLIENTE haya compartido accesos, materiales o contenidos con terceros no autorizados.
+d. EL CLIENTE haya incurrido en conducta abusiva, fraudulenta, difamatoria, disruptiva o contraria a la comunidad.
+e. EL CLIENTE haya descargado, copiado, reproducido, divulgado o usado indebidamente materiales del programa.
+f. EL CLIENTE haya contratado una membresía, renovación, extensión o servicio posterior no cubierto por esta garantía.
+g. Se trate de compras repetidas, renovaciones, reactivaciones, membresías, servicios complementarios, productos adicionales o contratos posteriores, salvo que LA EMPRESA indique expresamente lo contrario por escrito.
+
+17.8. En caso de aprobarse la garantía, LA EMPRESA reembolsará el valor efectivamente pagado por EL CLIENTE por concepto del programa cubierto por la garantía, dentro de un término razonable y por el medio de pago que LA EMPRESA determine según disponibilidad operativa, pasarela, banco o procesador. Los costos asociados a la devolución del dinero, serán asumidos por EL CLIENTE.
+17.9. Aprobado el reembolso, LA EMPRESA podrá retirar de inmediato todos los accesos, beneficios, recursos, bonos, sesiones, comunidad, materiales, soporte y servicios asociados al programa.
+
+17.10. EL CLIENTE se obliga a cesar el uso de cualquier material, recurso, plantilla, grabación, documento, contenido o información de LA EMPRESA después de aprobado el reembolso.
+
+17.11. Las solicitudes de devolución presentadas por fuera de la garantía de satisfacción solo procederán cuando exista aprobación expresa y escrita de LA EMPRESA o cuando una norma imperativa aplicable así lo ordene.
+
+DÉCIMA OCTAVA. TESTIMONIOS, USO DE IMAGEN Y RESULTADOS.
+18.1. EL CLIENTE podrá autorizar a LA EMPRESA, de forma previa, expresa, gratuita y voluntaria, para utilizar su nombre, imagen, voz, fotografías, videos, grabaciones, testimonios, comentarios, resultados, publicaciones, mensajes, capturas o materiales generados en el marco del programa, con fines educativos, informativos, comerciales, promocionales, institucionales o testimoniales.
+
+18.2. La autorización podrá constar en el presente contrato, formato independiente, correo electrónico, mensaje verificable, aceptación digital, grabación, formulario o cualquier otro medio que permita acreditar consentimiento.
+
+18.3. LA EMPRESA se obliga a no alterar de manera engañosa el sentido del testimonio ni presentar resultados de EL CLIENTE como típicos, garantizados o representativos del resultado que obtendrán otros estudiantes.
+
+18.4. Si LA EMPRESA otorga incentivos, bonos, descuentos, beneficios o contraprestaciones por un testimonio, podrá revelar dicha conexión material cuando sea legalmente exigible o comercialmente recomendable.
+
+18.5. EL CLIENTE declara que todo testimonio que entregue deberá ser honesto, verificable, basado en su experiencia real y no deberá contener afirmaciones falsas, infladas, engañosas o imposibles de sustentar.
+
+18.6. La autorización de uso de imagen será no exclusiva, gratuita, mundial, para medios físicos y digitales, y tendrá duración indefinida, salvo revocatoria escrita de EL CLIENTE. La revocatoria tendrá efectos hacia el futuro y no obligará a retirar materiales ya producidos, distribuidos, impresos, pautados, publicados o incorporados en campañas antes de la recepción efectiva de la revocatoria, salvo acuerdo escrito o disposición legal imperativa.
+
+18.7. LA EMPRESA se obliga a respetar la dignidad, honor, intimidad, reputación y derechos de imagen de EL CLIENTE.
+
+DÉCIMA NOVENA. PROTECCIÓN DE DATOS PERSONALES.
+19.1. LA EMPRESA tratará los datos personales de EL CLIENTE para fines de ejecución contractual, gestión de pagos, activación de accesos, soporte, comunicaciones, seguimiento, cumplimiento legal, fines administrativos, comerciales, operativos y de seguridad.
+
+19.2. EL CLIENTE autoriza a LA EMPRESA a tratar sus datos conforme a la política de privacidad publicada o informada por LA EMPRESA, así como a compartirlos con proveedores tecnológicos, pasarelas de pago, plataformas, herramientas, asesores, contratistas y terceros necesarios para la ejecución del contrato.
+
+19.3. EL CLIENTE será responsable de garantizar que cualquier dato personal de terceros que entregue a LA EMPRESA haya sido obtenido legalmente y cuente con las autorizaciones necesarias.
+
+19.4. EL CLIENTE podrá ejercer los derechos de acceso, corrección, actualización, eliminación u otros que resulten aplicables conforme a la normativa correspondiente, a través de los canales oficiales de LA EMPRESA.
+
+VIGÉSIMA. LIMITACIÓN DE RESPONSABILIDAD.
+20.1. En la máxima medida permitida por la ley aplicable, la responsabilidad total acumulada de LA EMPRESA frente a EL CLIENTE por cualquier reclamación derivada del contrato no excederá el valor efectivamente pagado por EL CLIENTE a LA EMPRESA por el programa objeto de este contrato.
+
+20.2. En ningún caso LA EMPRESA será responsable por lucro cesante, pérdida de oportunidad, pérdida de ingresos, pérdida de utilidades, pérdida de ventas, pérdida de reputación, pérdida de datos, bloqueo de cuentas, sanciones de plataformas, rechazo de anuncios, pérdida de clientes, incumplimientos frente a terceros, costos publicitarios, costos operativos, inversiones del CLIENTE, daños indirectos, incidentales, consecuenciales, especiales, punitivos o ejemplares, salvo que una norma imperativa aplicable disponga lo contrario.
+
+20.3. Las limitaciones anteriores no excluyen responsabilidad que no pueda ser limitada conforme a la ley aplicable, ni se interpretarán como autorización para fraude, dolo, mala fe o conducta intencional ilícita.
+
+VIGÉSIMA PRIMERA. CAUSALES DE SUSPENSIÓN O TERMINACIÓN.
+21.1. LA EMPRESA podrá suspender o terminar la participación de EL CLIENTE, retirar accesos y cesar la prestación del servicio, sin derecho a reembolso, cuando EL CLIENTE incurra en cualquiera de las siguientes conductas:
+
+a. Mora o incumplimiento de pago.
+b. Uso indebido de accesos, materiales, contenidos o comunidad.
+c. Compartir credenciales o permitir acceso de terceros no autorizados.
+d. Violación de confidencialidad o propiedad intelectual.
+e. Conducta disruptiva, irrespetuosa, abusiva, difamatoria, amenazante o que afecte la comunidad, equipo o participantes.
+f. Uso fraudulento de la garantía de satisfacción.
+g. Inicio de contracargos o disputas de pago de mala fe.
+h. Captación no autorizada de estudiantes, proveedores, colaboradores, mentores, traffickers o miembros del equipo de LA EMPRESA.
+i. Incumplimiento de cualquier obligación esencial del contrato.
+
+21.2. La suspensión o terminación por incumplimiento de EL CLIENTE no extingue obligaciones de pago causadas, confidencialidad, propiedad intelectual, no divulgación, no solicitación, indemnidad, resolución de controversias, limitación de responsabilidad y demás obligaciones que por su naturaleza deban sobrevivir.
+
+21.3. Las partes podrán terminar el contrato por mutuo acuerdo, siempre que conste por escrito.
+
+VIGÉSIMA SEGUNDA. INDEMNIDAD.
+22.1. EL CLIENTE mantendrá indemne a LA EMPRESA, sus miembros, directivos, empleados, contratistas, mentores, aliados, proveedores y representantes frente a reclamaciones, daños, sanciones, costos, gastos, honorarios, pérdidas o responsabilidades derivadas de:
+
+a. Incumplimiento contractual de EL CLIENTE.
+b. Uso indebido de materiales, accesos, comunidad o información.
+c. Violación de derechos de terceros por parte de EL CLIENTE.
+d. Incumplimiento legal, tributario, publicitario, comercial, societario, laboral, de consumo o de datos personales en el negocio de EL CLIENTE.
+e. Promesas, ofertas, garantías, anuncios, productos, servicios o incumplimientos de EL CLIENTE frente a sus propios clientes.
+f. Conflictos con socios, coproductores, colaboradores, proveedores, agencias, clientes o terceros.
+g. Uso, configuración o administración de plataformas, cuentas publicitarias, dominios, hosting, pasarelas, herramientas de automatización o inteligencia artificial por parte de EL CLIENTE.
+
+VIGÉSIMA TERCERA. NO SOLICITACIÓN Y PROTECCIÓN DEL EQUIPO.
+23.1. Durante la vigencia del contrato y por un (1) año contado desde su terminación, EL CLIENTE no podrá contratar, vincular, solicitar, inducir, desviar, captar o establecer relaciones comerciales, laborales, profesionales o de prestación de servicios con trabajadores, contratistas, mentores, traffickers, proveedores, asesores, colaboradores o miembros del equipo de LA EMPRESA, salvo autorización previa y escrita.
+
+23.2. EL CLIENTE tampoco podrá inducir a otros estudiantes, clientes, aliados o miembros de la comunidad a abandonar, incumplir, desacreditar o sustituir relaciones comerciales con LA EMPRESA mediante prácticas desleales, captación indebida, uso de información confidencial o aprovechamiento de la comunidad.
+
+23.3. Esta cláusula no impide actividades comerciales legítimas de EL CLIENTE, siempre que no impliquen uso indebido de información, captación dirigida, desviación de equipo, competencia desleal o aprovechamiento no autorizado del ecosistema de LA EMPRESA.
+
+VIGÉSIMA CUARTA. LIQUIDATED DAMAGES POR INCUMPLIMIENTOS DE DIFÍCIL CUANTIFICACIÓN.
+24.1. Las partes reconocen que ciertos incumplimientos, especialmente los relacionados con propiedad intelectual, confidencialidad, uso no autorizado de materiales, acceso indebido de terceros, captación de equipo o divulgación de metodologías, pueden generar daños difíciles de cuantificar de manera exacta.
+
+24.2. En caso de incumplimiento de dichas obligaciones, EL CLIENTE pagará a LA EMPRESA, a título de liquidated damages y no como penalidad punitiva, una suma equivalente al treinta por ciento (30 %) del valor total del contrato, sin perjuicio de que LA EMPRESA pueda solicitar medidas cautelares, retiro de contenidos, suspensión de accesos, cesación de la conducta y demás remedios disponibles.
+24.3. Esta estipulación no limita el derecho de LA EMPRESA a reclamar daños efectivamente comprobados cuando la ley aplicable lo permita y cuando dichos daños excedan la suma pactada, siempre que no implique una doble recuperación prohibida por la ley aplicable.
+
+VIGÉSIMA QUINTA. NOTIFICACIONES.
+25.1. Las notificaciones entre las partes se realizarán a los correos electrónicos, teléfonos, WhatsApp, direcciones físicas o canales registrados en el encabezado del contrato o en los sistemas de LA EMPRESA.
+
+25.2. EL CLIENTE será responsable de mantener actualizados sus datos de contacto. Cualquier comunicación enviada a los datos registrados se entenderá válidamente remitida, salvo que EL CLIENTE haya informado previamente y por escrito la actualización correspondiente.
+
+25.3. Para solicitudes de garantía, reembolsos, quejas, pausas, terminación, modificaciones o reclamaciones, EL CLIENTE deberá utilizar los canales oficiales definidos por LA EMPRESA. Las solicitudes enviadas a canales no oficiales no obligarán a LA EMPRESA hasta que sean recibidas por el canal correcto.
+
+VIGÉSIMA SEXTA. LEY APLICABLE, JURISDICCIÓN Y RESOLUCIÓN DE CONTROVERSIAS.
+
+26.1. El presente contrato se regirá e interpretará de conformidad con las leyes del Estado de Florida, Estados Unidos de América, sin perjuicio de aquellas normas imperativas de protección al consumidor que, según la ley aplicable, no puedan ser válidamente renunciadas.
+
+26.2. Las partes procurarán resolver de buena fe cualquier diferencia, reclamación o controversia derivada del presente contrato mediante arreglo directo. Para tal efecto, la parte interesada deberá remitir comunicación escrita a la otra parte indicando de manera clara los hechos, pretensiones, documentos de soporte y propuesta de solución.
+
+26.3. Recibida la comunicación, las partes contarán con un término de diez (10) días calendario para procurar una solución directa. El agotamiento de esta etapa no impedirá que cualquiera de las partes acuda ante la autoridad judicial competente cuando exista urgencia, riesgo de daño, necesidad de medida cautelar o cuando la naturaleza de la reclamación así lo justifique.
+
+26.4. En caso de no lograrse un acuerdo directo, cualquier controversia, reclamación, diferencia o disputa derivada del presente contrato, incluyendo su existencia, validez, interpretación, ejecución, cumplimiento, incumplimiento, terminación, reembolso, pago, propiedad intelectual, confidencialidad, acceso a plataformas, uso de contenidos o prestación del servicio, será sometida al conocimiento de los jueces y tribunales competentes del Estado de Florida, Estados Unidos de América.
+
+26.5. Para efectos de competencia territorial, las partes acuerdan someterse, en la máxima medida permitida por la ley aplicable, a la jurisdicción de los tribunales estatales o federales ubicados en el Condado de Orange, Estado de Florida, Estados Unidos de América.
+
+26.6. EL CLIENTE acepta que LA EMPRESA podrá acudir directamente ante los jueces competentes para solicitar medidas cautelares, órdenes de restricción, retiro de contenidos, protección de propiedad intelectual, protección de información confidencial, suspensión de uso no autorizado, recuperación o cierre de accesos, cesación de conductas indebidas, cobro de sumas adeudadas o cualquier otro remedio judicial urgente o necesario.
+
+26.7. En la máxima medida permitida por la ley aplicable, las partes renuncian expresamente a cualquier objeción basada en falta de jurisdicción personal, inconveniencia del foro o improcedencia territorial, siempre que la controversia sea conocida por los tribunales competentes del Estado de Florida conforme a esta cláusula.
+
+26.8. La presente cláusula no contiene pacto arbitral. En consecuencia, ninguna controversia derivada del presente contrato deberá ser sometida a arbitraje obligatorio, salvo que las partes acuerden lo contrario de manera expresa, posterior y por escrito.
+
+26.9. En la máxima medida permitida por la ley aplicable, las partes renuncian expresamente al juicio por jurado respecto de controversias derivadas del presente contrato, aceptando que cualquier disputa judicial sea decidida por el juez competente. Esta renuncia no aplicará cuando una norma imperativa disponga lo contrario.
+
+VIGÉSIMA SÉPTIMA. CONTRATO COMPLETO, NO DEPENDENCIA Y MODIFICACIONES.
+27.1. El presente contrato, junto con sus anexos, políticas, formularios aceptados, términos incorporados por referencia y comunicaciones escritas expresamente aceptadas por LA EMPRESA, constituye el acuerdo completo entre las partes y reemplaza cualquier conversación, propuesta, publicidad, presentación, mensaje, negociación, entendimiento o comunicación previa que contradiga sus términos.
+
+27.2. EL CLIENTE declara que no se ha basado en promesas, declaraciones, garantías, proyecciones, testimonios, casos de éxito, simulaciones, afirmaciones de ingresos o manifestaciones externas no incorporadas expresamente al presente contrato.
+
+27.3. Ninguna modificación, excepción, extensión, beneficio, descuento, devolución, autorización de acceso, promesa, garantía o cambio de condiciones será válido si no consta por escrito y ha sido aceptado expresamente por LA EMPRESA.
+
+27.4. La tolerancia, omisión, demora o falta de exigencia de LA EMPRESA frente a un incumplimiento no constituirá renuncia a sus derechos ni modificación del contrato.
+
+VIGÉSIMA OCTAVA. ACEPTACIÓN ELECTRÓNICA Y EVIDENCIA.
+28.1. La firma manuscrita, firma electrónica, aceptación digital, aceptación por formulario, confirmación por correo electrónico, confirmación por WhatsApp, pago total, pago parcial, abono, reserva, consignación, transferencia, uso de accesos, ingreso a plataformas o participación en el programa constituirá aceptación expresa, inequívoca e integral del presente contrato.
+
+28.2. EL CLIENTE declara que, antes de obligarse, tuvo acceso al contrato, lo leyó, comprendió y aceptó voluntariamente, incluyendo el alcance del servicio, ausencia de garantía de resultados, condiciones de la garantía de satisfacción, obligaciones de pago, reglas de acceso, propiedad intelectual, confidencialidad, ley aplicable y resolución de controversias.
+
+28.3. LA EMPRESA podrá conservar como evidencia contractual correos electrónicos, mensajes, registros de pago, comprobantes, logs de acceso, direcciones IP, formularios, grabaciones, aceptaciones digitales, registros de plataforma, entregas de credenciales, historial de soporte y demás soportes razonables de aceptación, activación, prestación del servicio y cumplimiento contractual.
+
+VIGÉSIMA NOVENA. DIVISIBILIDAD E INTERPRETACIÓN.
+29.1. Si alguna disposición del contrato es declarada inválida, ineficaz o inexigible, dicha disposición se interpretará, limitará o ajustará en la medida necesaria para hacerla válida y exigible. Si ello no es posible, se tendrá por separada sin afectar la validez de las demás cláusulas.
+
+29.2. Los títulos de las cláusulas se incluyen únicamente para facilidad de lectura y no limitarán ni modificarán su interpretación.
+
+29.3. En caso de duda, el contrato deberá interpretarse de manera que preserve su finalidad económica, la protección de la propiedad intelectual de LA EMPRESA, la naturaleza educativa del servicio, la ausencia de garantía de resultados y el equilibrio razonable entre las partes.
+
+TRIGÉSIMA. SUPERVIVENCIA.
+Las obligaciones relativas a pago, confidencialidad, propiedad intelectual, no divulgación, no solicitación, indemnidad, limitación de responsabilidad, uso de imagen previamente autorizado, resolución de controversias, ley aplicable, aceptación electrónica y demás obligaciones que por su naturaleza deban subsistir continuarán vigentes después de la terminación, vencimiento, suspensión, reembolso o resolución del contrato.
+
+[[FIRMAS]]
+
+{{FECHA_CONTRATO}}

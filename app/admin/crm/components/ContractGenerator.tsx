@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
@@ -94,6 +94,15 @@ const BUILTIN_CONTRACT_TEMPLATES: BuiltinContractTemplate[] = [
       "Contrato para el programa HOTSELLING STARTER (4 meses, acceso Skool).",
     textUrl: "/templates/contrato-hotselling-starter-v1.txt",
     metadataKey: "hotselling-starter-v1",
+  },
+  {
+    key: "hotselling-pro-v2",
+    label: "Hotselling Pro v2",
+    description:
+      "Contrato actualizado HOTSELLING PRO — Sin garantía de resultados. Garantía de satisfacción 15 días. Versión definitiva 4 meses.",
+    textUrl: "/templates/contrato-hotselling-pro-v2.txt",
+    docxUrl: "/templates/contrato-hotselling-pro-v2.docx",
+    metadataKey: "hotselling-pro-v2",
   },
 ];
 
