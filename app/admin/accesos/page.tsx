@@ -213,6 +213,7 @@ function AccesosPageContent() {
   const [mailTemplateKey, setMailTemplateKey] =
     useState<ContractExpiryKey | null>(null);
 
+  const [estadoFilter, setEstadoFilter] = useState<string>("todos");
   const [monthFilter, setMonthFilter] = useState<string>("todos");
   const [dueMes, setDueMes] = useState<string>("todos");
   const [tagFilter, setTagFilter] = useState<string>("todos");
@@ -269,6 +270,21 @@ function AccesosPageContent() {
       .map(([key, v]) => ({ key, ...v }));
   }, [items, overdueItems]);
 
+  const estadoOptions = useMemo(() => {
+    const all = [...items, ...overdueItems];
+    const map = new Map<string, { label: string; count: number }>();
+    for (const it of all) {
+      const key = String(it.alumnoEstado ?? "").trim();
+      if (!key) continue;
+      const prev = map.get(key);
+      if (prev) prev.count += 1;
+      else map.set(key, { label: key, count: 1 });
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b, "es", { sensitivity: "base" }))
+      .map(([key, v]) => ({ key, ...v }));
+  }, [items, overdueItems]);
+
   const normalize = (s: string) =>
     s
       .toLowerCase()
@@ -300,6 +316,13 @@ function AccesosPageContent() {
     if (tagFilter === "todos") return true;
     if (tagFilter === "__sin_tag__") return !String(it.tag ?? "").trim();
     return String(it.tag ?? "").trim() === tagFilter;
+  };
+
+  const matchesEstado = (it: (typeof items)[number]) => {
+    if (estadoFilter === "todos") return true;
+    if (estadoFilter === "__sin_estado__")
+      return !String(it.alumnoEstado ?? "").trim();
+    return String(it.alumnoEstado ?? "").trim() === estadoFilter;
   };
 
   // Umbral de días de inactividad activo (null = sin filtro).
@@ -338,6 +361,7 @@ function AccesosPageContent() {
           !matchesTipo(it) ||
           !matchesQuick(it) ||
           !matchesTag(it) ||
+          !matchesEstado(it) ||
           !matchesInactivity(it)
         )
           return false;
@@ -355,6 +379,7 @@ function AccesosPageContent() {
       quickFilter,
       dueMes,
       tagFilter,
+      estadoFilter,
       inactivityThreshold,
     ],
   );
@@ -368,6 +393,7 @@ function AccesosPageContent() {
           !matchesTipo(it) ||
           !matchesQuick(it) ||
           !matchesTag(it) ||
+          !matchesEstado(it) ||
           !matchesInactivity(it)
         )
           return false;
@@ -383,6 +409,7 @@ function AccesosPageContent() {
       tipoFilter,
       quickFilter,
       tagFilter,
+      estadoFilter,
       inactivityThreshold,
     ],
   );
@@ -918,6 +945,28 @@ function AccesosPageContent() {
               </SelectContent>
             </Select>
           )}
+          {estadoOptions.length > 0 && (
+            <Select value={estadoFilter} onValueChange={setEstadoFilter}>
+              <SelectTrigger className="w-full sm:w-48 gap-2">
+                <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="Todos los estados" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los estados</SelectItem>
+                <SelectItem value="__sin_estado__">Sin estado</SelectItem>
+                {estadoOptions.map((t) => (
+                  <SelectItem key={t.key} value={t.key}>
+                    <span className="flex items-center justify-between gap-4 w-full">
+                      <span>{t.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {t.count}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {/* Filtro por días de inactividad */}
           <Select
             value={inactivityPreset}
@@ -1004,6 +1053,7 @@ function AccesosPageContent() {
                   tipoFilter !== "todos" ||
                   quickFilter ||
                   tagFilter !== "todos" ||
+                  estadoFilter !== "todos" ||
                   inactivityPreset !== "todos" ||
                   dueMes !== "todos") && (
                   <Button
@@ -1015,6 +1065,7 @@ function AccesosPageContent() {
                       setQuickFilter(null);
                       setDueMes("todos");
                       setTagFilter("todos");
+                      setEstadoFilter("todos");
                       setInactivityPreset("todos");
                       setInactivityCustomDays("");
                     }}
@@ -1056,6 +1107,7 @@ function AccesosPageContent() {
                   tipoFilter !== "todos" ||
                   quickFilter ||
                   tagFilter !== "todos" ||
+                  estadoFilter !== "todos" ||
                   inactivityPreset !== "todos") && (
                   <Button
                     variant="ghost"
@@ -1065,6 +1117,7 @@ function AccesosPageContent() {
                       setTipoFilter("todos");
                       setQuickFilter(null);
                       setTagFilter("todos");
+                      setEstadoFilter("todos");
                       setInactivityPreset("todos");
                       setInactivityCustomDays("");
                     }}

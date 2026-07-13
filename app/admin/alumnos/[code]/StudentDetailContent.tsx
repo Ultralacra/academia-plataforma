@@ -408,7 +408,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [tempVenceFechaDesde, setTempVenceFechaDesde] = useState<string>("");
   const [tempVenceFechaHasta, setTempVenceFechaHasta] = useState<string>("");
   const [tempVenceTipo, setTempVenceTipo] = useState<
-    "contractual" | "extraordinaria" | "membresia"
+    "contractual" | "extraordinaria" | "membresia" | "otrosi" | "normal"
   >("contractual");
   const [tempVenceMotivo, setTempVenceMotivo] = useState<string>("");
 
@@ -2539,8 +2539,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
             : null;
         return {
           id: ext?.id ?? `range-${index}`,
-          tipo:
-            ext?.tipo === "extraordinaria" ? "extraordinaria" : "contractual",
+          tipo: ext?.tipo ?? "contractual",
           motivo: ext?.motivo ?? null,
           changedBy: ext?.changed_by ?? null,
           createdAt: ext?.created_at ?? null,
@@ -2552,7 +2551,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       })
       .filter(Boolean) as Array<{
       id: string;
-      tipo: "contractual" | "extraordinaria";
+      tipo: string;
       motivo: string | null;
       changedBy: any;
       createdAt: string | null;
@@ -3421,17 +3420,24 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       title="Extender accesos"
                       onClick={() => {
                         setTempMesesExtra("0");
-                        setTempVenceFechaDesde(isoDay(new Date()));
-                        setTempVenceFechaHasta(isoDay(new Date()));
-                        {
-                          const vt = (venceMeta as any)?.payload?.vence_tipo;
-                          setTempVenceTipo(
-                            vt === "extraordinaria"
+                        const vt = (venceMeta as any)?.payload?.vence_tipo;
+                        setTempVenceTipo(
+                          vt === "membresia"
+                            ? "membresia"
+                            : vt === "extraordinaria"
                               ? "extraordinaria"
-                              : vt === "membresia"
-                                ? "membresia"
-                                : "contractual",
-                          );
+                              : vt === "otrosi"
+                                ? "otrosi"
+                                : vt === "normal"
+                                  ? "normal"
+                                  : "contractual",
+                        );
+                        if (vt === "normal") {
+                          setTempVenceFechaDesde(isoDay(new Date()));
+                          setTempVenceFechaHasta("");
+                        } else {
+                          setTempVenceFechaDesde(isoDay(new Date()));
+                          setTempVenceFechaHasta(isoDay(new Date()));
                         }
                         setTempVenceMotivo(
                           String(
@@ -3655,18 +3661,25 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           title="Extender accesos"
                           onClick={() => {
                             setTempMesesExtra("0");
-                            setTempVenceFechaDesde(isoDay(new Date()));
-                            setTempVenceFechaHasta(isoDay(new Date()));
-                            {
-                              const vt = (venceMeta as any)?.payload
-                                ?.vence_tipo;
-                              setTempVenceTipo(
-                                vt === "extraordinaria"
+                            const vt = (venceMeta as any)?.payload
+                              ?.vence_tipo;
+                            setTempVenceTipo(
+                              vt === "membresia"
+                                ? "membresia"
+                                : vt === "extraordinaria"
                                   ? "extraordinaria"
-                                  : vt === "membresia"
-                                    ? "membresia"
-                                    : "contractual",
-                              );
+                                  : vt === "otrosi"
+                                    ? "otrosi"
+                                    : vt === "normal"
+                                      ? "normal"
+                                      : "contractual",
+                            );
+                            if (vt === "normal") {
+                              setTempVenceFechaDesde(isoDay(new Date()));
+                              setTempVenceFechaHasta("");
+                            } else {
+                              setTempVenceFechaDesde(isoDay(new Date()));
+                              setTempVenceFechaHasta(isoDay(new Date()));
                             }
                             setTempVenceMotivo(
                               String(
@@ -4454,28 +4467,27 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 <Select
                   value={tempVenceTipo}
                   onValueChange={(v) => {
-                    const next =
-                      v === "extraordinaria"
-                        ? "extraordinaria"
-                        : v === "membresia"
-                          ? "membresia"
-                          : "contractual";
+                    const valid = ["contractual", "extraordinaria", "membresia", "otrosi", "normal"] as const;
+                    const next = valid.includes(v as any) ? v as typeof valid[number] : "contractual";
                     setTempVenceTipo(next);
                     if (next === "membresia") {
                       setTempMesesExtra("1");
-                      // Empalmar desde el vencimiento actual si el alumno está activo
                       const memDesde =
                         accessStats && !accessStats.isExpired
                           ? isoDay(accessStats.estimatedEnd)
                           : isoDay(new Date());
                       setTempVenceFechaDesde(memDesde);
                       setTempVenceFechaHasta("");
+                    } else if (next === "normal") {
+                      setTempMesesExtra("0");
+                      setTempVenceFechaDesde(isoDay(new Date()));
+                      setTempVenceFechaHasta("");
                     } else {
                       setTempMesesExtra("0");
                       setTempVenceFechaDesde(isoDay(new Date()));
                       setTempVenceFechaHasta(isoDay(new Date()));
                     }
-                    if (next === "contractual") {
+                    if (next === "contractual" || next === "normal") {
                       setTempVenceMotivo("");
                     }
                   }}
@@ -4489,6 +4501,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       Extraordinaria
                     </SelectItem>
                     <SelectItem value="membresia">Membresía</SelectItem>
+                    <SelectItem value="otrosi">Otrosí</SelectItem>
+                    <SelectItem value="normal">Normal</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -4498,7 +4512,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
               <Label>
                 {tempVenceTipo === "membresia"
                   ? "Periodo de membresía"
-                  : "Rango de extensión"}
+                  : tempVenceTipo === "normal"
+                    ? "Extender acceso hasta"
+                    : "Rango de extensión"}
               </Label>
               <div className="mt-1 space-y-2">
                 {tempVenceTipo === "membresia" ? (
@@ -4544,6 +4560,28 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       />
                     </div>
                   </div>
+                ) : tempVenceTipo === "normal" ? (
+                  <div className="grid grid-cols-1">
+                    <div>
+                      <Label
+                        htmlFor="vence-fecha-hasta-normal"
+                        className="text-xs text-muted-foreground"
+                      >
+                        Fecha de vencimiento
+                      </Label>
+                      <Input
+                        id="vence-fecha-hasta-normal"
+                        type="date"
+                        value={tempVenceFechaHasta}
+                        onChange={(e) => setTempVenceFechaHasta(e.target.value)}
+                        className="mt-1"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        El acceso se extenderá hasta esta fecha. La fecha de inicio se
+                        establece automáticamente al día de hoy.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div>
@@ -4582,18 +4620,22 @@ export default function StudentDetailContent({ code }: { code: string }) {
               <p className="mt-1 text-xs text-muted-foreground">
                 {tempVenceTipo === "membresia"
                   ? `La membresía se activa desde la fecha inicial elegida y dura 30 días calendario. Si ya existen registros, esta sería la #${accessStats?.nextMembresiaNumber ?? membresiaExts.length + 1}.`
-                  : (() => {
-                      const desde = parseMaybe(tempVenceFechaDesde);
-                      const hasta = parseMaybe(tempVenceFechaHasta);
-                      if (!desde || !hasta) {
-                        return "La extensión contractual o extraordinaria se aplica desde la fecha inicial que selecciones y vence en la fecha final.";
-                      }
-                      return `La extensión se aplica desde el ${fmtES(desde.toISOString())} y mantendrá el acceso hasta el ${fmtES(hasta.toISOString())}.`;
-                    })()}
+                  : tempVenceTipo === "normal"
+                    ? ""
+                    : (() => {
+                        const desde = parseMaybe(tempVenceFechaDesde);
+                        const hasta = parseMaybe(tempVenceFechaHasta);
+                        if (!desde || !hasta) {
+                          return "La extensión se aplica desde la fecha inicial que selecciones y vence en la fecha final.";
+                        }
+                        return `La extensión se aplica desde el ${fmtES(desde.toISOString())} y mantendrá el acceso hasta el ${fmtES(hasta.toISOString())}.`;
+                      })()}
               </p>
             </div>
 
-            {tempVenceTipo === "extraordinaria" || tempVenceMotivo ? (
+            {(tempVenceTipo === "extraordinaria" || tempVenceTipo === "otrosi" || tempVenceMotivo) &&
+            tempVenceTipo !== "membresia" &&
+            tempVenceTipo !== "normal" ? (
               <div>
                 <Label htmlFor="vence-motivo">
                   Motivo / nota
@@ -4610,7 +4652,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   placeholder={
                     tempVenceTipo === "extraordinaria"
                       ? "Describe por qué se otorga esta extensión..."
-                      : "Opcional: detalle o referencia..."
+                      : tempVenceTipo === "otrosi"
+                        ? "Describe el motivo del otrosí..."
+                        : "Opcional: detalle o referencia..."
                   }
                 />
               </div>
@@ -4629,7 +4673,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   savingVence ||
                   (tempVenceTipo === "extraordinaria" &&
                     !tempVenceMotivo.trim()) ||
-                  !tempVenceFechaDesde ||
+                  (tempVenceTipo !== "membresia" &&
+                    tempVenceTipo !== "normal" &&
+                    !tempVenceFechaDesde) ||
                   (tempVenceTipo !== "membresia" && !tempVenceFechaHasta)
                 }
               >
