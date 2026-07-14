@@ -415,11 +415,11 @@ export function AppSidebar() {
                     url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
                     icon: GraduationCap,
                   },
-                  // {
-                  //   title: "Chat soporte",
-                  //   url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  //   icon: MessageSquare,
-                  // },
+                  {
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                    icon: MessageSquare,
+                  },
                   {
                     title: "Feedback",
                     url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
@@ -465,11 +465,11 @@ export function AppSidebar() {
                     url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
                     icon: GraduationCap,
                   },
-                  // {
-                  //   title: "Chat soporte",
-                  //   url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  //   icon: MessageSquare,
-                  // },
+                  {
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                    icon: MessageSquare,
+                  },
                   {
                     title: "Feedback",
                     url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
@@ -772,11 +772,11 @@ export function AppSidebar() {
                     url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
                     icon: GraduationCap,
                   },
-                  // {
-                  //   title: "Chat soporte",
-                  //   url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  //   icon: MessageSquare,
-                  // },
+                  {
+                    title: "Chat soporte",
+                    url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                    icon: MessageSquare,
+                  },
                   {
                     title: "Feedback",
                     url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
@@ -819,26 +819,26 @@ export function AppSidebar() {
               url: `/admin/alumnos/${code}/perfil`,
               icon: GraduationCap,
             },
-            // {
-            //   title: "Chat soporte",
-            //   url: `/admin/alumnos/${code}/chat`,
-            //   icon: MessageSquare,
-            //   disabled: isCompleted,
-            // },
             {
-              title: "Emma · Asistente IA",
-              url: "/alumno/agente",
-              icon: Sparkles,
+              title: "Chat soporte",
+              url: `/admin/alumnos/${code}/chat`,
+              icon: MessageSquare,
+              disabled: isCompleted,
             },
-            ...(hasHotsellingAccess
-              ? [
-                  {
-                    title: "Tu Coach Virtual",
-                    url: "/alumno/agentes/copy",
-                    icon: Sparkles,
-                  } as MenuItem,
-                ]
-              : []),
+            // {
+            //   title: "Emma · Asistente IA",
+            //   url: "/alumno/agente",
+            //   icon: Sparkles,
+            // },
+            // ...(hasHotsellingAccess
+            //   ? [
+            //       {
+            //         title: "Tu Coach Virtual",
+            //         url: "/alumno/agentes/copy",
+            //         icon: Sparkles,
+            //       } as MenuItem,
+            //     ]
+            //   : []),
             {
               title: "Feedback",
               url: `/admin/alumnos/${code}/feedback`,
@@ -1381,33 +1381,24 @@ export function AppSidebar() {
         <Separator className="mx-4 mt-2 bg-sidebar-border/30" />
 
         {/* Burbuja Emma — solo para alumnos */}
-        {userRoleForLabel === "student" && (
+        {/* {userRoleForLabel === "student" && (
           <div className="px-4 pt-3 pb-1">
             <Link
               href="/alumno/agente"
               className="group relative flex items-center gap-3 rounded-2xl bg-linear-to-r from-violet-500/10 via-fuchsia-500/10 to-indigo-500/10 border border-violet-300/30 dark:border-violet-700/30 px-3.5 py-3 shadow-sm hover:shadow-md hover:from-violet-500/20 hover:via-fuchsia-500/20 hover:to-indigo-500/20 transition-all duration-200 cursor-pointer"
             >
-              {/* Avatar animado Emma */}
               <div className="relative shrink-0">
                 <img src="/emma-avatar.png" alt="Emma" className="h-10 w-10 rounded-xl object-cover shadow-md" />
-                {/* Ping verde “en línea” */}
                 <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 ring-2 ring-sidebar"></span>
                 </span>
               </div>
-
-              {/* Texto */}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-sidebar-foreground leading-tight">
                   Emma
                 </p>
-                {/* <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5">
-                  Tu Coach Virtual
-                </p> */}
               </div>
-
-              {/* Etiqueta “Nuevo” + flecha */}
               <div className="flex flex-col items-end gap-1 shrink-0">
                 <span className="inline-flex items-center rounded-full bg-violet-500/20 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
                   IA
@@ -1416,7 +1407,7 @@ export function AppSidebar() {
               </div>
             </Link>
           </div>
-        )}
+        )} */}
 
         {/* Footer */}
         <Separator className="mx-4 mt-2 bg-sidebar-border/30" />

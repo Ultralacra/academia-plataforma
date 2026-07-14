@@ -791,6 +791,25 @@ export default function TicketsContent({
           return true;
         if (infNames.size > 0 && infNames.has(normText(i.informante_nombre)))
           return true;
+        if (infCodes.size > 0 || infNames.size > 0) {
+          const coachesArr = Array.isArray(i.coaches) ? i.coaches : [];
+          const hasCoachMatch = coachesArr.some((c) => {
+            if (
+              infCodes.size > 0 &&
+              c.codigo_equipo &&
+              infCodes.has(String(c.codigo_equipo).trim())
+            )
+              return true;
+            if (
+              infNames.size > 0 &&
+              c.nombre &&
+              infNames.has(normText(c.nombre))
+            )
+              return true;
+            return false;
+          });
+          if (hasCoachMatch) return true;
+        }
         return false;
       });
     }
