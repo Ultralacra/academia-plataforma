@@ -37,7 +37,7 @@ import { onTicketResuelto } from "@/components/chat/TicketResueltoNotifier";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type AgenteMode = "alumno" | "atc_team";
-export type AIProvider = "anthropic" | "openai";
+export type AIProvider = "openai";
 
 interface ChatMessage {
   id: string;
@@ -759,7 +759,7 @@ export function AgenteAtcChat({
   alumnoCode,
   alumnoName,
   mode = "alumno",
-  provider = "anthropic",
+  provider = "openai",
   welcomeMessage,
   className = "",
   onTicketCreated,

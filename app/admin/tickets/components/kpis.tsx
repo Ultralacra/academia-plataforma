@@ -8,6 +8,8 @@ import {
   CalendarDays,
   Flame,
   PauseCircle,
+  Sparkles,
+  Users,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import type { TicketsMetrics } from "./metrics";
@@ -53,6 +55,7 @@ export default function KPIs({
   metrics: TicketsMetrics;
   loading?: boolean;
 }) {
+  console.log("[METRICS] KPIs rendering:", { total: metrics.total, humans: metrics.porHumano, emma: metrics.porEmma });
   const range =
     metrics.from && metrics.to
       ? `${metrics.from} → ${metrics.to} (${metrics.days || 0} días)`
@@ -175,6 +178,37 @@ export default function KPIs({
           label="Días sin actividad"
           value={loading ? "…" : metrics.quietDays}
           hint="Dentro del rango"
+        />
+      </CardContent>
+
+      {/* Fila: desglose ATC directo / otros coaches / Emma / Otros */}
+      <CardContent className="grid grid-cols-1 gap-3 pt-1 md:grid-cols-4">
+        <Kpi
+          icon={<Users className="h-4 w-4 text-emerald-600" />}
+          label="Creados por ATC directo"
+          value={loading ? "…" : metrics.porAtcDirecto}
+          hint={`${metrics.porAtcDirectoPct}% del total`}
+          color="green"
+        />
+        <Kpi
+          icon={<Users className="h-4 w-4 text-amber-600" />}
+          label="Creados por otros coaches"
+          value={loading ? "…" : metrics.porOtrosCoaches}
+          hint={`${metrics.porOtrosCoachesPct}% del total`}
+          color="amber"
+        />
+        <Kpi
+          icon={<Sparkles className="h-4 w-4 text-violet-600" />}
+          label="Creados por Emma"
+          value={loading ? "…" : metrics.porEmma}
+          hint={`${metrics.porEmmaPct}% del total`}
+          color="violet"
+        />
+        <Kpi
+          icon={<Users className="h-4 w-4 text-gray-600" />}
+          label="Otros"
+          value={loading ? "…" : metrics.porOtros}
+          hint={`${metrics.porOtrosPct}% del total`}
         />
       </CardContent>
     </Card>

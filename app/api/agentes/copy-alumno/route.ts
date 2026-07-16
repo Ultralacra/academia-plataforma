@@ -828,13 +828,13 @@ export async function POST(request: NextRequest) {
   const systemPrompt = SYSTEM_PROMPTS[agentType] ?? SYSTEM_HOTSYSTEM;
 
   // 5. OpenAI streaming
-  const apiKey = process.env.OPENAI_API_KEY_STARTER;
-  const modelId = process.env.OPENAI_MODEL_STARTER ?? "gpt-4o-mini";
+  const apiKey = process.env.XACADEMY_COPY_ALUMNO_API_KEY ?? process.env.OPENAI_API_KEY_STARTER;
+  const modelId = process.env.XACADEMY_COPY_ALUMNO_MODEL ?? process.env.OPENAI_MODEL_STARTER ?? "gpt-4o-mini";
 
   if (!apiKey) {
     return new Response(
       JSON.stringify({
-        error: "OPENAI_API_KEY_STARTER no configurada en el servidor",
+        error: "XACADEMY_COPY_ALUMNO_API_KEY no configurada en el servidor",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );

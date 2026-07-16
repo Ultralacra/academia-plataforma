@@ -44,7 +44,7 @@ export const technicalContent: SectionContent[] = [
               ["Componentes UI", "Radix UI (shadcn/ui)", "latest"],
               ["Real-time", "Socket.IO", "client + server"],
               ["AI - OpenAI", "openai SDK", "ATC Agent"],
-              ["AI - Anthropic", "@anthropic-ai/sdk", "Copy, Super-ATC, Support-ATC"],
+              ["AI - OpenAI (agentes)", "openai SDK", "Copy, Super-ATC, Support-ATC, ATC, KR AI"],
               ["Video", "Remotion", "Player de grabaciones"],
               ["Almacenamiento", "Bunny CDN", "Archivos y media"],
               ["Email", "Brevo (Sendinblue)", "Transaccional"],
@@ -95,7 +95,7 @@ export const technicalContent: SectionContent[] = [
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
 │  │  Zoom    │  │  Brevo   │  │  Bunny   │  │  OpenAI  │   │
-│  │  OAuth   │  │  API     │  │  CDN     │  │  Claude  │   │
+│  │  OAuth   │  │  API     │  │  CDN     │  │  OpenAI │   │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
 └──────────────────────────────────────────────────────────────┘
 `,
@@ -190,8 +190,9 @@ ZOOM_REDIRECT_URI=https://yourdomain.com/api/zoom/callback
 # OpenAI (ATC Agent)
 OPENAI_API_KEY=sk-...
 
-# Anthropic Claude (Copy, Super-ATC, Support-ATC)
-ANTHROPIC_API_KEY=sk-ant-...
+# OpenAI — cada agente con su propia key (XACADEMY_<AGENTE>_API_KEY)
+XACADEMY_COPY_API_KEY=sk-...
+XACADEMY_SUPER_ATC_API_KEY=sk-...
 
 # Bunny CDN
 BUNNY_STORAGE_ZONE=your_zone
@@ -861,9 +862,9 @@ async function getAccessToken(request: NextRequest): Promise<string> {
             headers: ["Agente", "Proveedor", "Uso", "Runtime"],
             rows: [
               ["ATC Admin", "OpenAI GPT", "Recomendación de asignación de coaches", "Node.js, 300s"],
-              ["Copy Agent", "Anthropic Claude", "Revisión de copy, guiones VSL, copywriting", "Node.js, 300s"],
-              ["Super-ATC", "Anthropic Claude", "Clasificación de riesgo, escalamiento, multi-ticket", "Node.js, 300s"],
-              ["Support-ATC", "Anthropic Claude", "Copilot para equipo de soporte con knowledge base", "Node.js, 300s"],
+              ["Copy Agent", "OpenAI", "Revisión de copy, guiones VSL, copywriting", "Node.js, 300s"],
+              ["Super-ATC", "OpenAI", "Clasificación de riesgo, escalamiento, multi-ticket", "Node.js, 300s"],
+              ["Support-ATC", "OpenAI", "Copilot para equipo de soporte con knowledge base", "Node.js, 300s"],
             ],
           },
         ],
@@ -896,7 +897,7 @@ async function getAccessToken(request: NextRequest): Promise<string> {
           {
             type: "text",
             content:
-              "El Copy Agent usa Claude y tiene un sistema de sub-agentes especializados. Puede revisar documentos DOCX/PDF y generar revisiones detalladas.",
+              "El Copy Agent usa OpenAI y tiene un sistema de sub-agentes especializados. Puede revisar documentos DOCX/PDF y generar revisiones detalladas.",
           },
           {
             type: "code",

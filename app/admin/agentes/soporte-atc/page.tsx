@@ -808,7 +808,7 @@ function SoporteAtcWorkspace() {
 
         const authToken = getAuthToken();
         const provider =
-          localStorage.getItem("agents-ai-provider") ?? "anthropic";
+          localStorage.getItem("agents-ai-provider") ?? "openai";
 
         const res = await fetch("/api/agentes/soporte-atc", {
           method: "POST",
@@ -1117,7 +1117,7 @@ function SoporteAtcWorkspace() {
         <div className="border-t border-border p-3 space-y-2">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <Bot className="h-3.5 w-3.5" />
-            <span>Anthropic · Claude</span>
+            <span>OpenAI · Xacademy</span>
           </div>
           <Link
             href="/admin/agentes/soporte-atc/uso"

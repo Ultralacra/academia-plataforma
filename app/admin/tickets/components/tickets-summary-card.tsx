@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import type { Ticket } from "@/lib/data-service";
-import { type TicketsMetrics } from "./metrics";
+import { type TicketsMetrics, isEmmaTicket } from "./metrics";
 import {
   Users,
   FileText,
@@ -57,10 +57,11 @@ export default function TicketsSummaryCard({
   const { topInformantes, totalInformantes } = useMemo(() => {
     const m = new Map<string, number>();
     for (const t of tickets ?? []) {
-      const name =
-        String(
-          (t as any).informante_nombre ?? (t as any).informante ?? "—",
-        ).trim() || "—";
+      const name = isEmmaTicket(t)
+        ? "Emma · Asistente IA"
+        : String(
+            (t as any).informante_nombre ?? (t as any).informante ?? "—",
+          ).trim() || "—";
       m.set(name, (m.get(name) ?? 0) + 1);
     }
     const entries = Array.from(m.entries()).sort((a, b) => b[1] - a[1]);

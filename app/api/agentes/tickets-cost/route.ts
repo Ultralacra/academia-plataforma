@@ -71,10 +71,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const key = process.env.OPENAI_API_KEY_TICKETS;
+  const key = process.env.XACADEMY_TICKETS_API_KEY ?? process.env.OPENAI_API_KEY_TICKETS;
   if (!key) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY_TICKETS no configurada en el servidor." },
+      { error: "XACADEMY_TICKETS_API_KEY no configurada en el servidor." },
       { status: 500 },
     );
   }

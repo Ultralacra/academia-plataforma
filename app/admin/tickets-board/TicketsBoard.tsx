@@ -1687,6 +1687,67 @@ function TicketsBoardContent({
     return nombre.includes("emma") || code.includes("emma");
   }, []);
 
+  const atcStats = useMemo(() => {
+    const atcCoachCodes = new Set<string>();
+    const nonAtcCoachCodes = new Set<string>();
+    for (const c of coaches) {
+      const code = String(c.codigo || "").trim();
+      if (!code) continue;
+      if (isAtcCoach(c)) atcCoachCodes.add(code);
+      else nonAtcCoachCodes.add(code);
+    }
+
+    const hasAtcInvolvement = (t: TicketBoardItem): boolean => {
+      if (isAtcTicketTipo(t.tipo)) return true;
+      const allCoaches = [
+        ...((t as any)?.coaches ?? []),
+        ...((t as any)?.alumno_coaches ?? []),
+      ];
+      if (
+        allCoaches.some(
+          (c: any) => c && typeof c === "object" && isAtcCoach(c),
+        )
+      )
+        return true;
+      const overrides = (t as any)?.coaches_override;
+      if (Array.isArray(overrides)) {
+        const objs = overrides.filter(
+          (o: any) => o && typeof o === "object",
+        );
+        if (objs.some((o: any) => isAtcCoach(o))) return true;
+      }
+      return false;
+    };
+
+    let directAtc = 0;
+    let otherCoachesAtc = 0;
+    let emmaAtc = 0;
+
+    for (const t of displayTickets) {
+      const informante = String((t as any)?.informante ?? "").trim();
+      const isEmma = isEmmaTicket(t);
+
+      if (isEmma && hasAtcInvolvement(t)) {
+        emmaAtc++;
+      } else if (atcCoachCodes.has(informante)) {
+        directAtc++;
+      } else if (
+        nonAtcCoachCodes.has(informante) &&
+        hasAtcInvolvement(t)
+      ) {
+        otherCoachesAtc++;
+      }
+    }
+
+    return {
+      directAtc,
+      otherCoachesAtc,
+      emmaAtc,
+      others: displayTickets.length - (directAtc + otherCoachesAtc + emmaAtc),
+      total: displayTickets.length,
+    };
+  }, [displayTickets, coaches]);
+
   const scheduleAutoResolve = useCallback(
     (ticket: TicketBoardItem, codigo: string, alumnoCode?: string) => {
       const tid = ticket.id;
@@ -3213,6 +3274,42 @@ function TicketsBoardContent({
         open={deletedModalOpen}
         onOpenChange={setDeletedModalOpen}
       />
+
+      {!isStudent && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-border bg-background px-4 py-3 text-sm">
+          <span className="font-semibold text-foreground">
+            Tickets ATC
+          </span>
+          <span className="text-muted-foreground">
+            Creados por ATC directo:{" "}
+            <span className="font-medium text-foreground">
+              {atcStats.directAtc}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            Creados por otros coaches:{" "}
+            <span className="font-medium text-foreground">
+              {atcStats.otherCoachesAtc}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            Emma → ATC:{" "}
+            <span className="font-medium text-foreground">
+              {atcStats.emmaAtc}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            Otros:{" "}
+            <span className="font-medium text-foreground">
+              {atcStats.others}
+            </span>
+          </span>
+          <span className="ml-auto font-medium text-foreground">
+            Total visible:{" "}
+            <span className="font-semibold">{atcStats.total}</span>
+          </span>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">

@@ -82,88 +82,30 @@ export async function POST(req: NextRequest) {
 
     const systemWithContext = contextParts.join("\n");
 
-    // Determinar proveedor
-    const provider = body.provider === "openai" ? "openai" : "anthropic";
-
-    if (provider === "openai") {
-      // ── OpenAI ────────────────────────────────────────────────────────────
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        return NextResponse.json(
-          { error: "OPENAI_API_KEY no configurada en el servidor." },
-          { status: 500 },
-        );
-      }
-      const modelId = process.env.OPENAI_MODEL ?? "gpt-4o";
-      const client = new OpenAI({ apiKey });
-
-      const completion = await client.chat.completions.create({
-        model: modelId,
-        max_tokens: 2000,
-        messages: [
-          { role: "system", content: systemWithContext },
-          ...messages.map((m) => ({
-            role: m.role as "user" | "assistant",
-            content: String(m.content ?? ""),
-          })),
-        ],
-      });
-
-      const text = completion.choices[0]?.message?.content?.trim() ?? "";
-      return NextResponse.json({ text });
-    }
-
-    // ── Anthropic (default) ───────────────────────────────────────────────
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    // ── OpenAI ────────────────────────────────────────────────────────────
+    const apiKey = process.env.XACADEMY_ATC_API_KEY ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY no configurada en el servidor." },
+        { error: "XACADEMY_ATC_API_KEY no configurada en el servidor." },
         { status: 500 },
       );
     }
+    const modelId = process.env.XACADEMY_ATC_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o";
+    const client = new OpenAI({ apiKey });
 
-    const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-5";
-
-    const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 2000,
-        system: systemWithContext,
-        messages: messages.map((m) => ({
-          role: m.role,
+    const completion = await client.chat.completions.create({
+      model: modelId,
+      max_tokens: 2000,
+      messages: [
+        { role: "system", content: systemWithContext },
+        ...messages.map((m) => ({
+          role: m.role as "user" | "assistant",
           content: String(m.content ?? ""),
         })),
-      }),
+      ],
     });
 
-    if (!apiRes.ok) {
-      const errText = await apiRes.text().catch(() => "");
-      return NextResponse.json(
-        {
-          error: `Anthropic API error ${apiRes.status}`,
-          details: errText.slice(0, 500),
-        },
-        { status: 502 },
-      );
-    }
-
-    const data = (await apiRes.json()) as {
-      content?: Array<{ type: string; text?: string }>;
-    };
-
-    const text =
-      data.content
-        ?.filter((c) => c.type === "text")
-        .map((c) => c.text ?? "")
-        .join("\n")
-        .trim() || "";
-
+    const text = completion.choices[0]?.message?.content?.trim() ?? "";
     return NextResponse.json({ text });
   } catch (err: any) {
     return NextResponse.json(

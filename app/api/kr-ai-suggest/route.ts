@@ -1,9 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,14 +42,21 @@ Reglas para measurementType:
 Para targetSuggestion: infiere un valor numérico razonable del enunciado del KR. Si no hay número explícito, pon null.
 Para unit: sé específico y conciso (máximo 10 caracteres).`;
 
-    const message = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
+    const apiKey = process.env.XACADEMY_KR_AI_API_KEY ?? process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "XACADEMY_KR_AI_API_KEY no configurada" }, { status: 500 });
+    }
+    const modelId = process.env.XACADEMY_KR_AI_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o";
+    const client = new OpenAI({ apiKey });
+
+    const completion = await client.chat.completions.create({
+      model: modelId,
       max_tokens: 512,
       messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
     });
 
-    const rawText =
-      message.content[0].type === "text" ? message.content[0].text.trim() : "";
+    const rawText = completion.choices[0]?.message?.content?.trim() || "";
 
     // Extract JSON even if wrapped in code blocks
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);

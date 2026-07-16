@@ -1362,11 +1362,9 @@ function KbEditorTab() {
 
 function SuperAtcContent() {
   const [activeTab, setActiveTab] = useState<Tab>("kb");
-  const [provider] = useState<AIProvider>("anthropic");
-
+  const provider: AIProvider = "openai";
   useEffect(() => {
-    // Forzar siempre anthropic — OpenAI deshabilitado por control de costes
-    localStorage.setItem(AI_PROVIDER_KEY, "anthropic");
+    localStorage.setItem(AI_PROVIDER_KEY, "openai");
   }, []);
 
   const tabs: {
@@ -1408,14 +1406,14 @@ function SuperAtcContent() {
               </div>
             </div>
 
-            {/* Modelo IA — solo Claude */}
+            {/* Modelo IA — OpenAI */}
             <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
               <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Modelo IA
               </span>
               <div className="flex items-center gap-1 rounded-xl border border-border bg-background/60 p-1">
-                <span className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-[#c96442] to-[#a8522e] px-3 py-1.5 text-xs font-semibold text-white shadow">
-                  Anthropic · Claude
+                <span className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-[#10a37f] to-[#0e8a6b] px-3 py-1.5 text-xs font-semibold text-white shadow">
+                  OpenAI · Xacademy
                 </span>
               </div>
             </div>

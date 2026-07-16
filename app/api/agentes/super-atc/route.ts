@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { NextRequest } from "next/server";
 import { computeCostUSD } from "@/lib/model-pricing";
@@ -1825,7 +1824,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const provider = body.provider === "openai" ? "openai" : "anthropic";
+  const provider = "openai";
   const alumnoCode =
     typeof body.alumnoCode === "string" ? body.alumnoCode.trim() : "";
   const alumnoName =
@@ -1918,121 +1917,13 @@ export async function POST(request: NextRequest) {
     );
   };
 
-  // ── Anthropic ───────────────────────────────────────────────────────────────
+  // ── OpenAI ───────────────────────────────────────────────────────────────────
 
-  if (provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    const modelId = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "ANTHROPIC_API_KEY no configurada" }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          emitContext(controller);
-
-          const anthropic = new Anthropic({ apiKey });
-          const sdkStream = await anthropic.messages.create({
-            model: modelId,
-            max_tokens: 4_000,
-            stream: true,
-            system: systemPrompt,
-            messages: typedMessages.map((m) => ({
-              role: m.role as "user" | "assistant",
-              content: String(m.content ?? ""),
-            })),
-          });
-
-          let inputTokens = 0;
-          let outputTokens = 0;
-
-          for await (const event of sdkStream) {
-            if (
-              event.type === "message_start" &&
-              (event as { message?: { usage?: { input_tokens?: number } } })
-                .message?.usage
-            ) {
-              inputTokens =
-                (
-                  event as {
-                    message: { usage: { input_tokens: number } };
-                  }
-                ).message.usage.input_tokens ?? 0;
-            }
-            if (
-              event.type === "message_delta" &&
-              (event as { usage?: { output_tokens?: number } }).usage
-            ) {
-              outputTokens =
-                (event as { usage: { output_tokens: number } }).usage
-                  .output_tokens ?? 0;
-            }
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
-              const text = event.delta.text;
-              if (text) {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
-                );
-              }
-            }
-          }
-
-          void logAgentUsage(authorization, {
-            agent_type: "super-atc",
-            model: modelId,
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            cost_usd: computeCostUSD(modelId, inputTokens, outputTokens),
-            user_message_chars: userMsg.length,
-            mode,
-            user_codigo: currentUser.codigo ?? undefined,
-            user_nombre: currentUser.nombre ?? undefined,
-            alumno_codigo: alumnoCode || undefined,
-            alumno_nombre: ctx.alumnoNombreResuelto || alumnoName || undefined,
-            signals: ctx.signals,
-            created_at: new Date().toISOString(),
-          });
-
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        } catch (err: unknown) {
-          const e = err as { status?: number; message?: string };
-          let msg = e.message ?? "Error desconocido (Anthropic)";
-          if (e.status === 401) msg = "API key de Anthropic inválida (401).";
-          else if (e.status === 429) msg = "Rate limit en Anthropic (429).";
-          else if (e.status === 404)
-            msg = "Modelo no encontrado en Anthropic (404).";
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`),
-          );
-          controller.close();
-        }
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
-  }
-
-  // ── OpenAI fallback ──────────────────────────────────────────────────────────
-
-  const oaiKey = process.env.OPENAI_API_KEY;
-  const oaiModel = process.env.OPENAI_MODEL ?? "gpt-4o";
+  const oaiKey = process.env.XACADEMY_SUPER_ATC_API_KEY ?? process.env.OPENAI_API_KEY;
+  const oaiModel = process.env.XACADEMY_SUPER_ATC_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o";
   if (!oaiKey) {
     return new Response(
-      JSON.stringify({ error: "OPENAI_API_KEY no configurada" }),
+      JSON.stringify({ error: "XACADEMY_SUPER_ATC_API_KEY no configurada" }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

@@ -2,6 +2,53 @@
 
 import type { Ticket } from "@/lib/data-service";
 
+const ATC_KEYWORDS = [
+  "atc", "atencion", "atención",
+  "atencion al cliente", "atención al cliente",
+  "atencion_al_cliente", "atención_al_cliente",
+  "soporte", "support", "customer_support",
+];
+
+export function isAtcCoach(co: any): boolean {
+  if (!co || typeof co !== "object") return false;
+  const puesto = String(co?.puesto ?? "").toLowerCase().trim();
+  const area = String(co?.area ?? "").toLowerCase().trim();
+  return ATC_KEYWORDS.some((kw) => puesto.includes(kw) || area.includes(kw));
+}
+
+export function getAtcCoach(t: Ticket): { codigo_equipo: string; nombre: string } | null {
+  const alumnoCoaches: any[] = Array.isArray((t as any)?.alumno_coaches)
+    ? (t as any).alumno_coaches
+    : [];
+  const found = alumnoCoaches.find((co: any) => isAtcCoach(co));
+  if (!found) return null;
+  return {
+    codigo_equipo: String(found.codigo_equipo ?? found.codigo ?? found.id ?? ""),
+    nombre: String(found.nombre ?? found.name ?? "ATC"),
+  };
+}
+
+export function isEmmaTicket(t: Ticket): boolean {
+  const informante = (t.informante ?? "").trim();
+  const idAlumno = (t.id_alumno ?? "").trim();
+  if (informante && idAlumno && informante === idAlumno) return true;
+  const nombre = (t.informante_nombre ?? "").toLowerCase().trim();
+  const code = (t.informante ?? "").toLowerCase().trim();
+  return nombre.includes("emma") || code.includes("emma");
+}
+
+const ATC_TIPO_KEYWORDS = [
+  "atc", "atencion", "atención",
+  "atencion al cliente", "atención al cliente",
+  "soporte", "support",
+];
+
+export function isAtcTicketTipo(tipo?: string | null): boolean {
+  if (!tipo) return false;
+  const tipos = String(tipo).toLowerCase().split(",").map((s) => s.trim());
+  return tipos.some((t) => ATC_TIPO_KEYWORDS.some((kw) => t.includes(kw)));
+}
+
 /** util: YYYY-MM-DD */
 function yyyymmdd(d: Date) {
   const y = d.getFullYear();
@@ -27,6 +74,16 @@ export type TicketsMetrics = {
   pendientes: number;
   pendientesDeEnvio: number;
   pausados: number;
+  porHumano: number;
+  porEmma: number;
+  porHumanoPct: number;
+  porEmmaPct: number;
+  porAtcDirecto: number;
+  porOtrosCoaches: number;
+  porOtros: number;
+  porAtcDirectoPct: number;
+  porOtrosCoachesPct: number;
+  porOtrosPct: number;
 
   avgPerDay: number;   // promedio por día en el rango [from..to]
   days: number;        // tamaño del rango en días (incluyente)
@@ -71,7 +128,10 @@ export function ticketsByDayLocal(tickets: Ticket[]) {
   return map;
 }
 
-export function computeTicketMetrics(tickets: Ticket[]): TicketsMetrics {
+export function computeTicketMetrics(
+  tickets: Ticket[],
+  coaches: any[] = [],
+): TicketsMetrics {
   const total = tickets.length;
   const resueltos = tickets.filter(
     (t) => normalizeEstadoKey(t.estado) === "RESUELTO"
@@ -137,6 +197,66 @@ export function computeTicketMetrics(tickets: Ticket[]): TicketsMetrics {
   const last7 = sumBack(7);
   const last30 = sumBack(30);
 
+  // --- desglose por informante (misma lógica que tickets-board) ---
+  const atcCoachCodes = new Set<string>();
+  const nonAtcCoachCodes = new Set<string>();
+  for (const c of coaches) {
+    const code = String(c.codigo || "").trim();
+    if (!code) continue;
+    if (isAtcCoach(c)) atcCoachCodes.add(code);
+    else nonAtcCoachCodes.add(code);
+  }
+
+  const hasAtcInvolvement = (t: Ticket): boolean => {
+    if (isAtcTicketTipo(t.tipo)) return true;
+    const allCoaches = [
+      ...((t as any)?.coaches ?? []),
+      ...((t as any)?.alumno_coaches ?? []),
+    ];
+    if (
+      allCoaches.some(
+        (c: any) => c && typeof c === "object" && isAtcCoach(c),
+      )
+    )
+      return true;
+    const overrides = (t as any)?.coaches_override;
+    if (Array.isArray(overrides)) {
+      const objs = overrides.filter(
+        (o: any) => o && typeof o === "object",
+      );
+      if (objs.some((o: any) => isAtcCoach(o))) return true;
+    }
+    return false;
+  };
+
+  let porAtcDirecto = 0;
+  let porOtrosCoaches = 0;
+  let porEmma = 0;
+
+  for (const t of tickets) {
+    const informante = String((t as any)?.informante ?? "").trim();
+    const isEmma = isEmmaTicket(t);
+
+    if (isEmma && hasAtcInvolvement(t)) {
+      porEmma++;
+    } else if (atcCoachCodes.has(informante)) {
+      porAtcDirecto++;
+    } else if (
+      nonAtcCoachCodes.has(informante) &&
+      hasAtcInvolvement(t)
+    ) {
+      porOtrosCoaches++;
+    }
+  }
+
+  const porOtros = tickets.length - (porAtcDirecto + porOtrosCoaches + porEmma);
+  const porHumano = tickets.length - porEmma;
+  const porEmmaPct = tickets.length ? Math.round((porEmma / tickets.length) * 100) : 0;
+  const porHumanoPct = tickets.length ? Math.round((porHumano / tickets.length) * 100) : 0;
+  const porAtcDirectoPct = tickets.length ? Math.round((porAtcDirecto / tickets.length) * 100) : 0;
+  const porOtrosCoachesPct = tickets.length ? Math.round((porOtrosCoaches / tickets.length) * 100) : 0;
+  const porOtrosPct = tickets.length ? Math.round((porOtros / tickets.length) * 100) : 0;
+
   // --- métricas de tiempo de respuesta del informante (heurísticas) ---
   const respDiffs: number[] = [];
   const respKeyRe = /RESPUE|RESPOND|RESPONDI|RESPUEST|INFORMAD|INFORMA|PRIMERA RESPUESTA|FUE RESPUESTA|FIRST RESPONSE|FIRST_RESPONSE/i;
@@ -197,6 +317,16 @@ export function computeTicketMetrics(tickets: Ticket[]): TicketsMetrics {
     pendientes,
     pendientesDeEnvio,
     pausados,
+    porHumano,
+    porEmma,
+    porHumanoPct,
+    porEmmaPct,
+    porAtcDirecto,
+    porOtrosCoaches,
+    porOtros,
+    porAtcDirectoPct,
+    porOtrosCoachesPct,
+    porOtrosPct,
     avgPerDay,
     days,
     from,

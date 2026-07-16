@@ -398,7 +398,7 @@ function AgentePageContent() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [tickets, setTickets] = useState<StudentTicket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
-  const [provider, setProvider] = useState<AIProvider>("anthropic");
+  const [provider, setProvider] = useState<AIProvider>("openai");
   const [chatHistory, setChatHistory] = useState("");
   const [showFeedback, setShowFeedback] = useState(false);
   // Si el user no tiene codigo (datos incompletos de localStorage), forzar refetch
@@ -459,8 +459,8 @@ function AgentePageContent() {
 
   // Load provider preference
   useEffect(() => {
-    const saved = localStorage.getItem(AI_PROVIDER_KEY) as AIProvider | null;
-    if (saved === "openai" || saved === "anthropic") setProvider(saved);
+    const saved = localStorage.getItem(AI_PROVIDER_KEY);
+    if (saved) setProvider("openai");
   }, []);
 
   // Fetch ATC<->student chat history via socket.io

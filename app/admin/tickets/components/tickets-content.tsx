@@ -663,7 +663,19 @@ export default function TicketsContent({
           dataService.getTickets({ search, fechaDesde, fechaHasta }),
         ]);
         setTeams(tms.data ?? []);
-        setAllTickets(tks.items ?? []);
+        // Filtrar tickets eliminados (misma lógica que tickets-board)
+        const raw = tks.items ?? [];
+        const active = raw.filter((r: any) => {
+          try {
+            const estado = String(r?.estado ?? r?.status ?? r?.estatus ?? "").toUpperCase();
+            if (/(ELIMINAD|BORRADO|DELETED)/.test(estado)) return false;
+            if (r?.eliminado === true || r?.deleted === true) return false;
+            if (r?.deleted_at || r?.eliminado_at) return false;
+            if (typeof r?.activo !== "undefined" && r?.activo === false) return false;
+          } catch {}
+          return true;
+        });
+        setAllTickets(active);
         setPage(1);
       } catch (e) {
         console.error(e);
@@ -895,8 +907,8 @@ export default function TicketsContent({
 
   // 📊 NUEVO: métricas completas
   const metrics: TicketsMetrics = useMemo(
-    () => computeTicketMetrics(filtered ?? []),
-    [filtered],
+    () => computeTicketMetrics(filtered ?? [], coaches),
+    [filtered, coaches],
   );
 
   // Serie por día (para el area chart) — puedes seguir usando la de tu dataService

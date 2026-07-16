@@ -131,9 +131,9 @@ export const sections: DocSection[] = [
     subsections: [
       { id: "arquitectura-ia", title: "Arquitectura General" },
       { id: "atc-agent", title: "ATC Agent (OpenAI)" },
-      { id: "copy-agent", title: "Copy Agent (Claude)" },
-      { id: "super-atc", title: "Super-ATC Agent (Claude)" },
-      { id: "soporte-atc", title: "Support-ATC Agent (Claude)" },
+      { id: "copy-agent", title: "Copy Agent (OpenAI)" },
+      { id: "super-atc", title: "Super-ATC Agent (OpenAI)" },
+      { id: "soporte-atc", title: "Support-ATC Agent (OpenAI)" },
       { id: "multi-ticket", title: "Sistema Multi-Ticket" },
       { id: "tracking-uso", title: "Tracking de Uso y Costos" },
       { id: "pause-outcomes", title: "Pause Outcomes" },

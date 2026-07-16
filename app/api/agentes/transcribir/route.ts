@@ -4,10 +4,10 @@ import { NextRequest } from "next/server";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const oaiKey = process.env.OPENAI_API_KEY;
+  const oaiKey = process.env.XACADEMY_TRANSCRIBIR_API_KEY ?? process.env.OPENAI_API_KEY;
   if (!oaiKey) {
     return new Response(
-      JSON.stringify({ error: "OPENAI_API_KEY no configurada" }),
+      JSON.stringify({ error: "XACADEMY_TRANSCRIBIR_API_KEY no configurada" }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }

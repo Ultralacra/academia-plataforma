@@ -78,6 +78,13 @@ export type Ticket = {
     puesto?: string | null;
     area?: string | null;
   }[];
+  alumno_coaches?: {
+    codigo_equipo?: string | null;
+    nombre?: string | null;
+    puesto?: string | null;
+    area?: string | null;
+  }[];
+  coaches_override?: any[] | null;
   ultimo_estado?: {
     estatus?: string | null;
     fecha?: string | null; // ISO
@@ -529,8 +536,8 @@ export async function getTickets(opts: {
     nombre: r.nombre ?? r.subject ?? null,
     alumno_nombre: r.alumno_nombre ?? r.client_name ?? null,
     id_alumno: r.id_alumno ?? r.alumno_id ?? r.client_id ?? r.codigo_alumno ?? null,
-    informante: r.informante ?? r.informado_por ?? r.created_by ?? null,
-    informante_nombre: r.informante_nombre ?? r.informado_por_nombre ?? r.created_by_name ?? null,
+    informante: r.informante ?? null,
+    informante_nombre: r.informante_nombre ?? null,
     estado: r.estado ?? r.status ?? null,
     tipo: r.tipo ?? r.type ?? null,
     creacion: r.creacion ?? r.created_at ?? r.createdAt,
@@ -544,6 +551,15 @@ export async function getTickets(opts: {
           area: c.area ?? null,
         }))
       : [],
+    alumno_coaches: Array.isArray((r as any)?.alumno_coaches)
+      ? (r as any).alumno_coaches.map((c: any) => ({
+          codigo_equipo: c.codigo_equipo ?? c.codigo ?? null,
+          nombre: c.nombre ?? null,
+          puesto: c.puesto ?? c.rol ?? null,
+          area: c.area ?? null,
+        }))
+      : [],
+    coaches_override: (r as any)?.coaches_override ?? null,
     ultimo_estado: r.ultimo_estado
       ? {
           estatus: r.ultimo_estado.estatus ?? r.ultimo_estado.estado ?? null,
@@ -559,9 +575,17 @@ export async function getTickets(opts: {
       : [],
   }));
 
+  // Deduplicar por id (misma lógica que tickets-board)
+  const seen = new Set<number>();
+  const unique = items.filter((t) => {
+    if (seen.has(t.id)) return false;
+    seen.add(t.id);
+    return true;
+  });
+
   return {
-    items,
-    total: typeof total === "number" ? total : items.length,
+    items: unique,
+    total: typeof total === "number" ? total : unique.length,
     page: 1,
     pageSize: items.length,
     totalPages: 1,

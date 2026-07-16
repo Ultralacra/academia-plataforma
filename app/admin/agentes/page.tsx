@@ -29,7 +29,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listMetadata } from "@/lib/metadata";
 
-export type AIProvider = "openai" | "anthropic";
+export type AIProvider = "openai";
 export const AI_PROVIDER_KEY = "agents-ai-provider";
 
 const agents = [
@@ -157,11 +157,8 @@ const agents = [
 ];
 
 function AgentsHome() {
-  const [provider] = useState<AIProvider>("anthropic");
-
   useEffect(() => {
-    // Forzar siempre anthropic — OpenAI deshabilitado por control de costes
-    localStorage.setItem(AI_PROVIDER_KEY, "anthropic");
+    localStorage.setItem(AI_PROVIDER_KEY, "openai");
   }, []);
 
   return (
@@ -186,25 +183,18 @@ function AgentsHome() {
             </div>
           </div>
 
-          {/* Modelo IA — solo Claude */}
+          {/* Modelo IA — OpenAI */}
           <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
             <span className="text-[11px] font-medium uppercase tracking-wide text-[#7a6654] dark:text-orange-200/60">
               Modelo IA
             </span>
             <div className="flex items-center gap-1 rounded-xl border border-orange-200/60 bg-white/60 p-1 shadow-sm dark:border-orange-900/30 dark:bg-[#1f1a14]/60">
-              <span className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-[#c96442] to-[#a8522e] px-3 py-1.5 text-xs font-semibold text-white shadow">
-                <svg
-                  className="h-3.5 w-3.5"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-3.654 0H6.57L0 20h3.603l1.357-3.415h6.571L10.173 3.52zm-1.125 9.975H5.898l2.577-6.492 2.573 6.492z" />
-                </svg>
-                Anthropic
+              <span className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-[#10a37f] to-[#0e8a6b] px-3 py-1.5 text-xs font-semibold text-white shadow">
+                OpenAI
               </span>
             </div>
             <span className="text-[10px] text-[#9e8778] dark:text-orange-200/40">
-              Claude · Anthropic
+              OpenAI · Xacademy
             </span>
           </div>
         </div>

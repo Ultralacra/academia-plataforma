@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 import { computeCostUSD } from "@/lib/model-pricing";
 
@@ -1764,8 +1763,6 @@ export async function POST(request: NextRequest) {
 
     const basePrompt = SYSTEM_PROMPTS[agentType] ?? SYSTEM_HOTSYSTEM;
 
-    // Determinar proveedor: el cliente puede indicar openai | anthropic
-    const provider = reqProvider === "anthropic" ? "anthropic" : "openai";
 
     // Auth token del coach para peticiones a la API externa
     const authorization = request.headers.get("authorization") ?? "";
@@ -1792,124 +1789,9 @@ export async function POST(request: NextRequest) {
 
     const encoder = new TextEncoder();
 
-    if (provider === "anthropic") {
-      // ── Anthropic (Claude) — respuesta completa, enviada como SSE ─────────
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      const modelId = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
-
-      console.log(
-        "[copy-agent] >>> POST recibido (Anthropic)",
-        "| agentType:", agentType,
-        "| model:", modelId,
-        "| messages:", messages.length,
-        "| apiKey present:", !!apiKey,
-      );
-
-      if (!apiKey) {
-        console.error("[copy-agent] ANTHROPIC_API_KEY no configurada");
-        return new Response(
-          JSON.stringify({ error: "ANTHROPIC_API_KEY no configurada en .env.local" }),
-          { status: 500, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      const stream = new ReadableStream({
-        async start(controller) {
-          try {
-            // Emitir metadata de contexto antes del stream
-            if (studentCtx.ticketCount > 0 || studentCtx.loomCount > 0) {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ type: "context", ticketCount: studentCtx.ticketCount, loomCount: studentCtx.loomCount, ticketIds: studentCtx.ticketIds, previews: studentCtx.previews })}\n\n`,
-                ),
-              );
-            }
-            console.log("[copy-agent] Llamando a Anthropic con modelo:", modelId);
-            const anthropic = new Anthropic({ apiKey });
-
-            const sdkStream = await anthropic.messages.create({
-              model: modelId,
-              max_tokens: 16000,
-              stream: true,
-              system: systemPrompt,
-              messages: messages.map((m) => ({
-                role: m.role as "user" | "assistant",
-                content: String(m.content ?? ""),
-              })),
-            });
-
-            let chunkCount = 0;
-            let anthropicInputTokens = 0;
-            let anthropicOutputTokens = 0;
-            for await (const event of sdkStream) {
-              if (event.type === "message_start" && (event as any).message?.usage) {
-                anthropicInputTokens = (event as any).message.usage.input_tokens ?? 0;
-              }
-              if (event.type === "message_delta" && (event as any).usage) {
-                anthropicOutputTokens = (event as any).usage.output_tokens ?? 0;
-              }
-              if (
-                event.type === "content_block_delta" &&
-                event.delta.type === "text_delta"
-              ) {
-                const text = event.delta.text;
-                if (text) {
-                  chunkCount++;
-                  controller.enqueue(
-                    encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
-                  );
-                }
-              }
-            }
-
-            console.log("[copy-agent] Anthropic stream completado. Chunks:", chunkCount);
-
-            // Log de uso del coach
-            if (authorization) {
-              void logCoachAgentUsage(authorization, {
-                coach_id: coachInfo?.id,
-                coach_codigo: coachInfo?.codigo,
-                coach_nombre: coachInfo?.nombre,
-                agent_type: agentType,
-                model: modelId,
-                input_tokens: anthropicInputTokens,
-                output_tokens: anthropicOutputTokens,
-                cost_usd: computeCostUSD(modelId, anthropicInputTokens, anthropicOutputTokens),
-                user_message_chars: userMsg.length,
-                alumno_codigo: alumnoCode,
-                alumno_nombre: alumnoName,
-                created_at: new Date().toISOString(),
-              });
-            }
-
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
-          } catch (err: any) {
-            const status = err?.status ?? "?";
-            let msg = err?.message ?? "Error desconocido (Anthropic)";
-            if (status === 401) msg = "API key de Anthropic inválida o expirada (401).";
-            else if (status === 429) msg = "Sin créditos o rate limit en Anthropic (429).";
-            else if (status === 404) msg = `Modelo "${process.env.ANTHROPIC_MODEL}" no encontrado en Anthropic (404).`;
-            else if (status === 400) msg = `Petición inválida a Anthropic (400): ${err?.message}`;
-            console.error("[copy-agent] Error Anthropic:", status, err?.message);
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`));
-            controller.close();
-          }
-        },
-      });
-
-      return new Response(stream, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
-    }
-
-    // ── OpenAI streaming (default) ────────────────────────────────────────────
-    const apiKey = process.env.OPENAI_API_KEY;
-    const modelId = process.env.OPENAI_MODEL ?? "gpt-5";
+    // ── OpenAI streaming ───────────────────────────────────────────────────────
+    const apiKey = process.env.XACADEMY_COPY_API_KEY ?? process.env.OPENAI_API_KEY;
+    const modelId = process.env.XACADEMY_COPY_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5";
 
     console.log(
       "[copy-agent] >>> POST recibido",
@@ -2015,7 +1897,7 @@ export async function POST(request: NextRequest) {
           console.error("==================================================\n");
 
           let userMsg = msg;
-          if (status === 401) userMsg = "API key inválida o expirada (401). Revisa OPENAI_API_KEY en .env.local";
+          if (status === 401) userMsg = "API key inválida o expirada (401). Revisa XACADEMY_COPY_API_KEY en .env.local";
           else if (status === 429) userMsg = "Sin créditos / rate limit (429). Revisa el saldo en https://platform.openai.com/usage";
           else if (status === 404 || code === "model_not_found") userMsg = `Modelo "${modelId}" no disponible para tu cuenta. Prueba con gpt-4o o gpt-4o-mini.`;
           else if (status === 400) userMsg = `Petición inválida (400): ${msg}`;

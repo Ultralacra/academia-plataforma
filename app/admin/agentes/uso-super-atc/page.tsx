@@ -136,10 +136,10 @@ function formatUSD(n: number) {
 
 function modelProvider(
   model: string | null | undefined,
-): "anthropic" | "openai" | null {
+): "openai" | null {
   const m = String(model ?? "").toLowerCase();
-  if (m.startsWith("claude")) return "anthropic";
   if (
+    m.startsWith("claude") ||
     m.startsWith("gpt") ||
     m.startsWith("o3") ||
     m.startsWith("o4") ||
@@ -151,12 +151,6 @@ function modelProvider(
 
 function ProviderBadge({ model }: { model?: string | null }) {
   const provider = modelProvider(model);
-  if (provider === "anthropic")
-    return (
-      <span className="inline-flex rounded-full bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-        Anthropic
-      </span>
-    );
   if (provider === "openai")
     return (
       <span className="inline-flex rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">

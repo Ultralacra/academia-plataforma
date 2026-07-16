@@ -624,7 +624,7 @@ function AtcAgentWorkspace() {
           messages: payloadMessages,
           analysis,
           top_informantes: topInformantes,
-          provider: localStorage.getItem("agents-ai-provider") ?? "anthropic",
+          provider: localStorage.getItem("agents-ai-provider") ?? "openai",
         }),
       });
 
@@ -688,7 +688,7 @@ function AtcAgentWorkspace() {
           </div>
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/50">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Claude Opus
+            OpenAI · Xacademy
           </div>
         </div>
 

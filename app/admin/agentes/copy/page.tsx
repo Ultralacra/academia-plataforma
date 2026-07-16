@@ -684,7 +684,7 @@ function CopyAgentWorkspace() {
           body: JSON.stringify({
             messages: history,
             agentType: selectedAgentId,
-            provider: "anthropic",
+            provider: "openai",
             alumnoCode: selectedStudent?.code,
             alumnoName: selectedStudent?.name,
           }),
@@ -880,7 +880,7 @@ function CopyAgentWorkspace() {
 
         <div className="border-t border-white/10 px-4 py-3">
           <div className="text-center text-[10px] text-white/30">
-            claude-sonnet-4-5 · HotSelling
+            OpenAI · Xacademy Copy
           </div>
         </div>
       </div>
