@@ -131,7 +131,7 @@ export async function getTickets(opts: {
   if (opts.studentCode) {
     const q = toQuery({
       page: opts.page ?? 1,
-      pageSize: opts.pageSize ?? 500,
+      pageSize: opts.pageSize ?? 1000,
       fechaDesde: opts.fechaDesde ?? "",
       fechaHasta: opts.fechaHasta ?? "",
       estado: opts.estado ?? "",
@@ -183,7 +183,7 @@ export async function getTickets(opts: {
 
   const q = toQuery({
     page: opts.page ?? 1,
-    pageSize: opts.pageSize ?? 500,
+    pageSize: opts.pageSize ?? 1000,
     search: opts.search ?? "",
     fechaDesde: opts.fechaDesde ?? "",
     fechaHasta: opts.fechaHasta ?? "",

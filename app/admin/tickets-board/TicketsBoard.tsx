@@ -807,13 +807,8 @@ function TicketsBoardContent({
   const d = String(today.getDate()).padStart(2, "0");
   const todayStr = `${y}-${m}-${d}`;
 
-  // Default to 4 days ago
-  const fourDaysAgo = new Date();
-  fourDaysAgo.setDate(today.getDate() - 4);
-  const y4 = fourDaysAgo.getFullYear();
-  const m4 = String(fourDaysAgo.getMonth() + 1).padStart(2, "0");
-  const d4 = String(fourDaysAgo.getDate()).padStart(2, "0");
-  const fourDaysAgoStr = `${y4}-${m4}-${d4}`;
+  // Default to first day of current month
+  const firstDayOfMonthStr = `${y}-${m}-01`;
 
   const oneYearAgo = new Date(today);
   oneYearAgo.setFullYear(today.getFullYear() - 1);
@@ -825,7 +820,7 @@ function TicketsBoardContent({
   const shouldUseYearRange = isFeedbackMode && !!studentCode;
 
   const [fechaDesde, setFechaDesde] = useState<string>(
-    shouldUseYearRange ? oneYearAgoStr : fourDaysAgoStr,
+    shouldUseYearRange ? oneYearAgoStr : firstDayOfMonthStr,
   );
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
 
@@ -1524,7 +1519,6 @@ function TicketsBoardContent({
         setLoading(true);
         const res = await getTickets({
           page: 1,
-          pageSize: 500,
           search,
           fechaDesde,
           fechaHasta,
@@ -1719,13 +1713,26 @@ function TicketsBoardContent({
       return false;
     };
 
+    const noCoaches = (t: TicketBoardItem): boolean => {
+      const coachesArr = Array.isArray((t as any)?.coaches) ? (t as any).coaches : [];
+      const alumnoCoachesArr = Array.isArray((t as any)?.alumno_coaches) ? (t as any).alumno_coaches : [];
+      const overridesArr = Array.isArray((t as any)?.coaches_override) ? (t as any).coaches_override : [];
+      if (coachesArr.length > 0) return false;
+      if (alumnoCoachesArr.some((c: any) => c && typeof c === "object")) return false;
+      if (overridesArr.some((o: any) => o && typeof o === "object")) return false;
+      return true;
+    };
+
     let directAtc = 0;
     let otherCoachesAtc = 0;
     let emmaAtc = 0;
+    let sinCoaches = 0;
 
     for (const t of displayTickets) {
       const informante = String((t as any)?.informante ?? "").trim();
       const isEmma = isEmmaTicket(t);
+
+      if (noCoaches(t)) sinCoaches++;
 
       if (isEmma && hasAtcInvolvement(t)) {
         emmaAtc++;
@@ -1743,6 +1750,7 @@ function TicketsBoardContent({
       directAtc,
       otherCoachesAtc,
       emmaAtc,
+      sinCoaches,
       others: displayTickets.length - (directAtc + otherCoachesAtc + emmaAtc),
       total: displayTickets.length,
     };
@@ -1845,7 +1853,6 @@ function TicketsBoardContent({
         try {
           const res = await getTickets({
             page: 1,
-            pageSize: 500,
             search,
             fechaDesde,
             fechaHasta,
@@ -3230,7 +3237,6 @@ function TicketsBoardContent({
               try {
                 const res = await getTickets({
                   page: 1,
-                  pageSize: 500,
                   search,
                   fechaDesde,
                   fechaHasta,
@@ -3296,6 +3302,12 @@ function TicketsBoardContent({
             Emma → ATC:{" "}
             <span className="font-medium text-foreground">
               {atcStats.emmaAtc}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            Sin coach asignado:{" "}
+            <span className="font-medium text-foreground">
+              {atcStats.sinCoaches}
             </span>
           </span>
           <span className="text-muted-foreground">
@@ -7145,7 +7157,6 @@ function TicketsBoardContent({
                     setLoading(true);
                     const res = await getTickets({
                       page: 1,
-                      pageSize: 500,
                       search,
                       fechaDesde,
                       fechaHasta,
@@ -7247,7 +7258,6 @@ function TicketsBoardContent({
           setLoading(true);
           getTickets({
             page: 1,
-            pageSize: 500,
             search,
             fechaDesde,
             fechaHasta,

@@ -37,16 +37,10 @@ export function isEmmaTicket(t: Ticket): boolean {
   return nombre.includes("emma") || code.includes("emma");
 }
 
-const ATC_TIPO_KEYWORDS = [
-  "atc", "atencion", "atención",
-  "atencion al cliente", "atención al cliente",
-  "soporte", "support",
-];
-
 export function isAtcTicketTipo(tipo?: string | null): boolean {
   if (!tipo) return false;
   const tipos = String(tipo).toLowerCase().split(",").map((s) => s.trim());
-  return tipos.some((t) => ATC_TIPO_KEYWORDS.some((kw) => t.includes(kw)));
+  return tipos.some((t) => ATC_KEYWORDS.some((kw) => t.includes(kw)));
 }
 
 /** util: YYYY-MM-DD */

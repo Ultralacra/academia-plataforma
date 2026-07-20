@@ -9,6 +9,7 @@ import {
   Flame,
   PauseCircle,
   Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -51,9 +52,11 @@ function Kpi({
 export default function KPIs({
   metrics,
   loading,
+  deletedCount = 0,
 }: {
   metrics: TicketsMetrics;
   loading?: boolean;
+  deletedCount?: number;
 }) {
   console.log("[METRICS] KPIs rendering:", { total: metrics.total, humans: metrics.porHumano, emma: metrics.porEmma });
   const range =
@@ -209,6 +212,16 @@ export default function KPIs({
           label="Otros"
           value={loading ? "…" : metrics.porOtros}
           hint={`${metrics.porOtrosPct}% del total`}
+        />
+      </CardContent>
+
+      {/* Fila: tickets eliminados */}
+      <CardContent className="grid grid-cols-1 gap-3 pt-1 md:grid-cols-4">
+        <Kpi
+          icon={<Trash2 className="h-4 w-4 text-gray-600" />}
+          label="Eliminados"
+          value={loading ? "…" : deletedCount}
+          hint="Tickets eliminados en el rango"
         />
       </CardContent>
     </Card>

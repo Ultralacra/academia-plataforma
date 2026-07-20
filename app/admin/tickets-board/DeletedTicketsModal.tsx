@@ -19,8 +19,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import Spinner from "@/components/ui/spinner";
-import { Search, Trash2, RefreshCw, RotateCcw } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, Trash2, RefreshCw, RotateCcw, CalendarIcon } from "lucide-react";
 import { getDeletedTickets, restoreTicket, type DeletedTicketItem } from "./api";
 import { toast } from "@/components/ui/use-toast";
 
@@ -42,6 +50,20 @@ function formatDate(iso?: string | null) {
   });
 }
 
+function todayYMD() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+function firstDayOfMonthYMD() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`;
+}
+
 export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<DeletedTicketItem[]>([]);
@@ -50,6 +72,9 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [fechaDesde, setFechaDesde] = useState(firstDayOfMonthYMD);
+  const [fechaHasta, setFechaHasta] = useState(todayYMD);
+  const [informanteFiltro, setInformanteFiltro] = useState<string>("all");
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const pageSize = 25;
 
@@ -81,13 +106,20 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
     return () => clearTimeout(t);
   }, [search]);
 
-  const load = async (p: number, q: string) => {
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [fechaDesde, fechaHasta, informanteFiltro]);
+
+  const load = async (p: number, q: string, fd: string, fh: string) => {
     setLoading(true);
     try {
       const res = await getDeletedTickets({
         page: p,
         pageSize,
         search: q || undefined,
+        fechaDesde: fd || undefined,
+        fechaHasta: fh || undefined,
       });
       setItems(res.items);
       setTotal(res.total);
@@ -104,8 +136,37 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    load(page, debouncedSearch);
-  }, [open, page, debouncedSearch]);
+    load(page, debouncedSearch, fechaDesde, fechaHasta);
+  }, [open, page, debouncedSearch, fechaDesde, fechaHasta]);
+
+  // Informantes únicos para el filtro
+  const informanteOpts = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of items) {
+      const code = String(t.informante ?? "").trim();
+      const name = String(t.informante_nombre ?? "").trim();
+      if (code) {
+        const existing = map.get(code);
+        if (!existing || (name && existing !== name)) {
+          map.set(code, name || code);
+        }
+      }
+    }
+    return Array.from(map.entries())
+      .map(([code, name]) => ({ value: code, label: name || code }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+  }, [items]);
+
+  // Filtro local por informante
+  const filteredItems = useMemo(() => {
+    if (informanteFiltro === "all") return items;
+    return items.filter((t) => {
+      const code = String(t.informante ?? "").trim();
+      return code === informanteFiltro;
+    });
+  }, [items, informanteFiltro]);
+
+  const filteredTotal = filteredItems.length;
 
   const body = useMemo(() => {
     if (loading) {
@@ -119,7 +180,16 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
       return (
         <div className="flex flex-col items-center justify-center py-10 text-sm text-muted-foreground">
           <Trash2 className="h-8 w-8 mb-2 opacity-50" />
-          No hay tickets eliminados.
+          No hay tickets eliminados en el rango seleccionado.
+        </div>
+      );
+    }
+    const display = informanteFiltro === "all" ? items : filteredItems;
+    if (!display.length) {
+      return (
+        <div className="flex flex-col items-center justify-center py-10 text-sm text-muted-foreground">
+          <Trash2 className="h-8 w-8 mb-2 opacity-50" />
+          No hay tickets eliminados para el informante seleccionado.
         </div>
       );
     }
@@ -138,7 +208,7 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((t) => (
+            {display.map((t) => (
               <TableRow key={t.id}>
                 <TableCell className="max-w-[240px]">
                   <div
@@ -196,7 +266,7 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
         </Table>
       </div>
     );
-  }, [loading, items]);
+  }, [loading, items, filteredItems, informanteFiltro]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -210,25 +280,65 @@ export default function DeletedTicketsModal({ open, onOpenChange }: Props) {
             {total > 0 ? (
               <span className="tabular-nums">
                 {total} registro{total === 1 ? "" : "s"}
+                {informanteFiltro !== "all" ? ` · ${filteredTotal} filtrados` : ""}
               </span>
             ) : null}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="relative w-full sm:w-60">
+            <Label className="text-xs text-muted-foreground mb-1 block">Desde</Label>
             <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar en papelera..."
-              className="pl-8 h-8"
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+              className="h-8 text-xs"
             />
+          </div>
+          <div className="w-full sm:w-60">
+            <Label className="text-xs text-muted-foreground mb-1 block">Hasta</Label>
+            <Input
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
+              className="h-8 text-xs"
+            />
+          </div>
+          {informanteOpts.length > 0 && (
+            <div className="w-full sm:w-52">
+              <Label className="text-xs text-muted-foreground mb-1 block">Informante</Label>
+              <Select value={informanteFiltro} onValueChange={setInformanteFiltro}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {informanteOpts.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="relative w-full sm:w-52">
+            <Label className="text-xs text-muted-foreground mb-1 block">Buscar</Label>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar en papelera..."
+                className="pl-8 h-8 text-xs"
+              />
+            </div>
           </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => load(page, debouncedSearch)}
+            onClick={() => load(page, debouncedSearch, fechaDesde, fechaHasta)}
             disabled={loading}
             className="h-8"
           >

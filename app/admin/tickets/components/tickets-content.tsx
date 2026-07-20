@@ -13,7 +13,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { updateTicket } from "@/app/admin/alumnos/api";
-import { buildUrl } from "@/lib/api-config";
+import { apiFetch, buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
 import {
   Search,
@@ -47,7 +47,7 @@ import {
 import { Charts } from "./charts";
 import KPIs from "./kpis";
 import TeamsTable from "./teams-table";
-import { computeTicketMetrics, type TicketsMetrics } from "./metrics";
+import { computeTicketMetrics, type TicketsMetrics, isEmmaTicket, isAtcCoach } from "./metrics";
 import TicketsSummaryCard from "./tickets-summary-card";
 import PersonalMetrics from "@/app/admin/teamsv2/PersonalMetrics";
 import { exportTicketsDashboardExcel } from "./export-tickets-dashboard";
@@ -617,6 +617,7 @@ export default function TicketsContent({
   // Datos
   const [teams, setTeams] = useState<Team[]>([]);
   const [allTickets, setAllTickets] = useState<Ticket[]>([]);
+  const [loadingDeleted, setLoadingDeleted] = useState(false);
   const [loading, setLoading] = useState(true);
   // Alumnos para mapear ticket -> etapa (se usa en TicketsByPhase)
   const [students, setStudents] = useState<ClientItem[]>([]);
@@ -688,6 +689,72 @@ export default function TicketsContent({
     return () => clearTimeout(t);
   }, [search, fechaDesde, fechaHasta]);
 
+  const [deletedRawRows, setDeletedRawRows] = useState<any[]>([]);
+
+  // Carga de tickets eliminados desde endpoint dedicado
+  useEffect(() => {
+    let mounted = true;
+    const t = setTimeout(async () => {
+      setLoadingDeleted(true);
+      try {
+        const q = new URLSearchParams({
+          page: "1",
+          pageSize: "500",
+          search: "",
+          fechaDesde: fechaDesde || "",
+          fechaHasta: fechaHasta || "",
+        }).toString();
+        const token = getAuthToken();
+        const res = await fetch(buildUrl(`/ticket/get/deleted/ticket?${q}`), {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+        const json = await res.json().catch(() => null);
+        const rows = Array.isArray(json?.data) ? json.data : [];
+        if (mounted) setDeletedRawRows(rows);
+      } catch {
+        if (mounted) setDeletedRawRows([]);
+      } finally {
+        if (mounted) setLoadingDeleted(false);
+      }
+    }, 250);
+    return () => { mounted = false; clearTimeout(t); };
+  }, [fechaDesde, fechaHasta]);
+
+  // Mapear raw rows a Ticket, resolviendo informante nombre → código
+  const deletedTickets: Ticket[] = useMemo(() => {
+    const nameToCode = new Map<string, string>();
+    for (const c of coaches) {
+      const name = normText(c.nombre);
+      if (name && c.codigo) nameToCode.set(name, c.codigo);
+    }
+
+    return deletedRawRows.map((r: any) => {
+      const rawInf = String(r.informante ?? "").trim();
+      const rawInfName = String(r.informante_nombre ?? "").trim();
+      const infNameNorm = normText(rawInfName || rawInf);
+      const resolvedCode = nameToCode.get(infNameNorm) || rawInf;
+
+      return {
+        id: Number(r.id),
+        id_externo: r.codigo ?? null,
+        nombre: r.nombre ?? null,
+        alumno_nombre: r.alumno_nombre ?? null,
+        id_alumno: r.id_alumno ?? null,
+        informante: resolvedCode,
+        informante_nombre: rawInfName || rawInf || null,
+        estado: r.estado ?? "ELIMINADO",
+        tipo: r.tipo ?? null,
+        creacion: r.created_at ?? "",
+        deadline: r.deadline ?? null,
+        equipo_urls: [],
+        coaches: Array.isArray(r.coaches) ? r.coaches.map((c: any) => ({ codigo_equipo: c?.codigo_equipo ?? null, nombre: c?.nombre ?? null, puesto: c?.puesto ?? null, area: c?.area ?? null })) : [],
+        alumno_coaches: Array.isArray(r.alumno_coaches) ? r.alumno_coaches.map((c: any) => ({ codigo_equipo: c?.codigo_equipo ?? null, nombre: c?.nombre ?? null, puesto: c?.puesto ?? null, area: c?.area ?? null })) : [],
+        coaches_override: Array.isArray(r.coaches_override) ? r.coaches_override : [],
+        ultimo_estado: r.ultimo_estado ? { estatus: r.ultimo_estado.estatus ?? r.ultimo_estado.estado ?? "ELIMINADO", fecha: r.ultimo_estado.fecha ?? null } : { estatus: "ELIMINADO", fecha: r.deleted_at ?? null },
+      };
+    });
+  }, [deletedRawRows, coaches]);
+
   // Cargar lista de coaches
   useEffect(() => {
     let mounted = true;
@@ -732,12 +799,14 @@ export default function TicketsContent({
     (informanteFiltro.length === 1 && informanteFiltro[0] === "all");
 
   const filtered: Ticket[] = useMemo(() => {
+    const isEliminados = estado === "eliminado";
+    const source = isEliminados ? deletedTickets : allTickets;
     const base = preFilter
-      ? (allTickets ?? []).filter(preFilter)
-      : (allTickets ?? []);
+      ? (source ?? []).filter(preFilter)
+      : (source ?? []);
     let items = base;
 
-    if (estado !== "all") {
+    if (estado !== "all" && !isEliminados) {
       const e = estado.toLowerCase();
       items = items.filter((i) => (i.estado ?? "").toLowerCase() === e);
     }
@@ -795,14 +864,43 @@ export default function TicketsContent({
       const infNames = new Set(
         infValues.filter((v) => v.startsWith("name:")).map((v) => v.slice(5)),
       );
+      const infDerivedEmma = infValues.includes("derived:emma");
+      const codeToNames = new Map<string, string>();
+      for (const c of coaches) {
+        if (c.codigo && c.nombre) {
+          codeToNames.set(c.codigo, normText(c.nombre));
+        }
+      }
       items = items.filter((i) => {
-        if (
-          infCodes.size > 0 &&
-          infCodes.has(String(i.informante ?? "").trim())
-        )
-          return true;
-        if (infNames.size > 0 && infNames.has(normText(i.informante_nombre)))
-          return true;
+        if (infCodes.size > 0) {
+          const informanteCode = String(i.informante ?? "").trim();
+          if (infCodes.has(informanteCode)) return true;
+          const informanteName = normText(i.informante_nombre);
+          const informanteField = normText(i.informante);
+          let nameMatch = false;
+          infCodes.forEach((code) => {
+            if (nameMatch) return;
+            const coachName = codeToNames.get(code);
+            if (coachName && (coachName === informanteName || coachName === informanteField)) nameMatch = true;
+          });
+          if (nameMatch) return true;
+          const alumnoCoaches = Array.isArray((i as any)?.alumno_coaches)
+            ? (i as any).alumno_coaches
+            : [];
+          if (
+            alumnoCoaches.some((c: any) => {
+              if (!c || typeof c !== "object") return false;
+              const code = String(c.codigo_equipo ?? c.codigo ?? c.id ?? "").trim();
+              return code && infCodes.has(code);
+            })
+          )
+            return true;
+        }
+        if (infNames.size > 0) {
+          if (infNames.has(normText(i.informante_nombre))) return true;
+          if (infNames.has(normText(i.informante))) return true;
+        }
+        if (infDerivedEmma && isEmmaTicket(i)) return true;
         if (infCodes.size > 0 || infNames.size > 0) {
           const coachesArr = Array.isArray(i.coaches) ? i.coaches : [];
           const hasCoachMatch = coachesArr.some((c) => {
@@ -829,6 +927,7 @@ export default function TicketsContent({
     return items;
   }, [
     allTickets,
+    deletedTickets,
     preFilter,
     estado,
     tipo,
@@ -853,8 +952,14 @@ export default function TicketsContent({
     ticketsForOpts.forEach((t) =>
       set.add((t.estado ?? "SIN ESTADO").toLowerCase()),
     );
-    return ["all", ...Array.from(set)];
-  }, [ticketsForOpts]);
+    const base = Array.from(set);
+    const hasDeleted = deletedTickets.length > 0;
+    return [
+      "all",
+      ...(hasDeleted ? ["eliminado"] : []),
+      ...base,
+    ];
+  }, [ticketsForOpts, deletedTickets.length]);
 
   const tipoOpts = useMemo(() => {
     const set = new Set<string>();
@@ -864,9 +969,22 @@ export default function TicketsContent({
     return ["all", ...Array.from(set)];
   }, [ticketsForOpts]);
 
+  const coachNameToCode = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of coaches) {
+      const name = normText(c.nombre);
+      if (name && c.codigo) m.set(name, c.codigo);
+    }
+    return m;
+  }, [coaches]);
+
   const informanteOpts = useMemo(() => {
     const map = new Map<string, { value: string; label: string }>();
-    for (const t of ticketsForOpts) {
+    let hasEmma = false;
+
+    const sources = [...(ticketsForOpts ?? []), ...(deletedTickets ?? [])];
+
+    for (const t of sources) {
       const infCode = String(t.informante ?? "").trim();
       const infNameRaw = String(t.informante_nombre ?? "").trim();
       const infNameNorm = normText(infNameRaw);
@@ -877,25 +995,58 @@ export default function TicketsContent({
           value: key,
           label: infNameRaw || "Informante",
         });
-        continue;
+      } else if (infNameNorm) {
+        const coachCode = coachNameToCode.get(infNameNorm);
+        if (coachCode) {
+          const key = `code:${coachCode}`;
+          if (!map.has(key)) {
+            map.set(key, { value: key, label: infNameRaw });
+          }
+        } else {
+          const key = `name:${infNameNorm}`;
+          map.set(key, {
+            value: key,
+            label: infNameRaw,
+          });
+        }
       }
 
-      if (infNameNorm) {
-        const key = `name:${infNameNorm}`;
-        map.set(key, {
-          value: key,
-          label: infNameRaw,
-        });
+      // También verificar informante como posible nombre (deleted tickets)
+      if (!infCode && !infNameNorm) {
+        const infRaw = String(t.informante ?? "").trim();
+        const infNorm = normText(infRaw);
+        if (infNorm) {
+          const coachCode = coachNameToCode.get(infNorm);
+          if (coachCode) {
+            const key = `code:${coachCode}`;
+            if (!map.has(key)) {
+              map.set(key, { value: key, label: infRaw });
+            }
+          } else {
+            const key = `name:${infNorm}`;
+            map.set(key, { value: key, label: infRaw });
+          }
+        }
       }
+
+      if (isEmmaTicket(t)) {
+        hasEmma = true;
+      }
+    }
+
+    const sorted = Array.from(map.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
+    );
+
+    if (hasEmma) {
+      sorted.unshift({ value: "derived:emma", label: "Emma → ATC" });
     }
 
     return [
       { value: "all", label: "Todos los informantes" },
-      ...Array.from(map.values()).sort((a, b) =>
-        a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
-      ),
+      ...sorted,
     ];
-  }, [ticketsForOpts]);
+  }, [ticketsForOpts, deletedTickets, coachNameToCode]);
 
   const selectedCoach = useMemo(
     () =>
@@ -1238,7 +1389,7 @@ export default function TicketsContent({
                   }}
                   options={estadoOpts.map((e) => ({
                     value: e,
-                    label: e === "all" ? "Todos los estados" : e.toUpperCase(),
+                    label: e === "all" ? "Todos los estados" : e === "eliminado" ? "Eliminados" : e.toUpperCase(),
                   }))}
                   placeholder="Todos los estados"
                   searchPlaceholder="Buscar estado..."
@@ -1319,7 +1470,7 @@ export default function TicketsContent({
         </Card>
 
         {/* KPIs nuevas */}
-        <KPIs metrics={metrics} loading={loading} />
+        <KPIs metrics={metrics} loading={loading} deletedCount={deletedTickets.length} />
 
         {/* Métricas de resolución: general + por área */}
         <TicketsResolutionMetrics tickets={filtered} loading={loading} />

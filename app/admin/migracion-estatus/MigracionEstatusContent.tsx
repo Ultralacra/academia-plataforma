@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import {
   getAllStudentsPaged,
   getAllCoachesFromTeams,
@@ -27,11 +27,18 @@ import {
   UserX,
   HelpCircle,
   FileText,
+  CheckSquare,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/use-toast"
+import { getOpciones, type OpcionItem } from "../alumnos/api"
+import { buildUrl } from "@/lib/api-config"
 
 /* ============== Tipos ============== */
 
@@ -225,7 +232,7 @@ function suggestStatus(row: EnrichedRow): {
       }
     }
 
-    if (daysSinceEnd !== null && daysSinceEnd >= 0 && daysSinceEnd <= 5) {
+    if (daysSinceEnd !== null && daysSinceEnd > 0 && daysSinceEnd <= 5) {
       return {
         status: "VENCIMIENTO_MEMBRESIA",
         reason: `Membresía #${row.currentMembresiaNumero} vencida (${daysSinceEnd} días en gracia)`,
@@ -266,7 +273,7 @@ function suggestStatus(row: EnrichedRow): {
       }
     }
 
-    if (daysSinceEnd !== null && daysSinceEnd >= 0 && daysSinceEnd <= 5) {
+    if (daysSinceEnd !== null && daysSinceEnd > 0 && daysSinceEnd <= 5) {
       return {
         status: "VENCIMIENTO_CONTRATO",
         reason: `Contrato vencido (${daysSinceEnd} días en gracia para adquirir membresía)`,
@@ -334,6 +341,14 @@ export default function MigracionEstatusContent() {
   const [search, setSearch] = useState("")
   const [filterCurrentState, setFilterCurrentState] = useState<string[]>([])
   const [filterSuggestedStatus, setFilterSuggestedStatus] = useState<string[]>([])
+
+  // Bulk selection
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
+  const [bulkEstados, setBulkEstados] = useState<OpcionItem[]>([])
+  const [bulkEstadoKey, setBulkEstadoKey] = useState<string>("")
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<{ completed: number; total: number; errors: number }>({ completed: 0, total: 0, errors: 0 })
 
   const loadData = async () => {
     setLoading(true)
@@ -562,14 +577,7 @@ export default function MigracionEstatusContent() {
           }
         }
 
-        // Membership
-        const activeMembresias = membresias.filter((m) => !m.anulado)
-        const currentMembresia = activeMembresias[0] || null
-        const hasActiveMembership = currentMembresia
-          ? (daysSince(currentMembresia.fechaHasta) ?? 0) <= 0
-          : false
-
-        // Contract end
+        // Contract end (computed first so extensions can affect membership end date)
         const joinD = parseDate(s.joinDate)
         let contractEnd: Date | null = null
         if (joinD) {
@@ -594,6 +602,23 @@ export default function MigracionEstatusContent() {
             }
           }
         }
+
+        // Membership
+        const activeMembresias = membresias.filter((m) => !m.anulado)
+        const currentMembresia = activeMembresias[0] || null
+
+        // Effective membership end: max of membership fechaHasta and contractEnd (which includes extensions)
+        let effectiveMembresiaEnd: string | null = currentMembresia?.fechaHasta ?? null
+        if (currentMembresia && contractEnd && currentMembresia.fechaHasta) {
+          const memDate = parseDate(currentMembresia.fechaHasta)
+          if (memDate && contractEnd > memDate) {
+            effectiveMembresiaEnd = contractEnd.toISOString().slice(0, 10)
+          }
+        }
+
+        const hasActiveMembership = currentMembresia
+          ? (daysSince(effectiveMembresiaEnd) ?? 0) <= 0
+          : false
 
         const isPaused = (s.state || "")
           .toUpperCase()
@@ -624,9 +649,9 @@ export default function MigracionEstatusContent() {
           daysSinceContractEnd: contractEnd ? daysSince(contractEnd.toISOString().slice(0, 10)) : null,
           hasActiveMembership,
           currentMembresiaNumero: currentMembresia?.numeroMembresia ?? null,
-          membresiaEndDate: currentMembresia?.fechaHasta ?? null,
-          daysSinceMembresiaEnd: currentMembresia?.fechaHasta
-            ? daysSince(currentMembresia.fechaHasta)
+          membresiaEndDate: effectiveMembresiaEnd,
+          daysSinceMembresiaEnd: effectiveMembresiaEnd
+            ? daysSince(effectiveMembresiaEnd)
             : null,
 
           isPaused,
@@ -655,6 +680,24 @@ export default function MigracionEstatusContent() {
     loadData()
   }, [])
 
+  // Fetch estados when bulk dialog opens
+  const bulkFetchKeyRef = useRef(0)
+  useEffect(() => {
+    if (!bulkDialogOpen) return
+    const key = ++bulkFetchKeyRef.current
+    ;(async () => {
+      try {
+        const all = await getOpciones("estado_cliente")
+        const filtered = all.filter(
+          (o) =>
+            !o.value.toUpperCase().includes("PAUSADO") &&
+            !o.value.toUpperCase().includes("PAUSA"),
+        )
+        if (key === bulkFetchKeyRef.current) setBulkEstados(filtered)
+      } catch {}
+    })()
+  }, [bulkDialogOpen])
+
   /* ============== Filters ============== */
 
   const filtered = useMemo(() => {
@@ -676,6 +719,25 @@ export default function MigracionEstatusContent() {
     })
   }, [rows, search, filterCurrentState, filterSuggestedStatus])
 
+  const toggleSelectItem = (code: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedKeys.size === filtered.length) {
+      setSelectedKeys(new Set())
+    } else {
+      setSelectedKeys(new Set(filtered.map((r) => r.code)))
+    }
+  }
+
+  const clearSelection = () => setSelectedKeys(new Set())
+
   /* ============== KPIs ============== */
 
   const kpis = useMemo(() => {
@@ -693,6 +755,27 @@ export default function MigracionEstatusContent() {
       if (st) set.add(st)
     }
     return Array.from(set).sort()
+  }, [rows])
+
+  const suggestedOptions = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const r of rows) {
+      counts[r.suggestedStatus] = (counts[r.suggestedStatus] || 0) + 1
+    }
+    const labels: Record<string, string> = {
+      ACTIVO: "Activo",
+      VENCIMIENTO_CONTRATO: "Venc. Contrato",
+      VENCIMIENTO_MEMBRESIA: "Venc. Membresía",
+      PAUSA: "Pausa",
+      INACTIVO_POR_PAGO: "Inactivo x Pago",
+      FINALIZADO: "Finalizado",
+      REVISION_MANUAL: "Revisión Manual",
+    }
+    return Object.entries(counts).map(([key, count]) => ({
+      key,
+      label: labels[key] || key,
+      count,
+    }))
   }, [rows])
 
   /* ============== Export ============== */
@@ -876,6 +959,33 @@ export default function MigracionEstatusContent() {
         </div>
       </div>
 
+      {/* Suggested status quick filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">Estado sugerido:</span>
+        <Select
+          value={filterSuggestedStatus.length === 1 ? filterSuggestedStatus[0] : "todos"}
+          onValueChange={(v) => {
+            if (v === "todos") setFilterSuggestedStatus([])
+            else setFilterSuggestedStatus([v])
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-56">
+            <SelectValue placeholder="Todos los estados sugeridos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los estados sugeridos</SelectItem>
+            {suggestedOptions.map((o) => (
+              <SelectItem key={o.key} value={o.key}>
+                <span className="flex items-center justify-between gap-4 w-full">
+                  <span>{o.label}</span>
+                  <span className="text-xs text-muted-foreground">{o.count}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Suggested status filter badges */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">Estado sugerido:</span>
@@ -954,11 +1064,53 @@ export default function MigracionEstatusContent() {
         )
       })()}
 
+      {/* Bulk action bar */}
+      {selectedKeys.size > 0 && (
+        <div className="flex items-center justify-between gap-3 px-1">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+            {selectedKeys.size > 0
+              ? `${selectedKeys.size} de ${filtered.length} seleccionados`
+              : "Seleccionar todos"}
+          </label>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              className="gap-1.5"
+              onClick={() => {
+                setBulkEstadoKey("")
+                setBulkProgress({ completed: 0, total: 0, errors: 0 })
+                setBulkDialogOpen(true)
+              }}
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              Cambiar estatus
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+            >
+              Deseleccionar
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="px-3 py-2 w-10">
+                <Checkbox
+                  checked={filtered.length > 0 && selectedKeys.size === filtered.length}
+                  onCheckedChange={handleSelectAll}
+                  aria-label="Seleccionar todos"
+                />
+              </th>
               <th className="px-3 py-2 font-medium">Código</th>
               <th className="px-3 py-2 font-medium">Nombre</th>
               <th className="px-3 py-2 font-medium">Estado Actual</th>
@@ -975,11 +1127,20 @@ export default function MigracionEstatusContent() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
+            {filtered.map((r) => {
+              const isChecked = selectedKeys.has(r.code)
+              return (
               <tr
                 key={r.code}
-                className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+                className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${isChecked ? "bg-primary/5" : ""}`}
               >
+                <td className="px-3 py-2 w-10">
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={() => toggleSelectItem(r.code)}
+                    aria-label={`Seleccionar ${r.name || r.code}`}
+                  />
+                </td>
                 <td className="px-3 py-2 font-mono text-xs">{r.code}</td>
                 <td className="px-3 py-2 max-w-[200px] truncate" title={r.name}>
                   {r.name}
@@ -1115,7 +1276,8 @@ export default function MigracionEstatusContent() {
                   {r.suggestionReason}
                 </td>
               </tr>
-            ))}
+            )
+          })}
           </tbody>
         </table>
         {filtered.length === 0 && (
@@ -1128,6 +1290,178 @@ export default function MigracionEstatusContent() {
       <p className="text-xs text-muted-foreground">
         Mostrando {filtered.length} de {rows.length} alumnos
       </p>
+
+      {/* ── Bulk status change dialog ── */}
+      <Dialog
+        open={bulkDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !bulkSaving) {
+            setBulkDialogOpen(false)
+            setBulkEstados([])
+            setBulkEstadoKey("")
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckSquare className="w-5 h-5" /> Cambiar estatus masivo
+            </DialogTitle>
+            <DialogDescription>
+              {selectedKeys.size} alumno{selectedKeys.size !== 1 ? "s" : ""} seleccionado{selectedKeys.size !== 1 ? "s" : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 space-y-4">
+            {bulkSaving ? (
+              /* Progreso */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Actualizando estatus...
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {bulkProgress.completed + bulkProgress.errors} / {bulkProgress.total}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all duration-300"
+                    style={{
+                      width: `${
+                        bulkProgress.total > 0
+                          ? Math.round(
+                              ((bulkProgress.completed + bulkProgress.errors) /
+                                bulkProgress.total) *
+                                100,
+                            )
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {bulkProgress.completed} exitosos
+                  </span>
+                  {bulkProgress.errors > 0 && (
+                    <span className="text-destructive">
+                      {bulkProgress.errors} errores
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                {bulkEstados.length === 0 ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Cargando estatus...</span>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">
+                      Nuevo estatus
+                    </label>
+                    <Select value={bulkEstadoKey} onValueChange={setBulkEstadoKey}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecciona un estatus" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bulkEstados.map((o) => (
+                          <SelectItem key={o.id} value={o.key}>
+                            {o.value}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkDialogOpen(false)
+                setBulkEstados([])
+                setBulkEstadoKey("")
+              }}
+              disabled={bulkSaving}
+            >
+              {bulkSaving ? "Procesando..." : "Cancelar"}
+            </Button>
+            {!bulkSaving && (
+              <Button
+                onClick={async () => {
+                  if (!bulkEstadoKey || bulkSaving) return
+                  const codes = Array.from(selectedKeys).filter(Boolean)
+                  if (codes.length === 0) {
+                    toast({
+                      title: "Sin códigos",
+                      description: "Ninguno de los seleccionados tiene código de alumno",
+                    })
+                    return
+                  }
+                  setBulkSaving(true)
+                  setBulkProgress({ completed: 0, total: codes.length, errors: 0 })
+                  const token = getAuthToken()
+                  let completed = 0
+                  let errors = 0
+                  const CONCURRENCY = 4
+                  const updateOne = async (code: string) => {
+                    try {
+                      const fd = new FormData()
+                      fd.set("estado", bulkEstadoKey)
+                      const url = buildUrl(`/client/update/client/${encodeURIComponent(code)}`)
+                      const res = await fetch(url, {
+                        method: "PUT",
+                        body: fd,
+                        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                      })
+                      if (!res.ok) throw new Error(await res.text())
+                      return true
+                    } catch {
+                      return false
+                    }
+                  }
+                  const results: boolean[] = []
+                  let idx = 0
+                  while (idx < codes.length) {
+                    const batch = codes.slice(idx, idx + CONCURRENCY)
+                    const batchResults = await Promise.all(batch.map((c) => updateOne(c)))
+                    for (const ok of batchResults) {
+                      if (ok) completed++
+                      else errors++
+                    }
+                    results.push(...batchResults)
+                    setBulkProgress({ completed, total: codes.length, errors })
+                    idx += CONCURRENCY
+                  }
+                  const okCount = results.filter(Boolean).length
+                  const errCount = results.filter((r) => !r).length
+                  toast({
+                    title: "Actualización masiva completada",
+                    description: `${okCount} de ${codes.length} actualizado${okCount !== 1 ? "s" : ""} correctamente${errCount > 0 ? `. ${errCount} error${errCount !== 1 ? "es" : ""}.` : "."}`,
+                  })
+                  setBulkSaving(false)
+                  setBulkDialogOpen(false)
+                  setBulkEstados([])
+                  setBulkEstadoKey("")
+                  clearSelection()
+                  loadData()
+                }}
+                disabled={!bulkEstadoKey}
+              >
+                Cambiar estatus a {selectedKeys.size} alumno{selectedKeys.size !== 1 ? "s" : ""}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
