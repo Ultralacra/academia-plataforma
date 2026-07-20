@@ -1115,6 +1115,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       // 1) Si no tenemos metadata cargada, intentamos recargar antes de crear
       if (!venceMeta) {
         await loadVenceMetadata(student.id);
+        return;
       }
 
       // 2) Si existe, actualizamos el MISMO registro (no crear otro)
@@ -1184,12 +1185,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
         // IMPORTANTE: no sobrescribir payload completo; migramos a meses_extra (sin fecha)
         const { vence_estimado: _legacyVence, ...prevPayloadSansLegacy } =
           prevPayload;
+        // Acumular extensiones: siempre agregar la nueva extensión al array.
+        // `estimatedEnd` toma la fecha máxima entre todas las extensiones,
+        // por lo que la última siempre prevalece si es la más lejana.
+        const nextExtensiones = [...prevExtensiones, extensionEntry];
+
         const mergedPayload = {
           ...prevPayloadSansLegacy,
           meses_extra: prevExtra,
           vence_tipo: tempVenceTipo,
           vence_motivo: effectiveMotivo || prevMotivo || null,
-          extensiones: [...prevExtensiones, extensionEntry],
+          extensiones: nextExtensiones,
           historial: nextHistory,
           ultimo_cambio_at: now,
           ultimo_cambio_por: changedBy,
@@ -1200,6 +1206,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
           entity_id: curr.entity_id,
           payload: mergedPayload,
         };
+
+        // DEBUG: ver qué se está guardando
+        console.log("[DEBUG handleSaveVence] payload a guardar:", {
+          extensionesCount: mergedPayload.extensiones.length,
+          extensiones: mergedPayload.extensiones.map((e: any) => ({
+            id: e.id,
+            tipo: e.tipo,
+            fecha_desde: e.fecha_desde,
+            fecha_hasta: e.fecha_hasta,
+          })),
+          historialCount: mergedPayload.historial.length,
+        });
 
         const token = getAuthToken();
         const res = await fetch(
@@ -1270,6 +1288,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
           const txt = await res.text().catch(() => "");
           throw new Error(txt || `HTTP ${res.status}`);
         }
+        // Actualización optimista: reflejar el cambio en UI inmediatamente
+        // sin esperar la recarga del servidor.
+        setVenceMeta((prev: any) =>
+          prev ? { ...prev, payload } : prev,
+        );
       }
 
       await loadVenceMetadata(student.id);
@@ -2638,7 +2661,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
     // para sumar SOLO las pausas añadidas DESPUÉS de crear la extensión/membresía
     // (pausas incrementales). Esto extiende correctamente el acceso sin
     // doblar el conteo de las pausas ya incluidas en `baseEnd` al momento de creación.
-    const explicitRangeEndAdjusted = activeRangeExtensions.reduce<Date | null>(
+    // Usar TODAS las extensiones (no solo las activas) para que `estimatedEnd`
+    // refleje el fin de acceso más lejano incluso después de que expiren.
+    // `activeRangeExtensions` se conserva para la UI (contador "vigente(s)").
+    const explicitRangeEndAdjusted = rangeExtensions.reduce<Date | null>(
       (acc, ext) => {
         const pauseDelta =
           ext.pausedAtCreation !== null
@@ -2663,20 +2689,37 @@ export default function StudentDetailContent({ code }: { code: string }) {
         return acc;
       }, null);
 
-    const estEndCandidates = [
-      legacyComputedEnd,
-      explicitRangeEndAdjusted,
-      activeMembershipEndAdjusted,
-    ].filter(Boolean) as Date[];
-    const estEnd = estEndCandidates.reduce((acc, current) => {
-      return current.getTime() > acc.getTime() ? current : acc;
-    }, legacyComputedEnd);
+    // La extensión explícita (fecha_hasta) prevalece sobre la fecha base
+    // del programa. Si el usuario fijó un rango, ese es el fin de acceso real.
+    const estEnd =
+      explicitRangeEndAdjusted ??
+      activeMembershipEndAdjusted ??
+      legacyComputedEnd;
 
     const extensionDaysFromMetadata = Math.max(0, diffDays(baseEnd, estEnd));
     const remaining = diffDays(today, estEnd);
     // Si el vencimiento es HOY (remaining === 0) el acceso aún es válido
     // durante el día. Solo se considera vencido cuando remaining < 0.
     const isExpired = remaining < 0;
+
+    // DEBUG: imprimir fechas clave para debuggear el estimatedEnd
+    console.log("[DEBUG estimatedEnd]", {
+      ingreso: ingresoIso,
+      programaMeses,
+      baseEnd: baseEnd.toISOString(),
+      legacyComputedEnd: legacyComputedEnd.toISOString(),
+      explicitRangeEndAdjusted: explicitRangeEndAdjusted?.toISOString(),
+      rangeExtensionsCount: rangeExtensions.length,
+      rangeExtensionsDates: rangeExtensions.map((e) => ({
+        id: e.id,
+        tipo: e.tipo,
+        start: e.start.toISOString(),
+        end: e.end.toISOString(),
+      })),
+      estEnd: estEnd.toISOString(),
+      estimatedEndFmt: estEnd.toLocaleDateString("es-ES"),
+    });
+
     return {
       startDay,
       today,
@@ -4395,6 +4438,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Extender accesos</DialogTitle>
+            {accessStats ? (
+              <DialogDescription className="text-xs">
+                Vencimiento actual estimado:{" "}
+                <span className="font-medium">
+                  {fmtES(accessStats.estimatedEnd.toISOString())}
+                </span>
+                {accessStats.isExpired ? (
+                  <span className="text-rose-500"> (vencido)</span>
+                ) : null}
+              </DialogDescription>
+            ) : null}
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-md border border-border bg-muted/30 p-3">
@@ -4659,6 +4713,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 />
               </div>
             ) : null}
+            {tempVenceTipo !== "membresia" &&
+            tempVenceTipo !== "normal" &&
+            tempVenceFechaDesde &&
+            tempVenceFechaHasta &&
+            tempVenceFechaHasta <= tempVenceFechaDesde ? (
+              <p className="text-xs text-rose-500">
+                La fecha final debe ser posterior a la fecha inicial.
+              </p>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button
                 variant="ghost"
@@ -4676,7 +4739,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   (tempVenceTipo !== "membresia" &&
                     tempVenceTipo !== "normal" &&
                     !tempVenceFechaDesde) ||
-                  (tempVenceTipo !== "membresia" && !tempVenceFechaHasta)
+                  (tempVenceTipo !== "membresia" && !tempVenceFechaHasta) ||
+                  (tempVenceTipo !== "membresia" &&
+                    tempVenceTipo !== "normal" &&
+                    tempVenceFechaDesde &&
+                    tempVenceFechaHasta &&
+                    tempVenceFechaHasta <= tempVenceFechaDesde)
                 }
               >
                 {savingVence ? (

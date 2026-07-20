@@ -220,16 +220,8 @@ function computeEstimatedEnd(args: {
     }
   }
 
-  // Resultado: el máximo entre todos los candidatos
-  const candidates = [
-    legacyComputedEnd,
-    rangeEndCandidate,
-    membershipEndCandidate,
-  ].filter(Boolean) as Date[];
-  return candidates.reduce(
-    (acc, cur) => (cur.getTime() > acc.getTime() ? cur : acc),
-    legacyComputedEnd,
-  );
+  // La extensión explícita prevalece sobre la fecha base del programa
+  return rangeEndCandidate ?? membershipEndCandidate ?? legacyComputedEnd;
 }
 
 function daysBetweenInclusive(a: Date, b: Date) {
