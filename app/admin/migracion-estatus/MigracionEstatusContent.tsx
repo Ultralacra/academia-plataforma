@@ -203,12 +203,7 @@ function suggestStatus(row: EnrichedRow): {
     return { status: "PAUSA", reason: "Alumno en pausa activa" }
   }
 
-  // 2. Finalizado por etapa completa
-  if ((row.stage || "").toUpperCase() === "F5") {
-    return { status: "FINALIZADO", reason: "Etapa F5 completada" }
-  }
-
-  // 3. Finalizado por inactividad
+  // 2. Finalizado por inactividad
   if ((row.inactivityDays ?? 0) >= 60) {
     return {
       status: "FINALIZADO",
@@ -216,12 +211,12 @@ function suggestStatus(row: EnrichedRow): {
     }
   }
 
-  // 4. Finalizado por estado actual COMPLETADO
+  // 3. Finalizado por estado actual COMPLETADO
   if ((row.state || "").toUpperCase() === "COMPLETADO") {
     return { status: "FINALIZADO", reason: "Estado actual: COMPLETADO" }
   }
 
-  // 5. Tiene membresía activa
+  // 4. Tiene membresía activa
   if (row.hasActiveMembership && row.membresiaEndDate) {
     const daysSinceEnd = daysSince(row.membresiaEndDate)
 
@@ -246,7 +241,7 @@ function suggestStatus(row: EnrichedRow): {
     }
   }
 
-  // 6. Estado actual MEMBRESIA pero sin membresía activa detectada
+  // 5. Estado actual MEMBRESIA pero sin membresía activa detectada
   if ((row.state || "").toUpperCase().includes("MEMBRE")) {
     return {
       status: "VENCIMIENTO_MEMBRESIA",
@@ -254,7 +249,7 @@ function suggestStatus(row: EnrichedRow): {
     }
   }
 
-  // 7. Inactivo por pago con mora
+  // 6. Inactivo por pago con mora
   if ((row.state || "").toUpperCase().includes("INACTIVO") && (row.daysOverdue ?? 0) > 5) {
     return {
       status: "INACTIVO_POR_PAGO",
@@ -262,7 +257,7 @@ function suggestStatus(row: EnrichedRow): {
     }
   }
 
-  // 8. Contrato vencido
+  // 7. Contrato vencido
   if (row.contractEndDate) {
     const daysSinceEnd = daysSince(row.contractEndDate)
 
@@ -281,7 +276,7 @@ function suggestStatus(row: EnrichedRow): {
     }
   }
 
-  // 9. Cuotas vencidas sin ser INACTIVO
+  // 8. Cuotas vencidas sin ser INACTIVO
   if ((row.daysOverdue ?? 0) > 0) {
     if ((row.daysOverdue ?? 0) > 5) {
       return {
@@ -295,7 +290,7 @@ function suggestStatus(row: EnrichedRow): {
     }
   }
 
-  // 10. Activo por defecto
+  // 9. Activo por defecto
   return {
     status: "ACTIVO",
     reason: "Contrato vigente y al día en pagos",
